@@ -5,7 +5,8 @@
 // its last lines.
 import { createServer, type Server, type Socket } from 'node:net'
 import { createRequire } from 'node:module'
-import { appendFileSync, unlinkSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, statSync, unlinkSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { PTY_PROTO, LineSplitter, decodeMsg, encodeMsg, type FromHost, type PtyInfo, type PtyMeta, type ToHost } from '../core/ptyproto'
@@ -17,7 +18,22 @@ const FLUSH_MS = 12
 
 // node-pty is native: it is not bundled, it sits next to host.cjs in node_modules (loaded when the first one starts).
 const req = createRequire(import.meta.url)
-const loadPty = (): typeof import('node-pty') => req('node-pty')
+let ptyMod: typeof import('node-pty') | undefined
+const loadPty = (): typeof import('node-pty') => {
+  if (ptyMod) return ptyMod
+  // macOS and Linux: node-pty starts each session through its small `spawn-helper`, which comes without permission to run
+  // when its install step did not run (package.json › allowScripts): «posix_spawnp failed» (14-11, the tests on a Mac).
+  if (process.platform !== 'win32') {
+    try {
+      const dir = dirname(req.resolve('node-pty/package.json'))
+      for (const f of [join(dir, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'), join(dir, 'build', 'Release', 'spawn-helper')]) {
+        try { if (existsSync(f) && !(statSync(f).mode & 0o111)) chmodSync(f, 0o755) } catch { /* read-only: it may already run */ }
+      }
+    } catch { /* not found: node-pty says why below */ }
+  }
+  ptyMod = req('node-pty') as typeof import('node-pty')
+  return ptyMod
+}
 
 interface Session {
   info: PtyInfo

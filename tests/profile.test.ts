@@ -19,8 +19,14 @@ describe('project profile', () => {
     expect(p.kinds).toEqual(['unity', 'blender'])
     expect(p.summary).toBe('Juego de Unity 6000.3.9f1, con arte 3D con Blender; sin git')
     expect(p.heavy.sort()).toEqual(['gpu', 'unity'])
-    expect(p.checks.map((c) => c.nombre)).toEqual(['compila', 'pruebas'])
-    expect(p.checks[0].orden).toContain('tools/unity.ps1 build')
+    // tools/unity.ps1 is PowerShell: elsewhere (a Mac, 14-11 tests on macOS) the editor itself builds, and there is no test run.
+    if (process.platform === 'win32') {
+      expect(p.checks.map((c) => c.nombre)).toEqual(['compila', 'pruebas'])
+      expect(p.checks[0].orden).toContain('tools/unity.ps1 build')
+    } else {
+      expect(p.checks.map((c) => c.nombre)).toEqual(['compila'])
+      expect(p.checks[0].orden).toContain('6000.3.9f1')
+    }
     expect(p.mediaDirs.map((d) => d.slice(root.length + 1)).sort()).toEqual(['Assets', 'Logs'])
     expect(p.skills).toEqual(['level-design', 'scenario-blender-expert', 'scenario-unity-expert'])
     expect(p.agents.map((a) => a.name)).toEqual(['explorador', 'verificador', 'relevo', 'coordinador', 'revisor-visual', 'jugabilidad', 'arte-3d'])
