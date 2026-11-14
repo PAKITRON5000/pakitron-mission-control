@@ -71,7 +71,8 @@ export function readIdentity(acc: AccountConfig): AccountIdentity {
   const plan = planOf(login)
   return {
     email,
-    hasLogin: existsSync(cred) || login?.loggedIn === true,
+    // macOS: Claude Code keeps the sign-in in the Keychain, never in a file; the account's e-mail in .claude.json says it.
+    hasLogin: existsSync(cred) || login?.loggedIn === true || (process.platform === 'darwin' && Boolean(email)),
     ...(plan ? { plan } : {}),
     emailMismatch: Boolean(email && acc.emailExpected && email.toLowerCase() !== acc.emailExpected.toLowerCase())
   }

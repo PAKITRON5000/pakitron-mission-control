@@ -4,20 +4,24 @@
 
 ![Inicio de Mission Control con datos inventados: dos Claude trabajando, preguntas que esperan respuesta y el mapa de cuentas y proyectos](docs/img/inicio.png)
 
-Una app de escritorio para Windows que coordina tus cuentas de **Claude Code** en tus proyectos: quién trabaja dónde, quién sigue cuando una se queda sin uso, qué te espera a ti y qué hicieron mientras no mirabas. Con una sola cuenta ya sirve. Con varias, cada una sigue con lo suyo y, si tú lo enciendes, se relevan entre ellas. Está en español.
+Una app de escritorio para Windows y macOS que coordina tus cuentas de **Claude Code** en tus proyectos: quién trabaja dónde, quién sigue cuando una se queda sin uso, qué te espera a ti y qué hicieron mientras no mirabas. Con una sola cuenta ya sirve. Con varias, cada una sigue con lo suyo y, si tú lo enciendes, se relevan entre ellas. Está en español.
 
 ## Qué necesitas
 
-- Windows 10 u 11.
+- Windows 10 u 11, o macOS 12 o posterior (Apple Silicon o Intel).
 - Una cuenta de Claude con Claude Code, del plan que sea: Pro, Max, Ultra, Team, Enterprise, o pagando por uso (Console, una clave, Amazon Bedrock, Google Vertex). Claude Code solo dice cuánto uso queda en Pro, Max y Ultra: con los demás, la app sabe que se ha acabado cuando Claude Code lo avisa, y con los de pago por uso enseña el gasto de cada sesión, nunca le pregunta nada por su cuenta (cada pregunta cuesta) y no hace que sigan trabajando sin parar: sin un límite que los corte, gastarían hasta acabar el crédito.
 - Nada más. Si no tienes Claude Code, la app lo instala la primera vez con su instalador oficial. Node.js no hace falta: si no está, la app usa su propio programa para las órdenes que dejan los Claude.
 
 ## Instalar
 
-1. Ejecuta `Pakitron Mission Control Setup <versión>.exe`. No está firmado, así que Windows puede avisar: «Más información» › «Ejecutar de todas formas».
+1. Descarga el instalador de [Releases](../../releases):
+   - **Windows**: `Pakitron.Mission.Control.Setup.<versión>.exe`. No está firmado, así que Windows puede avisar: «Más información» › «Ejecutar de todas formas».
+   - **Mac**: `Pakitron-Mission-Control-<versión>-mac-arm64.dmg` para Apple Silicon (M1 y posteriores), `…-mac-x64.dmg` para Intel. Abre el `.dmg` y arrastra la app a **Aplicaciones**. Apple no la ha notarizado, así que la primera vez: clic derecho › **Abrir** › **Abrir** (o Ajustes del Sistema › Privacidad y seguridad › **Abrir igualmente**). En Mac las ventanas de los Claude se abren en Terminal; para que la app escriba en ellas tus mensajes del móvil, permítelo en Privacidad y seguridad › **Accesibilidad**.
 2. Ábrela desde el acceso directo **Pakitron Mission Control**.
 
-Desde el código: `npm install` y `npm run dist` dejan el instalador en `dist\`.
+Actualizar: cuando sale una versión nueva, la app lo avisa en su barra de arriba y abre el instalador de tu sistema. Se instala encima: tus datos están en su propia carpeta (`%LOCALAPPDATA%\PakitronMC` en Windows, `~/Library/Application Support/PakitronMC` en Mac) y no se pierde nada.
+
+Desde el código: `npm install` y `npm run dist` dejan el instalador de Windows en `dist/`; en un Mac, `npm run dist:mac` deja los `.dmg`.
 
 ## La primera vez
 

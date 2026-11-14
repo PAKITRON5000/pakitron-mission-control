@@ -1,0 +1,58 @@
+# The Mac installers (.dmg for Apple Silicon and for Intel), built on one of GitHub's Macs and added to the release.
+# A Windows PC cannot make a .dmg: this runs by itself each time a release is published, or by hand (Actions › Mac ›
+# Run workflow) with the release's tag.
+name: Mac
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the release that gets the Mac installers (for example v0.33.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Package (.dmg, arm64 and x64)
+        run: npx electron-builder --mac --arm64 --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Check the app opens its signature
+        run: |
+          for app in dist/mac*/*.app; do codesign --verify --deep --verbose=2 "$app"; done
+          ls -la dist/*.dmg
+
+      - name: Add to the release
+        run: gh release upload "$TAG" dist/*.dmg --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: dist/*.dmg
+          retention-days: 14

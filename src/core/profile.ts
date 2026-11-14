@@ -478,7 +478,11 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
 export const AGENT_MARK = '<!-- Creado por Mission Control (pmc preparar). Si lo cambias a mano, borra esta línea y no se volverá a escribir. -->'
 
 /** A subagent starts without the session's context: it is told what `pmc` stands for, with no path of this machine. */
-const PMC_NOTE = 'Ejecuta `pmc` desde la carpeta del proyecto. Si esa ventana no la encuentra, es `node "$LOCALAPPDATA/PakitronMC/bin/pmc.mjs"` (en PowerShell, `node "$env:LOCALAPPDATA/PakitronMC/bin/pmc.mjs"`).'
+/** Where pmc.mjs is when `pmc` is not on the PATH, as a shell of this system writes it. */
+const PMC_FALLBACK = process.platform === 'win32'
+  ? '`node "$LOCALAPPDATA/PakitronMC/bin/pmc.mjs"` (en PowerShell, `node "$env:LOCALAPPDATA/PakitronMC/bin/pmc.mjs"`)'
+  : process.platform === 'darwin' ? '`node "$HOME/Library/Application Support/PakitronMC/bin/pmc.mjs"`' : '`node "$HOME/.local/share/PakitronMC/bin/pmc.mjs"`'
+const PMC_NOTE = `Ejecuta \`pmc\` desde la carpeta del proyecto. Si esa ventana no la encuentra, es ${PMC_FALLBACK}.`
 
 export function agentFile(a: AgentSpec): string {
   const body = /\bpmc\b/.test(a.body) ? `${a.body}\n\n${PMC_NOTE}` : a.body
@@ -500,7 +504,7 @@ export const PMC_SKILL = [
   '',
   '# Mission Control: cómo se trabaja aquí',
   '',
-  'Mission Control coordina a varios Claude (cuentas distintas) en este proyecto. Todo se hace con la orden `pmc`, desde la carpeta del proyecto. Si esa ventana no la encuentra, es `node "$LOCALAPPDATA/PakitronMC/bin/pmc.mjs"` (en PowerShell, `node "$env:LOCALAPPDATA/PakitronMC/bin/pmc.mjs"`).',
+  `Mission Control coordina a varios Claude (cuentas distintas) en este proyecto. Todo se hace con la orden \`pmc\`, desde la carpeta del proyecto. Si esa ventana no la encuentra, es ${PMC_FALLBACK}.`,
   '',
   '## Empezar',
   '- `pmc parte`: lo que está en curso, el último latido, tu cola y lo que tienen las demás cuentas, en poco texto. No leas enteros `docs/RELEVO.md`, `docs/TASKS.md` ni `docs/STATE.md`: son archivo.',

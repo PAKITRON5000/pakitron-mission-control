@@ -3,7 +3,7 @@ import { t } from '../../../core/i18n'
 // box with its fade, the way back with its «?», the marks of what waits, and what floats over any shape.
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Search, Plus, RefreshCw, ChevronDown, Check, FolderPlus, ArrowLeft } from 'lucide-react'
+import { Search, Plus, RefreshCw, ChevronDown, Check, FolderPlus, ArrowLeft, Download } from 'lucide-react'
 import { useStore, type Route } from '../lib/store'
 import { api } from '../lib/api'
 import { NAV } from '../components/Sidebar'
@@ -117,6 +117,26 @@ export function ProjectSwitcher() {
   )
 }
 
+/** A newer version on GitHub (core/updates.ts): a button in the bar that opens its installer for this system. */
+function UpdatePill() {
+  const [u, setU] = useState<{ version: string } | undefined>()
+  useEffect(() => {
+    if (window.pmc?.platform === 'remote') return
+    const look = () => { void api<any>('updateInfo').then((r) => setU(r?.update)).catch(() => undefined) }
+    // The app asks GitHub 20 s after it starts; the bar looks a little later, then every half hour.
+    const first = setTimeout(look, 25_000)
+    const id = setInterval(look, 30 * 60_000)
+    return () => { clearTimeout(first); clearInterval(id) }
+  }, [])
+  if (!u) return null
+  return (
+    <button className="btn btn-sm no-drag flex-none inline-flex items-center gap-1.5" style={{ background: 'var(--accent)', color: 'white', borderRadius: 99 }}
+      title={t('Descarga el instalador. Se instala encima de esta versión y no pierdes nada.')} onClick={() => void api('openUpdate')}>
+      <Download size={14} strokeWidth={2.4} /> {t('Versión {v0} disponible', { v0: u.version })}
+    </button>
+  )
+}
+
 /** The window's own bar: the mark, the projects (tabs or a menu), search, assistant, refresh and a new instruction. */
 export function TitleBar({ tabs = true, middle }: { tabs?: boolean; middle?: ReactNode }) {
   const { state, setPalette, openComposer, refresh, now } = useStore()
@@ -127,6 +147,7 @@ export function TitleBar({ tabs = true, middle }: { tabs?: boolean; middle?: Rea
       {tabs ? <ProjectTabs /> : <ProjectSwitcher />}
       {middle}
       <div className="ml-auto flex items-center gap-2 flex-none">
+        <UpdatePill />
         <button className="no-drag flex items-center justify-center min-[1200px]:justify-start gap-2 h-[30px] w-[34px] px-0 min-[1200px]:px-3 rounded-[8px] border-0 t-small c3 min-[1200px]:w-[min(260px,19vw)]" title={t('Buscar (Ctrl+K)')} style={{ background: 'var(--fill)' }} onClick={() => setPalette(true)} aria-label={t('Buscar (Ctrl+K)')}>
           <Search size={14} className="flex-none" /> <span className="truncate hidden min-[1200px]:inline">{t('Buscar')}</span> <span className="kbd ml-auto hidden min-[1200px]:inline">{t('Ctrl K')}</span>
         </button>

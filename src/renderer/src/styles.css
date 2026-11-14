@@ -133,6 +133,7 @@ textarea, input[type='text'], input[type='search'], .selectable { user-select: t
   position: relative; z-index: 20;
 }
 .titlebar button, .titlebar input, .no-drag { -webkit-app-region: no-drag; }
+:root[data-os="darwin"] .titlebar { padding: 0 12px 0 84px; }
 .shell { display: flex; min-height: 0; min-width: 0; }
 .sidebar {
   flex: none; display: flex; flex-direction: column; min-height: 0;

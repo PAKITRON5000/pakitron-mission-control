@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, nativeTheme, Notification, protocol, shell, dialog, clipboard, screen, Tray } from 'electron'
 import { askChange, removeChange, responsibleFor, updateChange } from '../core/changes'
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readdirSync, readFileSync, realpathSync, unlinkSync } from 'node:fs'
 import { basename, join, extname, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
@@ -12,6 +12,9 @@ import { AttentionBell, WaitCounter } from '../core/attentionBell'
 import { AnswerWatch } from '../core/answerWatch'
 import { createRemote } from './remote'
 import { bringToFront, fontLine, fontPrefix, readScreen, typeKey, typeText } from './consoleTyper'
+import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
+import { closePosixClaude, openTerminalWindow, writeTerminalScript, type TerminalJob } from './terminal'
+import { asTasklist, fixPosixPath, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
 import { t, pickLang, setLang } from '../core/i18n'
 import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
@@ -92,6 +95,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 // (Abrir sesión, Retomar) are normal ones that save their conversation.
 for (const k of ['CLAUDE_CODE_CHILD_SESSION', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_CODE_MESSAGING_SOCKET',
   'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SKIP_PROMPT_HISTORY', 'AI_AGENT', 'CLAUDE_CONFIG_DIR']) delete process.env[k]
+
+// macOS: opened from the Finder or the Dock the app would not find node, git nor claude (core/platform.ts).
+if (isMac) fixPosixPath()
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'pmc', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
@@ -271,6 +277,7 @@ function registerProtocol(): void {
 // ---- launching sessions (only when the user presses a button) ---------------------------------------------------
 
 function launcherFor(id: AccountId): string | undefined {
+  if (!isWin) return undefined
   const f = join(process.env.USERPROFILE ?? '', 'claude-accesos', `${id}.cmd`)
   return existsSync(f) ? f : undefined
 }
@@ -285,6 +292,7 @@ function openTerminal(account: AccountId, cwd: string, args: string[], title: st
   const trust = ensureTrusted(claudeJsonOf(acc), [cwd])
   if (trust.added.length) service.log(`confianza: ${account} ya confía en ${trust.added.join(', ')}`)
   else if (trust.skipped) service.log(`confianza: ${account} en ${cwd}: ${trust.skipped}`)
+  if (!isWin) { openTerminalWindow({ title, cwd, configDir: acc.configDir, argv: [findClaude(), ...args] }); return }
   const launcher = launcherFor(account)
   const cmdline = launcher ? [launcher, ...safe].join(' ') : [`"${findClaude()}"`, ...safe].join(' ')
   // EV151 (the user, 14-11 04:50: «no puedo ver los cmd bien… me gusta ver los cmd si quiero e interactuar con ellos»):
@@ -634,6 +642,7 @@ function runNpx(cmd: string, cwd: string, timeout: number): Promise<string> {
 }
 
 function closeClaudeWindow(pid: number): void {
+  if (!isWin) { void closePosixClaude(pid, true); return }
   const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Math.floor(pid)}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.Name -eq 'cmd.exe' -and $q.CommandLine -match 'claude') { $q.ProcessId } }`
   execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 10_000 }, (_err, out) => {
     const parent = Number(String(out ?? '').trim())
@@ -649,6 +658,7 @@ function closeClaudeWindow(pid: number): void {
  * claude-accesos. Never anything that is not a Claude launcher's cmd.
  */
 function closeIdleWindow(pid: number, byHandToo = false): Promise<boolean> {
+  if (!isWin) return closePosixClaude(pid, byHandToo)
   const mine = byHandToo ? '' : ` -and $q.CommandLine -match 'Mission Control'`
   const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Math.floor(pid)}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.Name -eq 'cmd.exe' -and $q.CommandLine -match 'claude-accesos'${mine}) { $q.ProcessId } }`
   return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 15_000 }, (_err, out) => {
@@ -697,7 +707,8 @@ function refreshBusy(): void {
   if (busyReading) return
   busyReading = true
   const opts = { windowsHide: true, timeout: 8000, maxBuffer: 8 << 20 }
-  execFile('tasklist', ['/FO', 'CSV', '/NH'], opts, (_e, list) => {
+  execFile(PROCESS_LIST[0], PROCESS_LIST[1], opts, (_e, procs) => {
+    const list = asTasklist(String(procs ?? ''))
     execFile('nvidia-smi', ['--query-gpu=memory.used,memory.total', '--format=csv,noheader,nounits'], opts, (_e2, gpu) => {
       busyReading = false
       busyCache = { at: Date.now(), busy: detectBusy((cmd) => String((cmd === 'tasklist' ? list : gpu) ?? '')) }
@@ -933,6 +944,7 @@ const waitingTurn: Record<string, Waiting | undefined> = {}
 
 /** The command lines of the Unity and Blender running now (what tells which project each belongs to). */
 function heavyCommandLines(): Promise<string[]> {
+  if (!isWin) return new Promise((resolve) => execFile('ps', ['-A', '-o', 'command='], { timeout: 15000, maxBuffer: 8 << 20 }, (err, out) => resolve(err ? [] : String(out).split(/\r?\n/).filter((l) => /\/(Unity|Blender)(\.app\/|\s|$)/i.test(l)))))
   const ps = "Get-CimInstance Win32_Process -Filter \"Name='Unity.exe' OR Name='blender.exe'\" | ForEach-Object { $_.CommandLine }"
   return new Promise((resolve) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 15000, maxBuffer: 4 << 20 }, (err, out) => resolve(err ? [] : String(out).split(/\r?\n/).filter(Boolean))))
 }
@@ -1219,11 +1231,44 @@ function workCopy(p: ProjectConfig): ProjectConfig['copies'][number] | undefined
 
 const TASK_FOLDER = '\\PakitronMC\\'
 
+// macOS: the scheduled start is a launchd agent of the user's (~/Library/LaunchAgents) that opens a Terminal window at
+// that hour; launchd runs it on waking if the Mac was asleep then. The window takes the agent out when it starts.
+const launchdLabel = (account: AccountId) => `es.pakitron.missioncontrol.arrancar.${account}`
+const launchdPlist = (account: AccountId) => join(homedir(), 'Library', 'LaunchAgents', `${launchdLabel(account)}.plist`)
+const launchctl = (args: string[]) => new Promise<{ ok: boolean; err: string }>((resolve) => execFile('launchctl', args, { timeout: 15000 }, (e, _o, se) => resolve({ ok: !e, err: String(se || e?.message || '') })))
+async function unloadLaunchd(account: AccountId): Promise<void> {
+  await launchctl(['bootout', `gui/${process.getuid?.() ?? 501}/${launchdLabel(account)}`])
+  try { unlinkSync(launchdPlist(account)) } catch { /* none */ }
+}
+async function scheduleLaunchd(account: AccountId, at: number, job: TerminalJob): Promise<void> {
+  const uid = process.getuid?.() ?? 501
+  const script = writeTerminalScript({ ...job, once: false, before: [`launchctl bootout gui/${uid}/${launchdLabel(account)} 2>/dev/null; rm -f ${shQuote(launchdPlist(account))}`, ...(job.before ?? [])] }, join(paths.root(), 'scheduled', `${account}.command`))
+  const x = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const d = new Date(at)
+  const when = ([['Month', d.getMonth() + 1], ['Day', d.getDate()], ['Hour', d.getHours()], ['Minute', d.getMinutes()]] as const).map(([k, v]) => `<key>${k}</key><integer>${v}</integer>`).join('')
+  const plist = ['<?xml version="1.0" encoding="UTF-8"?>', '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">', '<plist version="1.0"><dict>',
+    `<key>Label</key><string>${launchdLabel(account)}</string>`,
+    `<key>ProgramArguments</key><array><string>/usr/bin/open</string><string>-a</string><string>Terminal</string><string>${x(script)}</string></array>`,
+    `<key>StartCalendarInterval</key><dict>${when}</dict>`, '</dict></plist>', ''].join('\n')
+  await unloadLaunchd(account)
+  mkdirSync(dirname(launchdPlist(account)), { recursive: true })
+  writeFileSync(launchdPlist(account), plist)
+  const r = await launchctl(['bootstrap', `gui/${uid}`, launchdPlist(account)])
+  if (!r.ok) throw new Error(t('macOS no ha dejado programar el arranque: {v0}', { v0: r.err.split('\n')[0] }))
+}
+
 /**
  * Takes the start out of Windows' Task Scheduler and out of the settings. If Windows refuses, the settings stay as they
  * are and the user is told: saying «quitado» while the task still fires would start a session nobody expects.
  */
 async function cancelSchedule(account: AccountId): Promise<void> {
+  if (!isWin) {
+    await unloadLaunchd(account)
+    const schedules = { ...(service.settings.schedules ?? {}) }
+    delete schedules[account]
+    service.setSettings({ schedules })
+    return
+  }
   const ps = `$t = Get-ScheduledTask -TaskPath '${TASK_FOLDER}' -TaskName 'Arrancar ${account}' -ErrorAction SilentlyContinue; if ($t) { Unregister-ScheduledTask -InputObject $t -Confirm:$false -ErrorAction Stop }; exit 0`
   await new Promise<void>((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 30000 }, (err, _o, e) => (err ? reject(new Error(t('Windows no ha dejado quitar el arranque: {v0}', { v0: String(e || err.message).split('\n')[0] }))) : resolve())))
   const schedules = { ...(service.settings.schedules ?? {}) }
@@ -1504,6 +1549,16 @@ const api: Record<string, Handler> = {
     const cwd = workCopy(p)?.path ?? p.root
     const dir = join(paths.root(), 'scheduled')
     mkdirSync(dir, { recursive: true })
+    if (!isWin) {
+      const say = (opts?.prompt ?? '').replace(/[\r\n]/g, ' ').trim() || 'sigue'
+      const node = service.nodeExe && existsSync(service.nodeExe) ? service.nodeExe : 'node'
+      const gate = `${shQuote(node)} ${shQuote(join(paths.binDir(), 'pmc.mjs'))} puede-arrancar ${account} ${projectId} || exit 0`
+      await scheduleLaunchd(account, at, { title: `${account} · ${p.name} (arranque programado)`, cwd, configDir: acc.configDir, before: [gate], argv: [findClaude(), '--permission-mode', 'auto', ...(opts?.fable ? ['--model', 'fable'] : []), say] })
+      const schedules = { ...(service.settings.schedules ?? {}), [account]: { at, projectId } }
+      service.setSettings({ schedules })
+      addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: t('Arranque programado de Claude {v0}: {v1}', { v0: account.slice(6), v1: new Date(at).toLocaleString('es-ES') }), source: 'Mission Control' })
+      return { at, cwd }
+    }
     const cmd = join(dir, `${account}.cmd`)
     const launcher = launcherFor(account)
     // A waiting hand-off opened its account with a bare «sigue» and its usual model (claude5, 12-11): it carries both now.
@@ -2032,11 +2087,19 @@ const api: Record<string, Handler> = {
   },
   /** EV126: whether this PC has Claude Code (Primeros pasos offers to install it when not). */
   claudeSetup: () => ({ installed: Boolean(claudeInstalled()) }),
+  /** A newer version on GitHub, if there is one (core/updates.ts); `check` asks GitHub again now. */
+  updateInfo: async (check?: boolean) => { if (check) await checkUpdate(); return { current: app.getVersion(), update } },
+  /** Opens the installer of the new version for this system (or its page) in the browser. */
+  openUpdate: async () => { if (update) await shell.openExternal(update.download ?? update.page); return Boolean(update) },
   /**
    * EV126: Claude Code's own installer, in a window the user sees (the command its web page gives for Windows). The app
    * sees the program when it finishes (claudeInstalled looks again each time).
    */
   claudeInstall: () => {
+    if (!isWin) {
+      openTerminalWindow({ title: 'Instalar Claude Code', cwd: homedir(), argv: ['/bin/zsh', '-c', "curl -fsSL https://claude.ai/install.sh | bash; echo; echo 'Listo: ya puedes cerrar esta ventana y volver a Mission Control.'"] })
+      return true
+    }
     const child = spawn('cmd.exe', ['/d', '/s', '/c', 'start "Instalar Claude Code" powershell.exe -NoExit -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex; Write-Host; Write-Host \'Listo: ya puedes cerrar esta ventana y volver a Mission Control.\'"'], { detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' })
     child.unref()
     return true
@@ -2051,6 +2114,7 @@ const api: Record<string, Handler> = {
     if (!/^[0-9a-f]{6,12}$/i.test(shortId)) throw new Error(t('Id de sesión raro'))
     const exe = claudeInstalled()
     if (!exe) throw new Error(t('Primero hay que instalar Claude Code'))
+    if (!isWin) { openTerminalWindow({ title: `Claude ${account.slice(6)} · sesión de fondo ${shortId}`, cwd: homedir(), configDir: acc.configDir, argv: [exe, 'attach', shortId] }); return true }
     const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "Claude ${account.slice(6)} · sesión de fondo ${shortId}" conhost.exe cmd.exe /k ${fontPrefix()}"${exe}" attach ${shortId}`], { cwd: homedir(), env: envFor(acc), detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' })
     child.unref()
     return true
@@ -2061,8 +2125,8 @@ const api: Record<string, Handler> = {
     if (!acc) throw new Error(t('Cuenta desconocida'))
     const exe = claudeInstalled()
     if (!exe) throw new Error(t('Primero hay que instalar Claude Code'))
-    const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "Iniciar sesión · Claude ${account.slice(6)}" cmd.exe /k ""${exe}" auth login"`], { cwd: homedir(), env: envFor(acc), detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' })
-    child.unref()
+    if (!isWin) openTerminalWindow({ title: `Iniciar sesión · Claude ${account.slice(6)}`, cwd: homedir(), configDir: acc.configDir, argv: [exe, 'auth', 'login'] })
+    else spawn('cmd.exe', ['/d', '/s', '/c', `start "Iniciar sesión · Claude ${account.slice(6)}" cmd.exe /k ""${exe}" auth login"`], { cwd: homedir(), env: envFor(acc), detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' }).unref()
     // EV146: a sign-in that leaves no credentials file (Console, a key) is only known by asking; every 30 s for 5 minutes.
     let tries = 0
     const timer = setInterval(() => {
@@ -2429,6 +2493,7 @@ const api: Record<string, Handler> = {
   attachSession: (account: AccountId, cwd: string, shortId: string) => {
     if (!/^[0-9a-f]{8}$/i.test(shortId)) throw new Error(t('Sesión no válida'))
     const acc = service.accounts.find((a) => a.id === account)!
+    if (!isWin) { openTerminalWindow({ title: `${account} · ${shortId}`, cwd, configDir: acc.configDir, argv: [findClaude(), 'attach', shortId] }); return }
     const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "${account} · ${shortId}" conhost.exe cmd.exe /k ${fontPrefix()}"${findClaude()}" attach ${shortId}`], {
       cwd, env: envFor(acc), detached: true, windowsVerbatimArguments: true, stdio: 'ignore'
     })
@@ -2779,6 +2844,7 @@ function applyTheme(): void {
   nativeTheme.themeSource = t === 'system' ? 'system' : t
   const z = uiScale()
   for (const w of [win, floating]) if (w && !w.isDestroyed()) { try { w.webContents.setZoomFactor(z) } catch { /* loading */ } }
+  if (win && isMac) { try { win.setWindowButtonPosition(trafficLights(z)) } catch { /* older Electron */ } }
   if (win && process.platform === 'win32') {
     const dark = nativeTheme.shouldUseDarkColors
     try {
@@ -2793,9 +2859,9 @@ import { games } from '../core/resources'
 
 function isPlaying(): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true, maxBuffer: 8 << 20 }, (err, out) => {
+    execFile(PROCESS_LIST[0], PROCESS_LIST[1], { windowsHide: true, maxBuffer: 8 << 20 }, (err, out) => {
       if (err) return resolve(false)
-      const running = out.toLowerCase()
+      const running = asTasklist(String(out)).toLowerCase()
       resolve(games().some((g) => running.includes(`"${g.toLowerCase()}"`)))
     })
   })
@@ -2946,6 +3012,9 @@ let quitting = false
 let toldTray = false
 app.on('before-quit', () => { quitting = true })
 
+/** macOS: the three window buttons, centred in the app's 52 px bar at the chosen size. */
+const trafficLights = (z: number) => ({ x: 16, y: Math.max(8, Math.round((52 * z - 16) / 2)) })
+
 function createWindow(): void {
   const dark = nativeTheme.shouldUseDarkColors
   win = new BrowserWindow({
@@ -2958,7 +3027,9 @@ function createWindow(): void {
     title: 'Mission Control',
     backgroundColor: dark ? '#0e0e11' : '#f5f5f7',
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#00000000', symbolColor: dark ? '#f5f5f7' : '#1d1d1f', height: Math.round(46 * uiScale()) },
+    ...(isMac
+      ? { trafficLightPosition: trafficLights(uiScale()) }
+      : { titleBarOverlay: { color: '#00000000', symbolColor: dark ? '#f5f5f7' : '#1d1d1f', height: Math.round(46 * uiScale()) } }),
     icon: join(here, '../../build/icon.png'),
     webPreferences: {
       preload: join(here, '../preload/index.cjs'),
@@ -3139,10 +3210,32 @@ function updateTray(): void {
   ]))
 }
 
+// ---- a new version on GitHub (core/updates.ts) ------------------------------------------------------------------------
+let update: UpdateInfo | undefined
+let updateToldFor = ''
+async function checkUpdate(): Promise<void> {
+  if (process.env.PMC_SHOT_DIR) return
+  try {
+    const r = await fetch(LATEST_URL, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'mission-control-app' }, signal: AbortSignal.timeout(15_000) })
+    if (!r.ok) return
+    update = updateFrom(await r.json(), app.getVersion(), process.platform, process.arch)
+    if (update && updateToldFor !== update.version && Notification.isSupported()) {
+      updateToldFor = update.version
+      const n = new Notification({ title: t('Hay una versión nueva de Mission Control: {v0}', { v0: update.version }), body: t('Pulsa para descargarla. Se instala encima y no pierdes nada.') })
+      n.on('click', () => { void api.openUpdate() })
+      n.show()
+    }
+  } catch { /* offline: next time */ }
+}
+function startUpdateChecks(): void {
+  setTimeout(() => void checkUpdate(), 20_000).unref()
+  setInterval(() => void checkUpdate(), 6 * 3600_000).unref()
+}
+
 async function setupTray(): Promise<void> {
   if (process.env.PMC_SHOT_DIR || tray) return
   try {
-    const img = await app.getFileIcon(process.execPath, { size: 'small' })
+    const img = isMac ? nativeImage.createFromPath(join(here, '../../build/icon.png')).resize({ width: 18, height: 18 }) : await app.getFileIcon(process.execPath, { size: 'small' })
     tray = new Tray(img)
     tray.on('click', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus() } })
     updateTray()
@@ -3218,7 +3311,7 @@ function routineTick(): void {
 }
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('es.pakitron.missioncontrol')
+  if (isWin) app.setAppUserModelId('es.pakitron.missioncontrol')
   service = new Service()
   setLang(pickLang(service.settings.lang, app.getLocale()))
   service.on('stop-failure', autoRelay)
@@ -3338,6 +3431,7 @@ app.whenReady().then(async () => {
   // EV79: a question nobody answered in time takes its default option, so the Claude that asked is never left waiting.
   setInterval(() => { try { if (expireDecisions(service.db, service.projects).length) service.push() } catch (e) { service.log(`decisiones vencidas: ${(e as Error).message}`) } }, 60_000).unref()
   void setupTray()
+  startUpdateChecks()
   registerProtocol()
   ipcMain.handle('pmc', async (_e, method: string, ...args: any[]) => {
     const fn = api[method]

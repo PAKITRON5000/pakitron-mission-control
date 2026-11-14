@@ -5,6 +5,8 @@ import { join } from 'node:path'
 
 export function dataRoot(): string {
   if (process.env.PMC_DATA_DIR) return process.env.PMC_DATA_DIR
+  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Application Support', 'PakitronMC')
+  if (process.platform !== 'win32') return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'PakitronMC')
   const local = process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local')
   return join(local, 'PakitronMC')
 }

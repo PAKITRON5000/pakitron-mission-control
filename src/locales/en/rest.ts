@@ -712,4 +712,10 @@ export const rest: Record<string, string> = {
   '{name} quitada': '{name} removed',
   'Abandonada por {v0}': 'Abandoned by {v0}',
   '[~] a medias': '[~] half done',
+  // 0.33: macOS and the notice of a new version on GitHub.
+  'macOS no ha dejado programar el arranque: {v0}': 'macOS did not let the start be scheduled: {v0}',
+  'Hay una versión nueva de Mission Control: {v0}': 'A new version of Mission Control is out: {v0}',
+  'Pulsa para descargarla. Se instala encima y no pierdes nada.': 'Click to download it. It installs over this one and you lose nothing.',
+  'Descarga el instalador. Se instala encima de esta versión y no pierdes nada.': 'Downloads the installer. It installs over this version and you lose nothing.',
+  'Versión {v0} disponible': 'Version {v0} available',
 }

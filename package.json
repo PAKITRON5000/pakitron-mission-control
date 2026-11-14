@@ -1,7 +1,7 @@
 {
   "name": "pakitron-mission-control",
   "productName": "Pakitron Mission Control",
-  "version": "0.32.49",
+  "version": "0.33.0",
   "description": "Coordina tus cuentas de Claude Code en tus proyectos: quién trabaja dónde y quién sigue cuando una se queda sin uso",
   "author": "Pakitron",
   "license": "Apache-2.0",
@@ -17,7 +17,8 @@
     "dist": "npm run build && electron-builder --win",
     "build:dir": "npm run build && electron-builder --win dir",
     "actualizar": "npm run build:dir && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/actualizar.ps1",
-    "capturas": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capturas.ps1"
+    "capturas": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capturas.ps1",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -62,7 +63,8 @@
       "out/main/**",
       "out/preload/**",
       "out/renderer/**",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "extraResources": [
       {
@@ -90,6 +92,31 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Mission Control",
       "deleteAppDataOnUninstall": false
+    },
+    "afterPack": "scripts/mac-firma.cjs",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon-1024.png",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "Pakitron-Mission-Control-${version}-mac-${arch}.${ext}",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Mission Control abre y lee las ventanas de Terminal de tus sesiones de Claude Code."
+      }
+    },
+    "dmg": {
+      "title": "Mission Control ${version}",
+      "artifactName": "Pakitron-Mission-Control-${version}-mac-${arch}.${ext}"
     }
   }
 }

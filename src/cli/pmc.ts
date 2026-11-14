@@ -25,7 +25,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.32.49'
+const VERSION = '0.33.0'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }

@@ -1,3 +1,4 @@
+import { PROCESS_LIST, asTasklist } from './platform'
 import { t } from './i18n'
 // Things only one job can use at a time, whatever the project: the Unity editor of a copy, the graphics card (16 GB,
 // shared by every project), a player build (11-11: one was killed for memory). Until now this was a hand-written line in
@@ -41,7 +42,7 @@ const run: Run = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', wind
 export function detectBusy(exec: Run = run): Busy {
   const busy: Busy = { userApps: [], unityEditors: 0, blender: 0 }
   try {
-    const names = exec('tasklist', ['/FO', 'CSV', '/NH']).split(/\r?\n/).map((l) => l.match(/^"([^"]+)"/)?.[1]?.toLowerCase()).filter(Boolean) as string[]
+    const names = asTasklist(exec(...PROCESS_LIST)).split(/\r?\n/).map((l) => l.match(/^"([^"]+)"/)?.[1]?.toLowerCase()).filter(Boolean) as string[]
     busy.playing = games().find((g) => names.includes(g.toLowerCase()))
     busy.userApps = USER_HEAVY.filter(([exe]) => names.includes(exe)).map(([, label]) => label)
     busy.unityEditors = names.filter((n) => n === 'unity.exe').length

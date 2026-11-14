@@ -22,7 +22,7 @@ import { scanMediaAsync, hashPending } from '../core/media'
 import { listAssignments, pruneAssignments, seedAssignments } from '../core/coord'
 import { modeOf } from '../core/workmode'
 import { isSessionWorking } from '../core/working'
-import { installNodeShim, installShims, shimDir } from '../core/shim'
+import { installNodeShim, installShims, nodeShimPath, shimDir } from '../core/shim'
 import { applyPendingRestore } from '../core/restore'
 import { codexChats, placeCodexChats } from '../core/astra'
 import { statusLineState, hooksState, type StatusLineState } from '../core/integrations'
@@ -723,6 +723,14 @@ export function timed(log: (s: string) => void, name: string, fn: () => unknown)
 }
 
 function findNode(): string | undefined {
+  // macOS and Linux: node from the PATH (the login shell's, core/platform.ts) or the usual folders; else the app's own.
+  if (process.platform !== 'win32') {
+    if (!process.env.PMC_SIN_NODE) {
+      const found = [...(process.env.PATH ?? '').split(':').filter(Boolean).map((d) => join(d, 'node')), '/opt/homebrew/bin/node', '/usr/local/bin/node'].find((c) => !c.startsWith(paths.binDir()) && existsSync(c))
+      if (found) return found
+    }
+    try { return installNodeShim(process.execPath) } catch { return undefined }
+  }
   const candidates = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe']
   // PMC_SIN_NODE: a PC without Node.js, for scripts/primera-vez.ps1 -SinNada.
   if (!process.env.PMC_SIN_NODE) {
@@ -740,6 +748,6 @@ function findNode(): string | undefined {
 /** Runs pmc.mjs (or any script) with Node, or with the app's own program when this PC has no Node.js (EV126). */
 export function nodeArgs(nodeExe: string, args: string[], env: NodeJS.ProcessEnv = process.env): { file: string; args: string[]; env: NodeJS.ProcessEnv } {
   // A .cmd cannot be started without a shell (Node refuses it since 2024): its program directly, with its variable.
-  if (/\.cmd$/i.test(nodeExe)) return { file: process.execPath, args, env: { ...env, ELECTRON_RUN_AS_NODE: '1' } }
+  if (/\.cmd$/i.test(nodeExe) || nodeExe === nodeShimPath()) return { file: process.execPath, args, env: { ...env, ELECTRON_RUN_AS_NODE: '1' } }
   return { file: nodeExe, args, env }
 }

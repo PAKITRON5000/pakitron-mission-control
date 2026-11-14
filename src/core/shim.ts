@@ -3,7 +3,7 @@
 // two tiny launchers in the user's own command folder (`~/.local/bin`, where Claude Code keeps `claude.exe`, already on
 // the PATH): `pmc.cmd` for PowerShell and cmd, `pmc` for bash. The same pattern npm uses for its commands. Nothing else
 // is touched: no PATH change, no registry. If that folder is not on the PATH, everything goes on with the long form.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { paths } from './paths'
@@ -16,9 +16,13 @@ export const shimDir = (): string => join(homedir(), '.local', 'bin')
  * and from cmd on 13-11). The app leaves it only when it finds no Node.js; from then on hooks, status lines and
  * launchers name it instead of `node`.
  */
-export const nodeShimPath = (): string => join(paths.binDir(), 'node.cmd')
+// macOS and Linux: a shell script `bin/node` instead of `bin\node.cmd`, and only the `pmc` launcher (no `pmc.cmd`).
+const posix = process.platform !== 'win32'
+
+export const nodeShimPath = (): string => join(paths.binDir(), posix ? 'node' : 'node.cmd')
 
 export function nodeShimText(appExe: string): string {
+  if (posix) return ['#!/bin/sh', `ELECTRON_RUN_AS_NODE=1 exec '${appExe.replace(/'/g, `'\\''`)}' "$@"`, ''].join('\n')
   return ['@echo off', 'setlocal', 'set ELECTRON_RUN_AS_NODE=1', `"${appExe}" %*`, ''].join('\r\n')
 }
 
@@ -29,8 +33,9 @@ export function installNodeShim(appExe: string, file = nodeShimPath()): string {
   try { cur = readFileSync(file, 'utf8') } catch { /* none */ }
   if (cur !== text) {
     mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, text)
+    writeFileSync(file, text, { mode: 0o755 })
   }
+  if (posix) chmodSync(file, 0o755)
   return file
 }
 
@@ -55,14 +60,15 @@ export function installShims(pmcMjs: string, dir = shimDir()): string[] {
   const t = shimTexts(pmcMjs)
   const made: string[] = []
   mkdirSync(dir, { recursive: true })
-  for (const [name, text] of [['pmc.cmd', t.cmd], ['pmc', t.sh]] as const) {
+  for (const [name, text] of (posix ? [['pmc', t.sh]] : [['pmc.cmd', t.cmd], ['pmc', t.sh]]) as [string, string][]) {
     const f = join(dir, name)
     let cur: string | undefined
     try { cur = readFileSync(f, 'utf8') } catch { /* none */ }
     if (cur === text) continue
     // Someone else's `pmc` is never replaced: only one that runs this pmc.mjs (an older path, a different form).
     if (cur !== undefined && !cur.includes('pmc.mjs')) continue
-    writeFileSync(f, text)
+    writeFileSync(f, text, { mode: 0o755 })
+    if (posix) chmodSync(f, 0o755)
     made.push(name)
   }
   return made
@@ -74,9 +80,9 @@ const norm = (p: string) => p.replace(/\\/g, '/').replace(/^\/([a-z])\//i, '$1:/
 export function shimReady(pmcMjs: string, dir = shimDir(), envPath = process.env.PATH ?? process.env.Path ?? ''): boolean {
   const t = shimTexts(pmcMjs)
   try {
-    if (readFileSync(join(dir, 'pmc.cmd'), 'utf8') !== t.cmd || readFileSync(join(dir, 'pmc'), 'utf8') !== t.sh) return false
+    if ((!posix && readFileSync(join(dir, 'pmc.cmd'), 'utf8') !== t.cmd) || readFileSync(join(dir, 'pmc'), 'utf8') !== t.sh) return false
   } catch { return false }
   // Node always sees a Windows PATH (Git Bash converts it for native programs): folders separated by «;».
   const want = norm(dir)
-  return existsSync(dir) && envPath.split(';').some((p) => p.trim() && norm(p.trim()) === want)
+  return existsSync(dir) && envPath.split(posix ? ':' : ';').some((p) => p.trim() && norm(p.trim()) === want)
 }

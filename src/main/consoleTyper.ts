@@ -4,6 +4,9 @@ import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { paths } from '../core/paths'
+import { macBringToFront, macReadScreen, macTypeKey, macTypeText } from './terminal'
+
+const posix = process.platform !== 'win32'
 
 const SCRIPT = String.raw`param([int]$TargetPid, [string]$TextBase64 = '', [string]$Key = '')
 $code = @'
@@ -75,12 +78,14 @@ function run(args: string[]): Promise<void> {
 }
 
 export function typeText(pid: number, text: string): Promise<void> {
+  if (posix) return macTypeText(pid, text)
   const flat = text.replace(/\s*\r?\n\s*/g, ' ').trim()
   return run(['-TargetPid', String(pid), '-TextBase64', Buffer.from(flat, 'utf8').toString('base64')])
 }
 
 /** One key: 'esc' stops what it is doing, a number picks a choice in a question, 'up'/'down' move in a menu, 'enter' confirms. */
 export function typeKey(pid: number, key: string): Promise<void> {
+  if (posix) return macTypeKey(pid, key)
   return run(['-TargetPid', String(pid), '-Key', key])
 }
 
@@ -128,6 +133,7 @@ let readerWritten = false
 
 /** The last lines a console window shows, as text. */
 export function readScreen(pid: number, lines = 40): Promise<string> {
+  if (posix) return macReadScreen(pid, lines)
   const file = join(paths.root(), 'read-console.ps1')
   if (!readerWritten || !existsSync(file)) writeFileSync(file, READER)
   readerWritten = true
@@ -175,6 +181,7 @@ let frontWritten = false
 
 /** Puts the console window of a running Claude in front of the others. */
 export function bringToFront(pid: number): Promise<void> {
+  if (posix) return macBringToFront(pid)
   const file = join(paths.root(), 'console-front.ps1')
   if (!frontWritten || !existsSync(file)) writeFileSync(file, FRONT)
   frontWritten = true
@@ -219,6 +226,7 @@ try { Add-Type -TypeDefinition $code; [ConsoleFont]::Set($Face) | Out-Null } cat
 
 /** The line that sets the font of the console it runs in (empty if the script cannot be written). */
 export function fontLine(): string {
+  if (posix) return ''
   const file = join(paths.root(), 'console-font.ps1')
   try {
     if (!existsSync(file) || readFileSync(file, 'utf8') !== FONT) writeFileSync(file, FONT)

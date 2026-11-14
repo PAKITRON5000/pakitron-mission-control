@@ -1,10 +1,10 @@
 # Mission Control for Claude Code
 
-**A desktop app for Windows that coordinates your Claude Code accounts and projects.** See which Claude is working where, how much usage each one has left, what they are waiting for you to decide, and who carries on when one runs out of usage. It works with one account and gets better with several.
+**A desktop app for Windows and macOS that coordinates your Claude Code accounts and projects.** See which Claude is working where, how much usage each one has left, what they are waiting for you to decide, and who carries on when one runs out of usage. It works with one account and gets better with several.
 
 [Leer en español](LEEME.md) · [Buy me a coffee](https://buymeacoffee.com/pakitron.exe)
 
-> The interface is in English and Spanish (Settings › General › Language; by default, your Windows language). The pictures below use made-up data: three accounts and three example projects.
+> The interface is in English and Spanish (Settings › General › Language; by default, your system language). The pictures below use made-up data: three accounts and three example projects.
 
 ![Mission Control home: two Claude Code sessions at work, questions waiting for an answer and the live map of accounts and projects](docs/img/inicio.png)
 
@@ -36,16 +36,20 @@ Claude Code is great at working on its own, but once you run it in more than one
 
 ## Requirements
 
-- Windows 10 or 11.
+- Windows 10 or 11, or macOS 12 or later (Apple Silicon or Intel).
 - A Claude account with Claude Code, on any plan: Pro, Max, Team, Enterprise, or pay as you go (Console, an API key, Amazon Bedrock, Google Vertex). Claude Code only reports how much usage is left on subscription plans. On the others the app knows an account has run out when Claude Code says so, and it never keeps a pay-as-you-go account working on its own.
 - Nothing else. If Claude Code is missing, the app installs it with Anthropic's official installer. Node.js is not needed.
 
 ## Install
 
-1. Download `Pakitron Mission Control Setup <version>.exe` from [Releases](../../releases) and run it. It is not signed yet, so Windows may warn you: "More info" › "Run anyway".
+1. Download the installer from [Releases](../../releases):
+   - **Windows**: `Pakitron.Mission.Control.Setup.<version>.exe`. It is not signed yet, so Windows may warn you: "More info" › "Run anyway".
+   - **Mac**: `Pakitron-Mission-Control-<version>-mac-arm64.dmg` for Apple Silicon (M1 and later), `…-mac-x64.dmg` for Intel. Open the `.dmg` and drag the app to **Applications**. It is not notarized by Apple, so the first time right-click it › **Open** › **Open** (or System Settings › Privacy & Security › **Open Anyway**). On a Mac the Claude windows open in Terminal; to let the app type your phone messages into them, allow it in Privacy & Security › **Accessibility**.
 2. Open **Pakitron Mission Control**. Its first screen walks you through four steps: your Claude accounts, letting the app see what each Claude does (it adds Claude Code hooks, after backing up your `settings.json`), your first project folder, and who carries on when an account runs out.
 
-From source: `npm install`, then `npm run dev` to try it or `npm run dist` to build the installer in `dist\`.
+Updating: when a new version is out, the app says so in its top bar and opens the right installer for your system. Install it over the old one: your data live in their own folder (`%LOCALAPPDATA%\PakitronMC` on Windows, `~/Library/Application Support/PakitronMC` on a Mac) and nothing is lost.
+
+From source: `npm install`, then `npm run dev` to try it, `npm run dist` to build the Windows installer or `npm run dist:mac` (on a Mac) for the `.dmg` files, in `dist/`.
 
 ## How the Claudes work with it
 
