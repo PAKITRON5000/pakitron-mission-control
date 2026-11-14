@@ -2,7 +2,7 @@
 // rewritten branch kept beside the old one (nothing in the copy is ever overwritten).
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { backupProject } from '../src/main/backup'
@@ -48,7 +48,7 @@ describe('backup run', () => {
 
       // A folder there that is not a git copy is never touched.
       const notGit = join(base, 'Copias de proyectos', 'otra cosa')
-      execFileSync('cmd', ['/c', 'mkdir', notGit], { windowsHide: true })
+      mkdirSync(notGit, { recursive: true })
       const refused = await backupProject(repo, notGit)
       expect(refused.ok).toBe(false)
       expect(refused.summary).toContain('no se toca')

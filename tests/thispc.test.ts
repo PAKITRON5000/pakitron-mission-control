@@ -15,7 +15,7 @@ describe('este-pc.json', () => {
     expect(games()).toEqual(COMMON_GAMES)
   })
 
-  it("with it: the user's own game counts as playing, and its folders come with %VARIABLES% expanded", () => {
+  it.skipIf(process.platform !== 'win32')("with it: the user's own game counts as playing, and its folders come with %VARIABLES% expanded", () => {
     writeFileSync(join(process.env.PMC_DATA_DIR!, 'este-pc.json'), '﻿' + JSON.stringify({ juegos: ['MiJuego.exe', ''], carpetasDeLimites: ['%LOCALAPPDATA%\\Avisos', ' '] }))
     expect(games()).toEqual([...COMMON_GAMES, 'MiJuego.exe'])
     expect(limitDirs()).toEqual([`${process.env.LOCALAPPDATA}\\Avisos`])

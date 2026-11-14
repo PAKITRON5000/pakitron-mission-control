@@ -118,7 +118,8 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
           <>
             <span className="num" style={{ fontSize: size * (small ? 0.24 : 0.2), fontWeight: 760, color: leftColor(tight.left, 'var(--label)'), letterSpacing: '-0.03em' }}>{Math.round(tight.left!)}<span style={{ fontSize: size * (small ? 0.13 : 0.11) }}>%</span></span>
             {small
-              ? <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{tight.which === 'five' ? '5 h' : 'semana'}</span>
+              // 14-11 (a Mac): «70 %» alone read as spent when it is what is left; the small ring says «queda» too.
+              ? <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{tight.which === 'five' ? t('queda · 5 h') : t('queda · sem.')}</span>
               : <>
                 <span style={{ fontSize: tiny(0.09), color: 'var(--label-2)', fontWeight: 650, marginTop: 1 }}>{t('queda')}</span>
                 <span style={{ fontSize: tiny(0.085), color: 'var(--label-2)', fontWeight: 550 }}>{tight.which === 'five' ? '5 horas' : 'semana'}</span>

@@ -8,7 +8,11 @@ describe('requirements at start', () => {
   it('asks for Claude Code, Git and Node always; Unity and Blender only when a project uses them', () => {
     const none = checkTools({ claudePath: 'claude', projectRoots: ['C:/p'], accounts: [], exec: exec(['git', 'node']), exists: () => false })
     expect(none.map((c) => `${c.name}:${c.ok}`)).toEqual(['Claude Code:false', 'Git:true', 'Node:true'])
-    expect(none[0].fix).toContain('Instala Claude Code')
+    expect(none[0]).toMatchObject({ install: 'claude' })
+    // 14-11: missing Git gets a one-click install; missing Node is fine while the app's own program stands in for it.
+    const bare = checkTools({ claudePath: 'claude', projectRoots: [], accounts: [], exec: exec(['claude']), exists: () => false, nodeFallback: '/x/bin/node', platform: 'darwin' })
+    expect(bare.map((c) => `${c.name}:${c.ok}:${c.install ?? ''}`)).toEqual(['Claude Code:true:claude', 'Git:false:git', 'Node:true:'])
+    expect(bare[1].fix).toContain('macOS')
     const game = checkTools({ claudePath: 'claude', projectRoots: ['C:/game'], accounts: [], exec: exec(['claude', 'git', 'node']), exists: (p) => p === join('C:/game', 'ProjectSettings', 'ProjectVersion.txt') || p === join('C:/game', 'ArtSource') })
     expect(game.map((c) => c.name)).toEqual(['Claude Code', 'Git', 'Node', 'Unity', 'Blender'])
     expect(game.find((c) => c.name === 'Unity')).toMatchObject({ ok: false, needed: false })

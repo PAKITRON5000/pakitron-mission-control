@@ -376,6 +376,8 @@ export interface Settings {
   backup?: { on?: boolean; dir?: string; hora?: string; off?: string[] }
   /** Starts scheduled with Windows' Task Scheduler (Próximo › Programar arranque), by account. */
   schedules?: Record<string, { at: number; projectId: string }>
+  /** The app version that already opened the installer of a missing Git once (main/index.ts › offerMissingTools). */
+  toolsOfferedFor?: string
   /** What only the user knows about an account: set aside (not to be used) or no longer paid. Absent: in use. */
   accountStatus?: Record<string, 'pausada' | 'baja' | undefined>
   /** EV68: the user hid «Primeros pasos» (Inicio); it comes back only while there is no project. */

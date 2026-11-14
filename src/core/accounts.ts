@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccountConfig, AccountId, AccountIdentity, AccountUsage, LimitHit, UsageSnapshot } from './types'
-import { home, paths } from './paths'
+import { home, pathKey, paths } from './paths'
 import { limitDirs } from './thispc'
 import { parseCreditsFile, parseWakeLog } from './parse/limits'
 import { configDirOf } from './sessions'
@@ -94,7 +94,7 @@ export interface FoundAccount {
  * `withoutLogin`: also the folders with no credentials file (marked signedIn: false), for the app to ask Claude Code.
  */
 export function detectAccounts(known: Pick<AccountConfig, 'id' | 'configDir'>[], dir = home(), opts: { withoutLogin?: boolean } = {}): FoundAccount[] {
-  const key = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase()
+  const key = (p: string) => pathKey(p)
   const followed = new Set(known.map((a) => key(a.configDir || join(dir, '.claude'))))
   const taken = new Set(known.map((a) => a.id))
   const found = new Map<string, FoundAccount>()

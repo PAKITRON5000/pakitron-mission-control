@@ -55,6 +55,7 @@ export function Viewer() {
   const versions = useAsync(() => (viewer && pid ? api<any[]>('assetVersions', pid, viewer) : Promise.resolve([])), [viewer, pid])
   const a = asset.data
   const [mode, setMode] = useState<Mode>('ver')
+  const swipe = useRef<{ x: number; y: number } | undefined>(undefined)
   const [draft, setDraft] = useState<Draft>()
   const [text, setText] = useState('')
   const [target, setTarget] = useState<AccountId | ''>('')
@@ -165,7 +166,16 @@ export function Viewer() {
           </div>
           <div className="flex-1 min-h-0 flex">
             <div className="flex-1 min-w-0 flex flex-col">
-            <div className="flex-1 min-h-0 relative">
+            <div className="flex-1 min-h-0 relative"
+              onTouchStart={(e) => { swipe.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : undefined }}
+              onTouchEnd={(e) => {
+                const s0 = swipe.current; swipe.current = undefined
+                if (!s0 || mode !== 'ver' || draft) return
+                const dx = e.changedTouches[0].clientX - s0.x, dy = e.changedTouches[0].clientY - s0.y
+                if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+                if (dx < 0 && idx >= 0 && idx < list.length - 1) setViewer(list[idx + 1])
+                else if (dx > 0 && idx > 0) setViewer(list[idx - 1])
+              }}>
               {a?.kind === 'image' && (
                 <ImageStage
                   key={a.id}
@@ -223,6 +233,13 @@ export function Viewer() {
               {idx >= 0 && idx < list.length - 1 && !draft && (
                 <button className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center border-0 opacity-70 hover:opacity-100 transition-opacity"
                   style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)', boxShadow: 'var(--shadow-2)' }} onClick={() => setViewer(list[idx + 1])} aria-label={t('Siguiente (→)')} title={t('Siguiente (→)')}><ChevronRight size={20} /></button>
+              )}
+              {/* EV168 (the user's note #12, from the phone: «no puedo ver los títulos de las fotos si estoy dentro deslizando
+                  entre ellas»): each piece's name, and its task, over it while passing from one to the next. */}
+              {a && !draft && (
+                <div key={a.id} className="viewer-caption absolute left-1/2 -translate-x-1/2 top-3 z-10 pointer-events-none t-small truncate">
+                  <b>{a.name}</b>{a.taskExtId ? <span className="c2"> · {a.taskExtId}</span> : null}{list.length > 1 && idx >= 0 ? <span className="c3"> · {idx + 1}/{list.length}</span> : null}
+                </div>
               )}
             </div>
             {list.length > 1 && <Filmstrip list={list} current={viewer!} onPick={(id) => setViewer(id)} />}

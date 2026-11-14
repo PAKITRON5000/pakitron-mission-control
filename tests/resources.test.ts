@@ -22,7 +22,7 @@ describe('shared resources', async () => {
     return gpu
   }
 
-  it('sees the user playing or editing, the editors open and the memory of the card', () => {
+  it.skipIf(process.platform !== 'win32')('sees the user playing or editing, the editors open and the memory of the card', () => {
     const busy = res.detectBusy(exec(tasklist('System', 'Adobe Premiere Pro.exe', 'Unity.exe', 'Unity Hub.exe', 'VALORANT-Win64-Shipping.exe', 'blender.exe'), '13100, 16303\r\n'))
     expect(busy.playing).toBe('VALORANT-Win64-Shipping.exe')
     expect(busy.userApps).toEqual(['Premiere'])

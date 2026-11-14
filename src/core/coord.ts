@@ -773,8 +773,8 @@ export const SHARED_FILE_MS = 30 * 60_000
 export function sharedFileWarning(db: DB, account: AccountId, file: string, sessionId: string | undefined, projectId: string | undefined, now = Date.now()): string | undefined {
   const path = nativePath(file)
   const other = db
-    .prepare("SELECT account, MAX(at) AS at FROM events WHERE kind = 'archivo' AND lower(detail) = lower(?) AND account IS NOT NULL AND account != ? AND at > ? GROUP BY account ORDER BY at DESC LIMIT 1")
-    .get(path, account, now - SHARED_FILE_MS) as { account: string; at: number } | undefined
+    .prepare("SELECT account, MAX(at) AS at FROM events WHERE kind = 'archivo' AND lower(replace(detail, char(92), '/')) = lower(?) AND account IS NOT NULL AND account != ? AND at > ? GROUP BY account ORDER BY at DESC LIMIT 1")
+    .get(path.split('\\').join('/'), account, now - SHARED_FILE_MS) as { account: string; at: number } | undefined
   if (!other) return undefined
   const name = path.split(/[\\/]/).pop() ?? path
   const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: t('Claude {v0} y Claude {v1} han escrito el mismo archivo: {name}', { v0: account.slice(6), v1: other.account.slice(6), name: name }), detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${path.toLowerCase()}` })

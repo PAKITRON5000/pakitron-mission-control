@@ -6,7 +6,11 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-export interface Check { name: string; ok: boolean; detail: string; fix?: string; needed: boolean }
+export interface Check {
+  name: string; ok: boolean; detail: string; fix?: string; needed: boolean
+  /** 14-11: what one click installs when it is missing (main/index.ts › installTool). */
+  install?: 'claude' | 'git' | 'node'
+}
 
 export type Run = (cmd: string, args: string[]) => string
 const run: Run = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', windowsHide: true, timeout: 6000, stdio: ['ignore', 'pipe', 'ignore'] })
@@ -24,6 +28,9 @@ export interface HealthInput {
   now?: number
   exec?: Run
   exists?: (p: string) => boolean
+  /** The app's own program standing in for Node (core/shim.ts), when this machine has no Node.js. */
+  nodeFallback?: string
+  platform?: string
 }
 
 /** Programs: the ones every project needs, and Unity or Blender only when a project uses them. */
@@ -32,11 +39,14 @@ export function checkTools(i: HealthInput): Check[] {
   const exists = i.exists ?? existsSync
   const out: Check[] = []
   const claude = i.claudePath !== 'claude' && exists(i.claudePath) ? version(exec, i.claudePath) ?? 'instalado' : version(exec, 'claude')
-  out.push({ name: 'Claude Code', ok: Boolean(claude), detail: claude ?? t('no se encuentra'), fix: 'Instala Claude Code (claude.com/claude-code) y abre de nuevo Mission Control', needed: true })
+  const mac = (i.platform ?? process.platform) === 'darwin'
+  out.push({ name: 'Claude Code', ok: Boolean(claude), detail: claude ?? t('no se encuentra'), fix: t('Pulsa «Instalar»: abre el instalador oficial de Claude Code en una ventana'), needed: true, install: 'claude' })
   const git = version(exec, 'git')
-  out.push({ name: 'Git', ok: Boolean(git), detail: git ?? t('no se encuentra'), fix: 'Instala Git (git-scm.com): sin él no hay ramas, copias de trabajo ni historial de cambios', needed: true })
+  out.push({ name: 'Git', ok: Boolean(git), detail: git ?? t('no se encuentra'), fix: mac ? t('Pulsa «Instalar»: macOS abre su instalador de herramientas (Git va con ellas). Sin Git no hay ramas, copias de trabajo ni historial de cambios') : t('Pulsa «Instalar» (lo instala winget, el instalador de Windows). Sin Git no hay ramas, copias de trabajo ni historial de cambios'), needed: true, install: 'git' })
   const node = version(exec, 'node')
-  out.push({ name: 'Node', ok: Boolean(node), detail: node ?? t('no se encuentra'), fix: 'Instala Node 22 o posterior (nodejs.org): las órdenes pmc y los avisos a los Claude lo usan', needed: true })
+  // EV126: without Node.js, pmc runs on the app's own program: nothing is missing then (14-11, a Mac: «instala Node 22» scared).
+  if (!node && i.nodeFallback) out.push({ name: 'Node', ok: true, detail: t('no instalado: pmc usa el programa de Mission Control, no hace falta'), needed: false })
+  else out.push({ name: 'Node', ok: Boolean(node), detail: node ?? t('no se encuentra'), fix: t('Pulsa «Instalar» (Node 22 o posterior): las órdenes pmc y los avisos a los Claude lo usan'), needed: true, install: 'node' })
   const unity = i.projectRoots.some((r) => exists(join(r, 'ProjectSettings', 'ProjectVersion.txt')))
   if (unity) {
     const hub = ['C:\\Program Files\\Unity\\Hub\\Editor', 'C:\\Program Files\\Unity Hub'].find((p) => exists(p))

@@ -25,7 +25,7 @@ import { setTaskStatus, listTasks } from '../core/engine'
 import { addComment, addInstruction, deliverToBuzon, listComments, listInstructions, setCommentStatus, setInstructionStatus, guessKind, buzonLine, editComment, deleteComment } from '../core/review'
 import { installStatusLine, uninstallStatusLine, statusLineState } from '../core/integrations'
 import { claudeInstalled, envFor, findClaude, findTranscript, projectsDir, projectsDirs, encodeCwd } from '../core/sessions'
-import { nodeRunner } from '../core/shim'
+import { nodeRunner, nodeShimPath } from '../core/shim'
 import { addAppTask } from '../core/engine'
 import { binnable, detectProject, integration, isInside, newestDoc, taskDiff } from '../core/projects'
 import { queryAssets, assetFacets, assetFolder, galleryHome, type AssetQuery } from '../core/gallery'
@@ -2138,6 +2138,8 @@ const api: Record<string, Handler> = {
   },
   /** EV126: whether this PC has Claude Code (Primeros pasos offers to install it when not). */
   claudeSetup: () => ({ installed: Boolean(claudeInstalled()) }),
+  /** 14-11 (the user: «debería instalarse solo… o que dé la opción ahí en comprobación de instalar con un click»). */
+  installTool: async (tool: 'claude' | 'git' | 'node') => { await installTool(tool); healthCache = undefined; return true },
   /** A newer version on GitHub, if there is one (core/updates.ts); `check` asks GitHub again now. */
   updateInfo: async (check?: boolean) => { if (check) await checkUpdate(); return { current: app.getVersion(), update } },
   /** Opens the installer of the new version for this system (or its page) in the browser. */
@@ -2418,6 +2420,7 @@ const api: Record<string, Handler> = {
     const st = service.state()
     const input = {
       claudePath: findClaude(),
+      nodeFallback: service.nodeExe && service.nodeExe === nodeShimPath() ? service.nodeExe : undefined,
       projectRoots: service.projects.map((p) => p.root),
       accounts: service.accounts.filter((a) => !service.settings.accountStatus?.[a.id]).map((a) => ({ id: a.id, configDir: envFor(a).CLAUDE_CONFIG_DIR ?? (a.configDir || join(homedir(), '.claude')), statusLine: Boolean(st.statusLine[a.id]?.ours), hooks: Boolean(st.hooks[a.id]), usageAt: service.agents.find((x) => x.id === a.id)?.usage.snapshot?.capturedAt }))
     }
@@ -3245,6 +3248,40 @@ function updateTray(): void {
   ]))
 }
 
+// ---- installing what this machine lacks (14-11) --------------------------------------------------------------------------
+/**
+ * Git and Node with one click, with each system's own installer: on a Mac Apple's command line tools (Git comes with
+ * them; macOS shows its own dialog) and Homebrew or nodejs.org for Node; on Windows winget, in a window the user sees
+ * (Windows asks for permission itself).
+ */
+async function installTool(tool: 'claude' | 'git' | 'node'): Promise<void> {
+  if (tool === 'claude') { api.claudeInstall(); return }
+  if (isMac) {
+    if (tool === 'git') { execFile('xcode-select', ['--install'], () => undefined); return }
+    const brew = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'].find((b) => existsSync(b))
+    if (brew) openTerminalWindow({ title: t('Instalar Node'), cwd: homedir(), argv: [brew, 'install', 'node'] })
+    else await shell.openExternal('https://nodejs.org/en/download')
+    return
+  }
+  if (isWin) {
+    const id = tool === 'git' ? 'Git.Git' : 'OpenJS.NodeJS.LTS'
+    spawn('cmd.exe', ['/d', '/s', '/c', `start "${tool === 'git' ? 'Instalar Git' : 'Instalar Node'}" cmd.exe /k winget install --id ${id} -e --accept-package-agreements --accept-source-agreements`], { detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' }).unref()
+    return
+  }
+  await shell.openExternal(tool === 'git' ? 'https://git-scm.com/downloads' : 'https://nodejs.org/en/download')
+}
+
+/** Once per version of the app (a new install or an update), Git's installer opens by itself when this machine lacks it. */
+function offerMissingTools(): void {
+  if (process.env.PMC_SHOT_DIR || service.settings.toolsOfferedFor === app.getVersion()) return
+  service.setSettings({ toolsOfferedFor: app.getVersion() })
+  execFile('git', ['--version'], { windowsHide: true, timeout: 8000 }, (err) => {
+    if (!err) return
+    service.log('git no está: se abre su instalador')
+    void installTool('git').catch(() => undefined)
+  })
+}
+
 // ---- a new version on GitHub (core/updates.ts) ------------------------------------------------------------------------
 let update: UpdateInfo | undefined
 let updateToldFor = ''
@@ -3467,6 +3504,7 @@ app.whenReady().then(async () => {
   setInterval(() => { try { if (expireDecisions(service.db, service.projects).length) service.push() } catch (e) { service.log(`decisiones vencidas: ${(e as Error).message}`) } }, 60_000).unref()
   void setupTray()
   startUpdateChecks()
+  setTimeout(offerMissingTools, 30_000).unref()
   setTimeout(() => void autoSkillSearch(), 5 * 60_000).unref()
   setInterval(() => void autoSkillSearch(), 3600_000).unref()
   registerProtocol()

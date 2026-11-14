@@ -396,11 +396,18 @@ export function Memory() {
 const COLORS = ['#FF9F0A', '#0A84FF', '#BF5AF2', '#30D158', '#FF375F', '#64D2FF', '#FFD60A', '#AC8E68', '#5E5CE6', '#FF6B8B']
 
 /** Ajustes › Cuentas: add an account (its own folder; the login is done once in a terminal) or take one out. */
-interface HealthCheck { name: string; ok: boolean; detail: string; fix?: string; needed: boolean }
+interface HealthCheck { name: string; ok: boolean; detail: string; fix?: string; needed: boolean; install?: 'claude' | 'git' | 'node' }
 
 /** What this PC needs and whether the data of each account arrives: each line says what it is and what to do. */
 function HealthSection() {
+  const { toast } = useStore()
   const [n, setN] = useState(0)
+  // After «Instalar», looked at again every 20 s for three minutes: the installer takes its time.
+  const install = (c: HealthCheck) => void api('installTool', c.install).then(() => {
+    toast(t('Se ha abierto el instalador de {v0}: cuando acabe, aparecerá en verde', { v0: c.name }))
+    let k = 0
+    const timer = setInterval(() => { setN((x) => x + 1); if (++k >= 9) clearInterval(timer) }, 20_000)
+  })
   const h = useAsync(() => api<{ tools: HealthCheck[]; readings: HealthCheck[] }>('health', n > 0), [n])
   const row = (c: HealthCheck) => (
     <div key={c.name} className="row">
@@ -409,6 +416,7 @@ function HealthSection() {
         <div className="t-body" style={{ fontWeight: 580 }}>{c.name} <span className="c3 t-small" style={{ fontWeight: 450 }}>· {c.detail}</span></div>
         {!c.ok && c.fix && <div className="t-small" style={{ color: c.needed ? 'var(--red)' : 'var(--orange)' }}>{c.fix}</div>}
       </div>
+      {!c.ok && c.install && <button className="btn btn-sm btn-primary flex-none" onClick={() => install(c)}>{t('Instalar')}</button>}
     </div>
   )
   return (

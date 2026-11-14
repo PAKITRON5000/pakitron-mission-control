@@ -7,7 +7,7 @@ import { installNodeShim, installShims, shimReady, shimTexts } from '../src/core
 import { nodeArgs } from '../src/main/service'
 
 describe('pmc launchers', () => {
-  it('writes pmc.cmd and pmc once, and says pmc is usable only when their folder is on the PATH', () => {
+  it.skipIf(process.platform !== 'win32')('writes pmc.cmd and pmc once, and says pmc is usable only when their folder is on the PATH', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pmc-shim-'))
     const mjs = 'C:\\Users\\x\\AppData\\Local\\PakitronMC\\bin\\pmc.mjs'
     expect(shimReady(mjs, dir, `C:\\Windows;${dir}`)).toBe(false)
@@ -19,7 +19,7 @@ describe('pmc launchers', () => {
     expect(shimReady(mjs, dir, 'C:\\Windows')).toBe(false)
   })
 
-  it('a pmc that is not ours is left alone; one of ours with an old path is brought up to date', () => {
+  it.skipIf(process.platform !== 'win32')('a pmc that is not ours is left alone; one of ours with an old path is brought up to date', () => {
     const dir = mkdtempSync(join(tmpdir(), 'pmc-shim-'))
     writeFileSync(join(dir, 'pmc'), '#!/bin/sh\necho otro programa\n')
     writeFileSync(join(dir, 'pmc.cmd'), shimTexts('D:\\viejo\\pmc.mjs').cmd)
@@ -28,7 +28,7 @@ describe('pmc launchers', () => {
     expect(shimReady('C:\\nuevo\\pmc.mjs', dir, dir)).toBe(false)
   })
 
-  it("on a PC without Node.js, pmc runs on the app's own program (EV126)", () => {
+  it.skipIf(process.platform !== 'win32')("on a PC without Node.js, pmc runs on the app's own program (EV126)", () => {
     const dir = mkdtempSync(join(tmpdir(), 'pmc-shim-'))
     const shim = installNodeShim('C:\\Programas\\Mission Control.exe', join(dir, 'bin', 'node.cmd'))
     expect(readFileSync(shim, 'utf8')).toBe('@echo off\r\nsetlocal\r\nset ELECTRON_RUN_AS_NODE=1\r\n"C:\\Programas\\Mission Control.exe" %*\r\n')

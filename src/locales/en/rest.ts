@@ -718,6 +718,17 @@ export const rest: Record<string, string> = {
   'Pulsa para descargarla. Se instala encima y no pierdes nada.': 'Click to download it. It installs over this one and you lose nothing.',
   'Descarga el instalador. Se instala encima de esta versión y no pierdes nada.': 'Downloads the installer. It installs over this version and you lose nothing.',
   'Versión {v0} disponible': 'Version {v0} available',
+  // 0.33.1: installing what is missing with one click, and the small ring saying «left».
+  'Instalar Node': 'Install Node',
+  'Instalar': 'Install',
+  'Pulsa «Instalar» (Node 22 o posterior): las órdenes pmc y los avisos a los Claude lo usan': 'Click «Install» (Node 22 or later): the pmc commands and the notices to the Claudes use it',
+  'Pulsa «Instalar» (lo instala winget, el instalador de Windows). Sin Git no hay ramas, copias de trabajo ni historial de cambios': 'Click «Install» (winget, Windows\' installer, does it). Without Git there are no branches, work copies or history of changes',
+  'Pulsa «Instalar»: abre el instalador oficial de Claude Code en una ventana': 'Click «Install»: it opens Claude Code\'s official installer in a window',
+  'Pulsa «Instalar»: macOS abre su instalador de herramientas (Git va con ellas). Sin Git no hay ramas, copias de trabajo ni historial de cambios': 'Click «Install»: macOS opens its tools installer (Git comes with them). Without Git there are no branches, work copies or history of changes',
+  'Se ha abierto el instalador de {v0}: cuando acabe, aparecerá en verde': '{v0}\'s installer is open: when it finishes, it will show in green',
+  'no instalado: pmc usa el programa de Mission Control, no hace falta': 'not installed: pmc runs on Mission Control\'s own program, it is not needed',
+  'queda · 5 h': 'left · 5 h',
+  'queda · sem.': 'left · week',
   // EV167: skills found alone for each project.
   '{n} skill recomendada para {name}': '{n} recommended skill for {name}',
   '{n} skills recomendadas para {name}': '{n} recommended skills for {name}',

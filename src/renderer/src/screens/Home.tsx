@@ -138,7 +138,7 @@ export function Home() {
   const recent = useAsync(() => (pid ? api<TimelineEvent[]>('timeline', pid, now - 48 * 3600_000, now) : Promise.resolve([])), [pid, state?.refreshedAt?.docs, state?.refreshedAt?.git])
   const latest = useAsync(() => (pid ? api<{ items: Asset[] }>('assets', { projectId: pid, limit: 5, kind: 'image' }) : Promise.resolve({ items: [] })), [pid, state?.refreshedAt?.media])
   const comments = useAsync(() => (pid ? api<Comment[]>('comments', pid) : Promise.resolve([])), [pid, state?.now])
-  const health = useAsync(() => api<{ tools: { name: string; ok: boolean; detail: string; fix?: string; needed: boolean }[] }>('health'), [Math.floor(now / 600_000)])
+  const health = useAsync(() => api<{ tools: { name: string; ok: boolean; detail: string; fix?: string; needed: boolean; install?: string }[] }>('health'), [Math.floor(now / 600_000)])
   const ins = useAsync(() => (pid ? api<Instruction[]>('instructions', pid) : Promise.resolve([])), [pid, state?.now])
   const week = useAsync(() => (pid ? api<{ now: WeekMetrics; before: WeekMetrics }>('metrics', pid) : Promise.resolve(undefined)), [pid, state?.refreshedAt?.docs])
   const stale = useAsync(() => api<{ account: string; sessionId: string; working: boolean }[]>('staleWindows'), [state?.refreshedAt?.agents, Math.floor(now / 60_000)])
@@ -204,7 +204,7 @@ export function Home() {
   for (const a of agents.filter((x) => x.state === 'esperando'))
     crew.push(<Row key={'w' + a.id} icon={<Hand size={17} />} color="var(--orange)" title={`${accName(a.id)} ${a.stateReason.toLowerCase()}`} sub={a.sessions.find((x) => x.status === 'waiting')?.title} onClick={() => setAgentOpen(a.id)} />)
   for (const c of (health.data?.tools ?? []).filter((x) => !x.ok && x.needed))
-    todo.push(<Row key={'hl' + c.name} icon={<CircleAlert size={17} />} color="var(--red)" title={t('Falta {name}: {detail}', { name: c.name, detail: c.detail })} sub={c.fix} onClick={() => go('ajustes', 'comprobacion')} />)
+    todo.push(<Row key={'hl' + c.name} icon={<CircleAlert size={17} />} color="var(--red)" title={t('Falta {name}: {detail}', { name: c.name, detail: c.detail })} sub={c.fix} onClick={() => (c.install ? void api('installTool', c.install).then(() => toast(t('Se ha abierto el instalador de {v0}: cuando acabe, aparecerá en verde', { v0: c.name }))) : go('ajustes', 'comprobacion'))} />)
   // An account spending with nothing to show for it (the last half hour): one line, to go and look.
   const stalled = new Map<string, TimelineEvent>()
   for (const e of recent.data ?? []) if (e.kind === 'aviso' && e.account && now - e.at < 45 * 60_000 && /sin escribir ni reservar/.test(e.title)) stalled.set(e.account, e)

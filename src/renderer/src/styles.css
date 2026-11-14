@@ -134,6 +134,13 @@ textarea, input[type='text'], input[type='search'], .selectable { user-select: t
 }
 .titlebar button, .titlebar input, .no-drag { -webkit-app-region: no-drag; }
 :root[data-os="darwin"] .titlebar { padding: 0 12px 0 84px; }
+/* EV168: the piece's name over the picture in the viewer, readable on any image; it fades in each time the piece changes. */
+.viewer-caption {
+  max-width: min(92%, 640px); padding: 5px 12px; border-radius: 99px;
+  background: color-mix(in srgb, var(--chrome) 88%, transparent); backdrop-filter: blur(14px); box-shadow: var(--shadow-2);
+  animation: viewer-caption-in 0.25s ease-out;
+}
+@keyframes viewer-caption-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .shell { display: flex; min-height: 0; min-width: 0; }
 .sidebar {
   flex: none; display: flex; flex-direction: column; min-height: 0;
