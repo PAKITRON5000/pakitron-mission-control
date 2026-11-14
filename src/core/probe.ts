@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // EV120 (the user, 13-11 14:00: «te he recargado manualmente los créditos y la app no ha leído la recarga, por lo que me
 // ha tocado abrirte manualmente»). An account the app believes out of usage only showed its new usage once one of its
 // sessions replied, and the app opens no session for an account it believes out: nobody noticed a recharge. Now the app
@@ -54,7 +55,18 @@ export function backSooner(backAt: number | undefined, r: ProbeReading): boolean
   return !hasUsage(r) && Boolean(backAt && r.resetsAt && r.resetsAt < backAt - 15 * 60_000)
 }
 
+/**
+ * Still out, and back later than the app believes, or when it did not know when (14-11 16:36: Claude 3's week was used up
+ * until 19:00 while the app said «vuelve 17:30», its 5 hours, and after 17:30 it would have counted it as having usage):
+ * the reading is written so every screen and the wheel wait for the right time.
+ */
+export function backLater(backAt: number | undefined, r: ProbeReading): boolean {
+  return !hasUsage(r) && Boolean(r.resetsAt) && (!backAt || r.resetsAt! > backAt + 15 * 60_000)
+}
+
 export const PROBE_EVERY_MS = 10 * 60_000
+/** An account believed to have usage but nearly out at its last reading is asked when that reading is this old. */
+export const NEAR_OUT_STALE_MS = 60 * 60_000
 /** An account due back sooner than this is just waited for. */
 export const PROBE_SKIP_IF_BACK_WITHIN_MS = 15 * 60_000
 
@@ -68,12 +80,17 @@ export interface ProbeCandidate {
   skip: boolean
   /** Signed in (claude auth status); unknown counts as yes. */
   login?: boolean
+  /**
+   * Believed to have usage, but its last reading had 95 % or more of a window still open spent, and is older than
+   * NEAR_OUT_STALE_MS: it may have run out since, here or elsewhere, before the wheel gives it the turn.
+   */
+  nearOut?: boolean
 }
 
 /** The account to ask now, if any: one at a time, the one asked longest ago first. */
 export function dueProbe(accounts: ProbeCandidate[], lastAsked: Record<string, number>, now: number): string | undefined {
   return accounts
-    .filter((a) => a.out && !a.skip && a.login !== false)
+    .filter((a) => (a.out || a.nearOut) && !a.skip && a.login !== false)
     .filter((a) => !a.backAt || a.backAt - now > PROBE_SKIP_IF_BACK_WITHIN_MS)
     .filter((a) => now - (lastAsked[a.id] ?? 0) >= PROBE_EVERY_MS)
     .sort((a, b) => (lastAsked[a.id] ?? 0) - (lastAsked[b.id] ?? 0))[0]?.id
@@ -82,8 +99,8 @@ export function dueProbe(accounts: ProbeCandidate[], lastAsked: Record<string, n
 /** In words, for the timeline: «semana 1 %, 5 horas 9 %». */
 export function probeWords(r: ProbeReading): string {
   const parts: string[] = []
-  if (r.week) parts.push(`semana ${r.week.pct} %`)
-  if (r.five) parts.push(`5 horas ${r.five.pct} %`)
+  if (r.week) parts.push(t('semana {v0} %', { v0: r.week.pct }))
+  if (r.five) parts.push(t('5 horas {v0} %', { v0: r.five.pct }))
   return parts.join(', ')
 }
 

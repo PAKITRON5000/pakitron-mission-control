@@ -35,6 +35,8 @@ const viewers = new Map<string, Set<WebContents>>()
 /** The last pieces of each session, for a view that asks for its screen while more is arriving. */
 const recent = new Map<string, { seq: number; data: string }[]>()
 const popped = new Map<string, BrowserWindow>()
+/** Windows already watched for closing (attachView). */
+const watched = new WeakSet<WebContents>()
 
 export function initEmbedded(d: EmbeddedDeps): void { deps = d }
 
@@ -110,9 +112,16 @@ async function connectTo(): Promise<PtyClient> {
       deps?.changed()
     },
     close: () => {
-      if (client === c) client = undefined
+      if (client !== c) return
+      client = undefined
       deps?.log('terminal de la app: se cerró la conexión con sus sesiones')
+      // Until it is found again they are not shown as alive: with the host gone (closed from the Task Manager, the PC
+      // short of memory) they ended with it, and the app must not type into them or count them as open.
+      const now = Date.now()
+      for (const s of sessions.values()) if (s.alive) { s.alive = false; s.exitCode = s.exitCode ?? -1; s.endedAt = now }
       deps?.changed()
+      // A pipe that broke with the host still running: found again in a moment (nothing is started for it).
+      setTimeout(() => void ensureClient(false).catch(() => undefined), 2000).unref?.()
     }
   })
   await c.connect(pipe(), token())
@@ -145,7 +154,10 @@ async function ensureClient(start = true): Promise<PtyClient | undefined> {
       if (!client) throw new Error(`no arrancan las terminales de la app${last ? ` (${last.message})` : ''}`)
       deps?.log(`terminal de la app: arrancado su proceso (pid ${client.hostPid}, con ${r.file})`)
     }
-    for (const s of await client!.list()) sessions.set(s.id, s)
+    // What the host has is the truth: the ones it no longer knows leave (ended long ago, or a host that started anew).
+    const known = await client!.list()
+    for (const id of [...sessions.keys()]) if (!known.some((s) => s.id === id)) { sessions.delete(id); recent.delete(id) }
+    for (const s of known) sessions.set(s.id, s)
     deps?.changed()
     return client!
   })().finally(() => { connecting = undefined })
@@ -183,7 +195,11 @@ export async function startEmbedded(o: StartEmbedded): Promise<PtyInfo> {
   return info
 }
 
-export function embeddedList(): PtyInfo[] {
+/** One that ended this long ago leaves the list by itself (the wheel closes many; «Retomar aquí» is for the recent). */
+const ENDED_KEEP_MS = 30 * 60_000
+
+export function embeddedList(now = Date.now()): PtyInfo[] {
+  for (const s of [...sessions.values()]) if (!s.alive && s.endedAt && now - s.endedAt > ENDED_KEEP_MS) forgetEmbedded(s.id)
   return [...sessions.values()].sort((a, b) => a.startedAt - b.startedAt)
 }
 
@@ -198,7 +214,11 @@ export async function attachView(id: string, view: WebContents): Promise<PtySnap
   const set = viewers.get(id) ?? new Set<WebContents>()
   set.add(view)
   viewers.set(id, set)
-  view.once('destroyed', () => viewers.get(id)?.delete(view))
+  // One listener per window, not one per view drawn (Chats draws them again each time it opens).
+  if (!watched.has(view)) {
+    watched.add(view)
+    view.once('destroyed', () => { for (const s of viewers.values()) s.delete(view) })
+  }
   // What arrived after the screen was taken, so nothing is drawn twice or lost.
   const after = (recent.get(id) ?? []).filter((r) => r.seq > snap.seq).map((r) => r.data).join('')
   return { ...snap, data: snap.data + after, alive: sessions.get(id)?.alive ?? false }

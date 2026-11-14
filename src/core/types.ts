@@ -47,7 +47,10 @@ export interface UsageWindow {
 
 export interface UsageSnapshot {
   account: AccountId
+  /** When its numbers were current: the last time the session that gave them talked to Anthropic (core/usagefresh.ts). */
   capturedAt: number
+  /** As written by `pmc statusline`; readUsageSnapshot puts it in `capturedAt`. */
+  freshAt?: number
   fiveHour?: UsageWindow
   sevenDay?: UsageWindow
   spend?: { usedPct: number; resetsAt: number; usedUsd?: number; limitUsd?: number }
@@ -443,8 +446,8 @@ export interface Settings {
   /** EV161: the language of the app and of what the Claudes are told («es», «en»); none: the system's. */
   lang?: 'es' | 'en'
   /**
-   * EV156: where the Claudes the app opens live: in their own console window ('ventana', the default) or inside the app,
-   * in Chats ('app'), where each one can be popped out to a window of its own and docked again.
+   * EV156: where the Claudes the app opens live: inside the app, in Chats ('app', the default since Decidir #157 «A»),
+   * where each one can be popped out to a window of its own and docked again, or in their own console window ('ventana').
    */
   sessionsWhere?: 'ventana' | 'app'
   /**

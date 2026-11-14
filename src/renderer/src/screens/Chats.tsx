@@ -214,7 +214,7 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
         {/* EV141 (Decidir #148): a background session has no window; «Ver» opens one on it, to watch it and write to it. */}
         {chat.background && chat.account && <button className="btn btn-sm flex-none" title={t('Abre una ventana con esta sesión de fondo: la ves y le escribes como a cualquier Claude')} onClick={() => void api('attachBackground', chat.account, chat.background).then(() => toast(t('Abriendo la sesión en una ventana')), (e: Error) => toast(e.message))}>{t('Ver')}</button>}
         {/* EV151: an open session with a window: its window in front of the others. */}
-        {info.live && info.inApp && <button className="btn btn-sm flex-none" title={t('Su terminal, dentro de la app: lo ves como en su ventana y le escribes allí')} onClick={() => { onBack(); window.location.hash = `#/chats/${encodeURIComponent('pty:' + info.inApp)}` }}>{t('Ver terminal')}</button>}
+        {info.live && info.inApp && hasTerminals() && <button className="btn btn-sm flex-none" title={t('Su terminal, dentro de la app: lo ves como en su ventana y le escribes allí')} onClick={() => { onBack(); window.location.hash = `#/chats/${encodeURIComponent('pty:' + info.inApp)}` }}>{t('Ver terminal')}</button>}
         {info.live && !chat.background && !info.inApp && <button className="btn btn-sm flex-none" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => void api('frontSession', chat.sessionId).then(() => toast(t('Ventana delante')), (e: Error) => toast(e.message))}>{t('Ver ventana')}</button>}
       </header>
       <div className="m-msgs" onScroll={(e) => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }}>
@@ -264,7 +264,7 @@ function NewChat({ onClose, inApp }: { onClose: () => void; inApp?: boolean }) {
   const [text, setText] = useState('')
   const [who, setWho] = useState<AccountId>('claude1')
   // EV156: inside the app (its terminal in Chats) or in a window of its own; first, what the user chose in Chats.
-  const [here, setHere] = useState(hasTerminals() && (inApp || state?.settings.sessionsWhere === 'app'))
+  const [here, setHere] = useState(hasTerminals() && (inApp || state?.settings.sessionsWhere !== 'ventana'))
   const start = async () => {
     try {
       if (here && state?.activeProjectId) {
@@ -272,7 +272,8 @@ function NewChat({ onClose, inApp }: { onClose: () => void; inApp?: boolean }) {
         window.location.hash = `#/chats/${encodeURIComponent('pty:' + r.id)}`
         toast(t('Abierto dentro de la app'))
       } else {
-        await api('chatNew', who, state?.activeProjectId, text.trim())
+        // «En su ventana» chosen here: a window, whatever Chats says for the ones the app opens (from the phone, as chosen there).
+        await api('chatNew', who, state?.activeProjectId, text.trim(), hasTerminals() ? 'ventana' : undefined)
         toast(t('Abierto en el PC: aparecerá aquí en unos segundos'))
       }
       onClose()

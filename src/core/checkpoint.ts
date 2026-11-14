@@ -158,6 +158,28 @@ export function archiveRelevo(markdown: string, now: number, archiveName: string
   return { keep: tidy(keep), archived: tidy(out) }
 }
 
+/**
+ * `git log --format=@%ct --name-only` (newest first) → when each file was last committed, in ms. A write already in a
+ * later commit is saved: it does not make the file anyone's in pickFiles (14-11 17:32: claude1 had fixed one line of
+ * pmc.ts and committed it; its next checkpoint still took the whole file, with claude6's half-done change in it).
+ */
+export function lastCommits(log: string): Map<string, number> {
+  const out = new Map<string, number>()
+  let at: number | undefined
+  for (const line of log.split(/\r?\n/)) {
+    if (line.startsWith('@')) { const s = Number(line.slice(1)); at = Number.isFinite(s) ? s * 1000 : undefined; continue }
+    const p = line.trim()
+    if (p && at != null && !out.has(norm(p))) out.set(norm(p), at)
+  }
+  return out
+}
+
+/** Whether a write at `at` to `path` is already in a commit (lastCommits). */
+export function savedAlready(commits: Map<string, number>, path: string, at: number): boolean {
+  const c = commits.get(norm(path))
+  return c != null && c >= Math.floor(at / 1000) * 1000
+}
+
 /** `git status --porcelain=v1 -z` → the changed paths (a rename gives its new name). */
 export function porcelainPaths(z: string): string[] {
   const parts = z.split('\0')

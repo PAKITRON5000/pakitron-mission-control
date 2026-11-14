@@ -31,18 +31,19 @@ export const hasTerminals = () => Boolean(window.pmc?.pty) && window.pmc.platfor
 
 const watched = () => !document.documentElement.classList.contains('pmc-still')
 
-export function useEmbedded(): [Embedded[] | undefined, () => void] {
+/** The Claudes inside the app, asked every 3 s while someone looks (`on`: only while the sheet that needs it is open). */
+export function useEmbedded(on = true): [Embedded[] | undefined, () => void] {
   const { state } = useStore()
   const [list, setList] = useState<Embedded[]>()
   const read = () => { void api<Embedded[]>('embedList').then(setList, () => setList([])) }
   useEffect(() => {
-    if (!hasTerminals()) return
+    if (!on || !hasTerminals()) return
     read()
     const timer = setInterval(() => { if (watched()) read() }, 3000)
     return () => clearInterval(timer)
     // The main process says when one opens or ends (a new state): read again then too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+  }, [state, on])
   return [list, read]
 }
 
@@ -108,7 +109,10 @@ function Tile({ s, focus, onChanged }: { s: Embedded; focus: boolean; onChanged:
           : <AppTerminal id={s.id} autoFocus={focus} />}
         {!s.alive && (
           <div className="emb-ended">
-            <span className="flex-1">{t('Este Claude terminó{v0}.', { v0: s.exitCode ? t(' (código {v0})', { v0: s.exitCode }) : '' })}</span>
+            <span className="flex-1">{s.exitCode === -1
+              // The app lost its terminal process (closed from the Task Manager, the PC short of memory): it ended with it.
+              ? t('Se cerró junto con el proceso de las terminales de la app.')
+              : t('Este Claude terminó{v0}.', { v0: s.exitCode ? t(' (código {v0})', { v0: s.exitCode }) : '' })}</span>
             {conv.current && <button className="btn btn-sm" onClick={resume}><RotateCcw size={13} /> {t('Retomar aquí')}</button>}
             <button className="btn btn-sm btn-ghost" onClick={() => void call('embedForget', s.id)}>{t('Quitar')}</button>
           </div>
@@ -121,7 +125,7 @@ function Tile({ s, focus, onChanged }: { s: Embedded; focus: boolean; onChanged:
 /** «Dónde se abren los Claude que abra la app»: their own window, as until now, or here. */
 export function SessionsWhere() {
   const { state, refresh, toast } = useStore()
-  const where = state?.settings.sessionsWhere ?? 'ventana'
+  const where = state?.settings.sessionsWhere ?? 'app'
   const set = (v: 'ventana' | 'app') => void api('setSettings', { sessionsWhere: v }).then(refresh, (e: Error) => toast(e.message))
   return (
     <span className="emb-where" title={t('Dónde se abren los Claude que abre la app (relevos, la rueda, Poner a trabajar, Nuevo chat)')}>
@@ -133,7 +137,9 @@ export function SessionsWhere() {
 
 export function EmbeddedGrid({ focusId, onNew }: { focusId?: string; onNew: () => void }) {
   const [list, read] = useEmbedded()
+  const { state } = useStore()
   if (!hasTerminals()) return null
+  const here = (state?.settings.sessionsWhere ?? 'app') === 'app'
   const items = list ?? []
   return (
     <section className="mb-4">
@@ -146,7 +152,9 @@ export function EmbeddedGrid({ focusId, onNew }: { focusId?: string; onNew: () =
       <div className="t-small c3 px-1 mb-2">
         {items.length
           ? t('Cada uno como en su ventana: pincha dentro para escribirle. «Despegar» lo saca a una ventana propia; al cerrarla vuelve aquí. Si cierras la app, siguen trabajando.')
-          : t('Aquí ves y escribes a los Claude como en su ventana, todos a la vez. Abre uno con «Abrir uno aquí», o elige «Dentro de la app» para que se abran aquí los que abra la app.')}
+          : here
+            ? t('Aquí ves y escribes a los Claude como en su ventana, todos a la vez. Los que abra la app (relevos, la rueda, Poner a trabajar) aparecerán aquí; o abre uno con «Abrir uno aquí».')
+            : t('Aquí ves y escribes a los Claude como en su ventana, todos a la vez. Abre uno con «Abrir uno aquí», o elige «Dentro de la app» para que se abran aquí los que abra la app.')}
       </div>
       {items.length > 0 && <div className="emb-grid">{items.map((s) => <Tile key={s.id} s={s} focus={s.id === focusId} onChanged={read} />)}</div>}
     </section>

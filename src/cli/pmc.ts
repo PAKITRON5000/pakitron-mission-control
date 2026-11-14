@@ -12,6 +12,7 @@ import { accountFromConfigDir, configuredAccounts, readLogins } from '../core/ac
 import { noLimitsText, planOf } from '../core/logins'
 import { appendActivity, describeHook, guardProtected, guardRules, setFocus, toolCallsIn } from '../core/live'
 import { guardUnverified } from '../core/verify'
+import { acceptReading, sessionFreshAt } from '../core/usagefresh'
 import type { AccountId } from '../core/types'
 import { installStatusLine, uninstallStatusLine, statusLineState } from '../core/integrations'
 import { turnFor, waitTurnText, wheelProjectOf, type TurnAnswer, type TurnFile } from '../core/chain'
@@ -44,7 +45,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.34.0'
+const VERSION = '0.34.1'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -84,10 +85,20 @@ function statusline(accountArg?: string): void {
   const spend = rl?.spend_limit
   try {
     mkdirSync(paths.liveSessionsDir(), { recursive: true })
+    // When this session last talked to Anthropic (core/usagefresh.ts): an idle one redraws with hours-old numbers.
+    const liveFile = data?.session_id ? join(paths.liveSessionsDir(), `${String(data.session_id).replace(/[^\w-]/g, '')}.json`) : ''
+    let prevLive: { apiMs?: number; freshAt?: number } | undefined
+    try { if (liveFile) prevLive = JSON.parse(readFileSync(liveFile, 'utf8')) } catch { /* first redraw */ }
+    let transcriptAt: number | undefined
+    try { if (typeof data?.transcript_path === 'string') transcriptAt = statSync(data.transcript_path).mtimeMs } catch { /* not written yet */ }
+    const apiMs = typeof data?.cost?.total_api_duration_ms === 'number' ? data.cost.total_api_duration_ms : undefined
+    const freshAt = sessionFreshAt(prevLive, apiMs, transcriptAt, now)
     if (data?.session_id) {
       atomicWrite(
-        join(paths.liveSessionsDir(), `${String(data.session_id).replace(/[^\w-]/g, '')}.json`),
+        liveFile,
         JSON.stringify({
+          apiMs,
+          freshAt,
           account,
           at: now,
           sessionId: data.session_id,
@@ -104,7 +115,7 @@ function statusline(accountArg?: string): void {
       )
     }
     if (five || week || spend) {
-      const snap: any = { account, capturedAt: now, source: 'statusline', sessionId: data.session_id, model: data.model?.id }
+      const snap: any = { account, capturedAt: now, freshAt, source: 'statusline', sessionId: data.session_id, model: data.model?.id }
       if (five && typeof five.used_percentage === 'number') snap.fiveHour = { usedPct: five.used_percentage, resetsAt: five.resets_at * 1000 }
       if (week && typeof week.used_percentage === 'number') snap.sevenDay = { usedPct: week.used_percentage, resetsAt: week.resets_at * 1000 }
       if (spend && typeof spend.used_percentage === 'number')
@@ -112,6 +123,8 @@ function statusline(accountArg?: string): void {
       const file = paths.usageFile(account)
       let prev: any
       try { prev = JSON.parse(readFileSync(file, 'utf8')) } catch { /* first */ }
+      // Another session of this account knows more recent numbers: this one's are old news, the saved ones stay.
+      if (!acceptReading(prev, snap)) throw new Error('stale')
       atomicWrite(file, JSON.stringify(snap))
       const changed =
         !prev ||
@@ -956,7 +969,7 @@ async function claims(cmd: string, args: string[]): Promise<void> {
     }
     if (cmd === 'guarda') {
       // EV41: heartbeat, commit of what this account wrote, reservations kept alive for whoever takes over.
-      const { heartbeatLine, withHeartbeat, porcelainPaths, pickFiles, archiveRelevo, parseGuarda, futureHours } = await import('../core/checkpoint')
+      const { heartbeatLine, withHeartbeat, porcelainPaths, pickFiles, archiveRelevo, parseGuarda, futureHours, lastCommits, savedAlready } = await import('../core/checkpoint')
       const g = parseGuarda(args)
       const text = g.text
       if (!text) { say(t('Uso: pmc guarda "qué has hecho y qué queda" [--probado "qué y cómo"] [--siguiente "el paso concreto"] [--no-rehacer "lo que ya está y no hay que repetir"] [--sin-commit]')); process.exitCode = 2; return }
@@ -1022,9 +1035,12 @@ async function claims(cmd: string, args: string[]): Promise<void> {
           const rows = db.prepare("SELECT account, detail, MAX(at) AS at FROM events WHERE kind = 'archivo' AND at > ? AND account IS NOT NULL AND detail IS NOT NULL GROUP BY account, detail").all(now - 12 * 3600_000) as { account: string; detail: string; at: number }[]
           const mine: string[] = [], others: string[] = []
           let othersLast: number | undefined
+          // A write already in a commit is saved: it makes the file nobody's (14-11 17:32).
+          let commits = new Map<string, number>()
+          try { commits = lastCommits(git('log', '--since=13.hours', '--format=@%ct', '--name-only')) } catch { /* every write counts */ }
           for (const r of rows) {
             const p = rel(r.detail)
-            if (!p) continue
+            if (!p || savedAlready(commits, p, r.at)) continue
             if (r.account === account) mine.push(p)
             else if (r.at > now - 2 * 3600_000) { others.push(p); othersLast = Math.max(othersLast ?? 0, r.at) }
           }

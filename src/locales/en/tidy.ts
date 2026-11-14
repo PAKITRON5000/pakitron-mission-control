@@ -5,7 +5,7 @@ export const tidy: Record<string, string> = {
   'otro proyecto': 'another project',
   // Between two keys in Settings › General («Ctrl + Ctrl − y Ctrl 0»).
   'y': 'and',
-  // Left in Spanish in Accounts with the app in English (14-11 17:25, demo capture): the ring and the tasks of an account.
+  // Left in Spanish in Accounts with the app in English (14-11 17:21, demo capture): the ring and the tasks of an account.
   'semana': 'week',
   '{n} tarea a su nombre': '{n} task in its name',
   '{n} tareas a su nombre': '{n} tasks in its name',
@@ -17,7 +17,7 @@ export const tidy: Record<string, string> = {
   'empezando': 'starting',
   '{n} trabajando': '{n} working',
   'nadie trabajando': 'nobody working',
-  // Notices and timeline of src/main/index.ts that were still plain Spanish (EV163, 14-11 17:37).
+  // Notices and timeline of src/main/index.ts that were still plain Spanish (EV163, 14-11 17:30).
   'Nadie puede trabajar ahora.': 'Nobody can work right now.',
   'La primera vuelve el {when}.': 'The first one is back on {when}.',
   'Seguirá sola donde lo dejó: no tienes que hacer nada.': 'It will carry on by itself where it left off: you do not have to do anything.',

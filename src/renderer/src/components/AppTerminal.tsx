@@ -50,18 +50,16 @@ export function AppTerminal({ id, autoFocus, sizes = true, fontSize = 13, onExit
     term.open(el)
 
     // Ctrl+C copies when something is selected (otherwise it goes to Claude, which stops what it is doing), Ctrl+V pastes.
+    // Both by letting the browser do its own copy and paste (xterm takes them from there): answering «false» here only
+    // keeps xterm from sending ^C or ^V. Pasting by hand as well pasted everything twice.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
       const mod = e.ctrlKey || e.metaKey
-      if (mod && e.key.toLowerCase() === 'c' && term.hasSelection()) {
+      if (mod && !e.altKey && e.key.toLowerCase() === 'c' && term.hasSelection()) {
         void navigator.clipboard.writeText(term.getSelection()).catch(() => undefined)
-        term.clearSelection()
         return false
       }
-      if (mod && e.key.toLowerCase() === 'v') {
-        void navigator.clipboard.readText().then((txt) => { if (txt) term.paste(txt) }).catch(() => undefined)
-        return false
-      }
+      if (mod && !e.altKey && e.key.toLowerCase() === 'v') return false
       return true
     })
     // The app's own shortcuts (Ctrl+1…9, Ctrl+N, Ctrl+J) do not take keys meant for the Claude.

@@ -22,7 +22,11 @@ if (!thumb && !term && !window.location.hash && window.pmc?.platform === 'remote
 document.documentElement.dataset.os = window.pmc?.platform ?? ''
 
 // EV156: «Traer delante» a Claude that lives inside the app: Chats, with its terminal in front.
-if (!thumb && !term) window.pmc?.on?.('pty-focus', (id) => { window.location.hash = `#/chats/${encodeURIComponent('pty:' + String(id))}` })
+if (!thumb && !term) window.pmc?.on?.('pty-focus', (id) => {
+  // The sheet or overlay it was asked from closes, so the terminal is seen (store.tsx › __pmc.reset).
+  ;(window as unknown as { __pmc?: { reset?: () => void } }).__pmc?.reset?.()
+  window.location.hash = `#/chats/${encodeURIComponent('pty:' + String(id))}`
+})
 
 /** The popped-out terminal speaks the app's language too. */
 function Lang({ children }: { children: ReactNode }) {

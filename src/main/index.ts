@@ -77,7 +77,7 @@ import { createAssistant, type Assistant } from './assistant'
 import { createRecharge, type Recharge } from './recharge'
 import { createBackup } from './backup'
 import { createProbe } from './probe'
-import { hasUsage, probeWords } from '../core/probe'
+import { hasUsage, NEAR_OUT_STALE_MS, probeWords } from '../core/probe'
 import { createCleanup, type Cleanup } from './cleanup'
 import { statfs } from 'node:fs/promises'
 import { parseAuthStatus, loginWarning, type LoginState } from '../core/logins'
@@ -295,7 +295,8 @@ function openTerminal(account: AccountId, cwd: string, args: string[], title: st
   if (trust.added.length) service.log(`confianza: ${account} ya confía en ${trust.added.join(', ')}`)
   else if (trust.skipped) service.log(`confianza: ${account} en ${cwd}: ${trust.skipped}`)
   // EV156: inside the app (Chats) when the user chose so; if that cannot start, its usual window, so nothing is lost.
-  if ((where ?? service.settings.sessionsWhere) === 'app' && !process.env.PMC_SHOT_DIR) {
+  // Decidir #157 «A» (the user, 14-11): inside the app unless «En su ventana» is chosen in Chats.
+  if ((where ?? service.settings.sessionsWhere ?? 'app') === 'app' && !process.env.PMC_SHOT_DIR) {
     void openEmbedded(acc, cwd, args, title).catch((e) => {
       service.log(`terminal de la app: ${(e as Error).message}; se abre en su ventana`)
       try { openTerminal(account, cwd, args, title, 'ventana') } catch (err) { service.log(`ventana: ${(err as Error).message}`) }
@@ -713,6 +714,9 @@ function runNpx(cmd: string, cwd: string, timeout: number): Promise<string> {
 }
 
 function closeClaudeWindow(pid: number): void {
+  // EV156: one inside the app: its terminal is closed.
+  const inApp = embeddedByPid(pid)
+  if (inApp) { void killEmbedded(inApp.id).catch(() => undefined); return }
   if (!isWin) { void closePosixClaude(pid, true); return }
   const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Math.floor(pid)}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.Name -eq 'cmd.exe' -and $q.CommandLine -match 'claude') { $q.ProcessId } }`
   execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 10_000 }, (_err, out) => {
@@ -729,6 +733,9 @@ function closeClaudeWindow(pid: number): void {
  * claude-accesos. Never anything that is not a Claude launcher's cmd.
  */
 function closeIdleWindow(pid: number, byHandToo = false): Promise<boolean> {
+  // EV156: a Claude inside the app has no console window: its terminal is closed (always one the app opened).
+  const inApp = embeddedByPid(pid)
+  if (inApp) return killEmbedded(inApp.id).catch(() => false)
   if (!isWin) return closePosixClaude(pid, byHandToo)
   const mine = byHandToo ? '' : ` -and $q.CommandLine -match 'Mission Control'`
   const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${Math.floor(pid)}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.Name -eq 'cmd.exe' -and $q.CommandLine -match 'claude-accesos'${mine}) { $q.ProcessId } }`
@@ -2538,9 +2545,17 @@ const api: Record<string, Handler> = {
     }
     return { ok: hasUsage(r), checked: true, words: probeWords(r), backAt: hasUsage(r) ? undefined : r.resetsAt }
   },
+  /** EV174: «Comprobar ahora»: the account's real usage, asked to Claude Code with one tiny question (written for every screen). */
+  usageCheck: async (account: AccountId): Promise<{ words: string; out: boolean }> => {
+    const r = await probe.check(account)
+    if (!r) throw new Error(t('Claude Code no ha contestado; prueba otra vez en un momento'))
+    void service.refreshAgents().then(() => service.push())
+    return { words: probeWords(r), out: !hasUsage(r) }
+  },
   /** Only web pages (a skill's page on skills.sh): nothing else is opened from here. */
   openExternal: (url: string) => (/^https:[/][/]/.test(url) ? shell.openExternal(url) : undefined),
-  openSession: (account: AccountId, cwd: string) => openTerminal(account, cwd, [], `${account} · nueva sesión`),
+  // A window, as its button says (for /login the first time); Decidir #157 «A» is about the ones the app opens alone.
+  openSession: (account: AccountId, cwd: string) => openTerminal(account, cwd, [], `${account} · nueva sesión`, 'ventana'),
   /**
    * «Lanzar ahora»: opens the account in the copy where the project is being worked on (the newest RELEVO.md), already told
    * «sigue». Refused when it would only spend credits for nothing; a scheduled start that would have repeated this work goes.
@@ -2605,7 +2620,8 @@ const api: Record<string, Handler> = {
   },
   resumeSession: (account: AccountId, cwd: string, sessionId: string) => {
     if (!/^[0-9a-f-]{8,36}$/i.test(sessionId)) throw new Error(t('Sesión no válida'))
-    openTerminal(account, cwd, ['--resume', sessionId], `${account} · retomar ${sessionId.slice(0, 8)}`)
+    // «Retomar»: in a window, as it says; «Retomar aquí» (embedResume) takes it up inside the app.
+    openTerminal(account, cwd, ['--resume', sessionId], `${account} · retomar ${sessionId.slice(0, 8)}`, 'ventana')
   },
   attachSession: (account: AccountId, cwd: string, shortId: string) => {
     if (!/^[0-9a-f]{8}$/i.test(shortId)) throw new Error(t('Sesión no válida'))
@@ -2784,10 +2800,10 @@ const api: Record<string, Handler> = {
     await typeKey(live.pid, key)
     return true
   },
-  chatNew: (account: AccountId, projectId: string, text: string) => {
+  chatNew: (account: AccountId, projectId: string, text: string, where?: 'ventana' | 'app') => {
     const p = service.project(projectId)
     if (!p) throw new Error(t('Proyecto desconocido'))
-    openTerminal(account, p.root, [text.replace(/\s*\r?\n\s*/g, ' ')], `${account} · desde el móvil`)
+    openTerminal(account, p.root, [text.replace(/\s*\r?\n\s*/g, ' ')], `${account} · desde el móvil`, where === 'ventana' || where === 'app' ? where : undefined)
     return true
   },
   remoteStatus: () => remote.status(),
@@ -3292,7 +3308,7 @@ async function screenshots(dir: string): Promise<void> {
 // works with it).
 let tray: Tray | undefined
 let traySig = ''
-// In the reader's language (EV163, 14-11 17:35: the tray was still in Spanish with the app in English).
+// In the reader's language (EV163, 14-11 17:30: the tray was still in Spanish with the app in English).
 const TRAY_STATE: Record<string, () => string> = { trabajando: () => t('trabajando'), esperando: () => t('te espera'), 'sin-uso': () => t('sin uso'), bloqueado: () => t('bloqueada'), disponible: () => t('libre'), desconectado: () => t('sin abrir') }
 
 function updateTray(): void {
@@ -3558,7 +3574,12 @@ app.whenReady().then(async () => {
       const st = service.settings.accountStatus?.[a.id]
       const reserve = (service.settings.reserves ?? []).some((r) => r.on && r.account === a.id)
       // EV146: a key, Console or cloud account pays for each request and gives no usage to read: never probed.
-      return { id: a.id, out: a.state === 'sin-uso', backAt: a.usage.activeLimit?.resetsAt, skip: st === 'baja' || (st === 'pausada' && !reserve) || !a.identity.hasLogin || Boolean(a.identity.plan?.paysPerUse), login: logins[a.id]?.loggedIn }
+      // 14-11: Claude 3, its 5 hours back at 17:30 and its week «97 %» from a reading of 15:28, counted as having usage;
+      // the probe had seen the week used up until 19:00. Nearly out at an old reading: asked before the wheel uses it.
+      const snap = a.usage.snapshot
+      const now = Date.now()
+      const nearOut = Boolean(snap && now - snap.capturedAt > NEAR_OUT_STALE_MS && [snap.fiveHour, snap.sevenDay].some((w) => w && w.usedPct >= 95 && w.resetsAt > now))
+      return { id: a.id, out: a.state === 'sin-uso', nearOut, backAt: a.usage.activeLimit?.resetsAt, skip: st === 'baja' || (st === 'pausada' && !reserve) || !a.identity.hasLogin || Boolean(a.identity.plan?.paysPerUse), login: logins[a.id]?.loggedIn }
     }),
     env: (id) => { const acc = service.accounts.find((x) => x.id === id); return acc ? envFor(acc) : process.env },
     claude: findClaude,
@@ -3574,6 +3595,14 @@ app.whenReady().then(async () => {
       service.setSettings({ recharged: { ...(service.settings.recharged ?? {}), [id]: at - 1 } })
       const when = r.resetsAt ? new Date(r.resetsAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '?'
       addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: t('Claude {v0} vuelve antes de lo que se creía: el {when} (lo ha dicho Claude Code; {v1})', { v0: id.slice(6), when: when, v1: probeWords(r) }), source: 'Mission Control' })
+      void service.refreshAgents()
+      service.push()
+    },
+    // Still out and back later than believed, or the app did not know when (14-11: Claude 3's week, until 19:00, while
+    // the app said «vuelve 17:30»): the reading is written already; the timeline says it.
+    later: (id, r) => {
+      const when = r.resetsAt ? new Date(r.resetsAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '?'
+      addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: t('Claude {v0} no tiene uso hasta el {when} (lo ha dicho Claude Code; {v1})', { v0: id.slice(6), when: when, v1: probeWords(r) }), source: 'Mission Control', dedupe: `tarde:${id}:${r.resetsAt ?? 0}` })
       void service.refreshAgents()
       service.push()
     },

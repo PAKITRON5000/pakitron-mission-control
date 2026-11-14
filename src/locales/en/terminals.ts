@@ -27,6 +27,7 @@ export const terminals: Record<string, string> = {
   'Abrir uno aquí': 'Open one here',
   'Cada uno como en su ventana: pincha dentro para escribirle. «Despegar» lo saca a una ventana propia; al cerrarla vuelve aquí. Si cierras la app, siguen trabajando.': 'Each one as in its window: click inside to type to it. «Pop out» moves it to a window of its own; closing it brings it back here. If you close the app, they keep working.',
   'Aquí ves y escribes a los Claude como en su ventana, todos a la vez. Abre uno con «Abrir uno aquí», o elige «Dentro de la app» para que se abran aquí los que abra la app.': 'Here you see and type to your Claudes as in their window, all at once. Open one with «Open one here», or choose «Inside the app» so the ones the app opens appear here.',
+  'Aquí ves y escribes a los Claude como en su ventana, todos a la vez. Los que abra la app (relevos, la rueda, Poner a trabajar) aparecerán aquí; o abre uno con «Abrir uno aquí».': 'Here you see and type to your Claudes as in their window, all at once. The ones the app opens (handovers, the wheel, Put to work) will appear here; or open one with «Open one here».',
   'Sigue trabajando aunque cierres esta ventana: vuelve a Chats': 'It keeps working if you close this window: it goes back to Chats',
   'Lo vuelve a poner en Chats, dentro de la app': 'Puts it back in Chats, inside the app',
   'La retoma dentro de la app, en «Dentro de la app», donde la dejó': 'Picks it up inside the app, in «Inside the app», where it left off',
@@ -36,5 +37,16 @@ export const terminals: Record<string, string> = {
   '¿Qué quieres que haga? (o déjalo vacío y escríbele en su terminal)': 'What do you want it to do? (or leave it empty and type to it in its terminal)',
   'Dónde:': 'Where:',
   '· dentro de la app': '· inside the app',
-  'Has abierto a Claude {v0} dentro de la app': 'You opened Claude {v0} inside the app'
+  'Has abierto a Claude {v0} dentro de la app': 'You opened Claude {v0} inside the app',
+  // EV174 (usage left): the probe saw an account out until later than the app believed.
+  'Claude {v0} no tiene uso hasta el {when} (lo ha dicho Claude Code; {v1})': 'Claude {v0} has no usage until {when} (Claude Code said so; {v1})',
+  'Se cerró junto con el proceso de las terminales de la app.': 'It closed along with the app’s terminal process.',
+  // EV174 «Comprobar ahora» in Accounts.
+  'Sin uso ahora: {v0}': 'No usage now: {v0}',
+  'Uso real: {v0}': 'Real usage: {v0}',
+  'Pregunta a Anthropic con esta cuenta cuánto uso le queda de verdad, también lo gastado en otro ordenador, el móvil o claude.ai (gasta una pregunta mínima)': 'Asks Anthropic with this account how much usage it really has left, including what was spent on another computer, the phone or claude.ai (it spends one tiny request)',
+  'comprobando…': 'checking…',
+  'Claude Code no ha contestado; prueba otra vez en un momento': 'Claude Code did not answer; try again in a moment',
+  'semana {v0} %': 'week {v0} %',
+  '5 horas {v0} %': '5 hours {v0} %'
 }

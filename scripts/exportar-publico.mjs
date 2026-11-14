@@ -67,15 +67,23 @@ try { for (const l of readFileSync(join(data, 'privado.txt'), 'utf8').split(/\r?
 try { for (const l of readFileSync(join(data, 'publico-permitido.txt'), 'utf8').split(/\r?\n/)) for (const w of [...words]) if (l.trim() && w.toLowerCase() === l.trim().toLowerCase()) words.delete(w) } catch { /* none */ }
 
 // ---- the copy ------------------------------------------------------------------------------------------------------
-const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean)
+// From the last commit, not from the working tree: what another session has half done and not saved is never published
+// (14-11 17:33: three sessions at once, and the tree had a version raise and files a translation script was rewriting).
+// The commit is written to a folder of its own through a temporary index, so the real one is not touched.
+const tracked = execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean)
 const files = tracked.filter((f) => !PRIVATE.some((re) => re.test(f)))
+const head = join(tmpdir(), `pmc-export-head-${process.pid}`)
+rmSync(head, { recursive: true, force: true })
+mkdirSync(head, { recursive: true })
+execFileSync('git', ['--work-tree', head, 'checkout', 'HEAD', '--', '.'], { cwd: root, env: { ...process.env, GIT_INDEX_FILE: join(head, '.export-index') }, stdio: 'ignore' })
 if (existsSync(out)) rmSync(out, { recursive: true, force: true })
 mkdirSync(out, { recursive: true })
 for (const f of files) {
   const to = join(out, f)
   mkdirSync(dirname(to), { recursive: true })
-  cpSync(join(root, f), to)
+  cpSync(join(head, f), to)
 }
+rmSync(head, { recursive: true, force: true })
 
 // ---- the search ----------------------------------------------------------------------------------------------------
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\\/g, '[\\\\/]+').replace(/\//g, '[\\\\/]+')

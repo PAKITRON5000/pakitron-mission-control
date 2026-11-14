@@ -1,6 +1,6 @@
 // pmc guarda (EV41): heartbeat in RELEVO.md, the account's files, git's list of changes.
 import { describe, it, expect } from 'vitest'
-import { archiveRelevo, enCursoLine, futureHours, heartbeatLine, leadingDate, pickFiles, porcelainPaths, staleEnCurso, withHeartbeat } from '../src/core/checkpoint'
+import { archiveRelevo, enCursoLine, futureHours, heartbeatLine, lastCommits, leadingDate, pickFiles, savedAlready, porcelainPaths, staleEnCurso, withHeartbeat } from '../src/core/checkpoint'
 
 describe('pmc guarda', () => {
   const at = new Date(2026, 10, 12, 12, 5)
@@ -152,5 +152,23 @@ describe('«En curso» que se queda viejo (14-11)', () => {
     expect(staleEnCurso(enCursoLine(md), 'claude6', undefined, t0).reminder).toContain('es de otra cuenta')
     expect(staleEnCurso('**En curso:** algo sin cuenta', 'claude6', undefined, t0).reminder).toBeUndefined()
     expect(staleEnCurso(undefined, 'claude1', undefined, t0)).toEqual({})
+  })
+})
+
+describe('writes already committed make a file nobody\'s (14-11 17:32)', () => {
+  const log = ['@1794673920', '', 'src/cli/pmc.ts', 'docs/RELEVO.md', '', '@1794673000', '', 'src/cli/pmc.ts', 'src/core/tidy.ts', ''].join('\n')
+  it('reads the newest commit of each file', () => {
+    const c = lastCommits(log)
+    expect(c.get('src/cli/pmc.ts')).toBe(1794673920_000)
+    expect(c.get('src/core/tidy.ts')).toBe(1794673000_000)
+    expect(c.has('src/main/index.ts')).toBe(false)
+  })
+  it('a write before or in the second of its last commit is saved; one after it, or of a file never committed, is not', () => {
+    const c = lastCommits(log)
+    expect(savedAlready(c, 'src/cli/pmc.ts', 1794673900_000)).toBe(true)
+    expect(savedAlready(c, 'src/cli/pmc.ts', 1794673920_400)).toBe(true)
+    expect(savedAlready(c, 'src/cli/pmc.ts', 1794673921_000)).toBe(false)
+    expect(savedAlready(c, 'SRC\\core\\tidy.ts', 1794672000_000)).toBe(true)
+    expect(savedAlready(c, 'src/main/index.ts', 1)).toBe(false)
   })
 })

@@ -8,6 +8,7 @@ import { Sheet, SheetHeader, SPRING, STATE_META, ACCOUNT_COLOR, Bar, workingOn, 
 import { AliasEdit } from '../screens/Accounts'
 import { ClaudeRing, UsageBar } from './ClaudeRing'
 import { ago, clock, countdown, dateShort, modelName, whenFull } from '../lib/format'
+import { useEmbedded } from './EmbeddedGrid'
 const LIMIT_SOURCE: Record<string, string> = { wake_log: 'wake.log', get transcript() { return t('su conversación') }, get statusline() { return t('línea de estado al 100 %') } }
 
 function UsageLine({ label, w, now, blockedUntil }: { label: string; w?: UsageWindow; now: number; blockedUntil?: number }) {
@@ -47,6 +48,8 @@ function Group({ title, children, right }: { title: string; children: ReactNode;
 
 export function AgentSheet() {
   const { state, agentOpen, setAgentOpen, now, toast, openComposer } = useStore()
+  // EV156: which of its sessions live inside the app (their terminal is in Chats, not in a window).
+  const [inApp] = useEmbedded(Boolean(agentOpen))
   const [tech, setTech] = useState(false)
   const [moreTasks, setMoreTasks] = useState(false)
   const a = state?.agents.find((x) => x.id === agentOpen)
@@ -153,7 +156,9 @@ export function AgentSheet() {
               </span>
               {s.kind === 'background' && <button className="btn btn-sm" onClick={() => run(() => api('attachSession', a.id, s.cwd, s.shortId), t('Abriendo la sesión'))}><Play size={12} /> {t('Ver')}</button>}
               {/* EV151: its window in front of the others, to watch it or write in it. */}
-              {s.kind !== 'background' && s.pid && <button className="btn btn-sm" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => run(() => api('frontSession', s.sessionId), t('Ventana delante'))}><Play size={12} /> {t('Ver ventana')}</button>}
+              {s.kind !== 'background' && s.pid && (inApp?.some((e) => e.pid === s.pid && e.alive)
+                ? <button className="btn btn-sm" title={t('Su terminal, dentro de la app: lo ves como en su ventana y le escribes allí')} onClick={() => { const e = inApp!.find((x) => x.pid === s.pid)!; setAgentOpen(undefined); window.location.hash = `#/chats/${encodeURIComponent('pty:' + e.id)}` }}><Play size={12} /> {t('Ver terminal')}</button>
+                : <button className="btn btn-sm" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => run(() => api('frontSession', s.sessionId), t('Ventana delante'))}><Play size={12} /> {t('Ver ventana')}</button>)}
             </div>
           ))}
           {!a.sessions.length && <div className="row t-small c3">{t('Abre una con «Abrir sesión» o retoma una conversación.')}</div>}

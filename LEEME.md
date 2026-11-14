@@ -4,7 +4,7 @@
 
 ![Inicio de Mission Control con datos inventados: dos Claude trabajando, preguntas que esperan respuesta y el mapa de cuentas y proyectos](docs/img/inicio-es.png)
 
-Una app de escritorio para Windows y macOS que coordina tus cuentas de **Claude Code** en tus proyectos: quién trabaja dónde, quién sigue cuando una se queda sin uso, qué te espera a ti y qué hicieron mientras no mirabas. Con una sola cuenta ya sirve. Con varias, cada una sigue con lo suyo y, si tú lo enciendes, se relevan entre ellas. Está en español.
+Una app de escritorio para Windows y macOS que coordina tus cuentas de **Claude Code** en tus proyectos: quién trabaja dónde, quién sigue cuando una se queda sin uso, qué te espera a ti y qué hicieron mientras no mirabas. Con una sola cuenta ya sirve. Con varias, cada una sigue con lo suyo y, si tú lo enciendes, se relevan entre ellas. En español y en inglés (Ajustes › General › Idioma).
 
 ## Qué necesitas
 
@@ -16,7 +16,7 @@ Una app de escritorio para Windows y macOS que coordina tus cuentas de **Claude 
 
 1. Descarga el instalador de [Releases](../../releases):
    - **Windows**: `Pakitron.Mission.Control.Setup.<versión>.exe`. No está firmado, así que Windows puede avisar: «Más información» › «Ejecutar de todas formas».
-   - **Mac**: `Pakitron-Mission-Control-<versión>-mac-arm64.dmg` para Apple Silicon (M1 y posteriores), `…-mac-x64.dmg` para Intel. Abre el `.dmg` y arrastra la app a **Aplicaciones**. Apple no la ha notarizado, así que la primera vez: clic derecho › **Abrir** › **Abrir** (o Ajustes del Sistema › Privacidad y seguridad › **Abrir igualmente**). En Mac las ventanas de los Claude se abren en Terminal; para que la app escriba en ellas tus mensajes del móvil, permítelo en Privacidad y seguridad › **Accesibilidad**.
+   - **Mac**: `Pakitron-Mission-Control-<versión>-mac-arm64.dmg` para Apple Silicon (M1 y posteriores), `…-mac-x64.dmg` para Intel. Abre el `.dmg` y arrastra la app a **Aplicaciones**. Apple no la ha notarizado, así que la primera vez: clic derecho › **Abrir** › **Abrir** (o Ajustes del Sistema › Privacidad y seguridad › **Abrir igualmente**). En Mac los Claude se abren dentro de la app; si eliges que se abran en su ventana, lo hacen en Terminal, y para que la app escriba en ellas tus mensajes del móvil, permítelo en Privacidad y seguridad › **Accesibilidad**.
 2. Ábrela desde el acceso directo **Pakitron Mission Control**.
 
 Actualizar: cuando sale una versión nueva, la app lo avisa en su barra de arriba y abre el instalador de tu sistema. Se instala encima: tus datos están en su propia carpeta (`%LOCALAPPDATA%\PakitronMC` en Windows, `~/Library/Application Support/PakitronMC` en Mac) y no se pierde nada.
@@ -35,6 +35,8 @@ Inicio enseña **Primeros pasos**: cuatro pasos, cada uno con su botón. La app 
 ## Cómo trabajan los Claude aquí
 
 Cada Claude usa la orden `pmc`, que la app deja preparada en cualquier ventana. Con `pmc parte` sabe en qué punto está el proyecto. `pmc claim` reserva una tarea para que nadie más la haga y `pmc guarda` deja el relevo al día al cerrar cada bloque. Cuando necesita que decidas algo, `pmc decide` deja la pregunta en **Decidir** y sigue con otra cosa; si no contestas a tiempo, se queda la opción por defecto. Tú lo ves todo en la app sin abrir un archivo.
+
+Los Claude que abre la app se ven dentro de ella, en **Chats › Dentro de la app**: cada uno con su terminal, como en su ventana, todos a la vez, y les escribes ahí mismo. «Despegar» saca uno a una ventana propia y «Anclar» lo devuelve. Si cierras o actualizas la app, siguen trabajando. Si lo prefieres, en Chats eliges que se abran cada uno en su ventana, como antes.
 
 Cada proyecto que añades queda preparado para los Claude: la app ve qué tipo de proyecto es (un juego, una web, un vídeo…) y deja un `CLAUDE.md` corto con cómo se trabaja allí, unos ayudantes (para orientarse, revisar capturas, comprobar y dejar el relevo), la skill de Mission Control y qué modelo basta para cada tarea. Además busca sola en [skills.sh](https://skills.sh) las skills que le encajan, al añadirlo y una vez por semana, e Inicio te dice cuántas ha encontrado. Instalarlas es siempre un clic tuyo: una skill trabaja con todos los permisos.
 

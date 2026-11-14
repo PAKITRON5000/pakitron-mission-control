@@ -131,7 +131,11 @@ export function detectAccounts(known: Pick<AccountConfig, 'id' | 'configDir'>[],
 
 export function readUsageSnapshot(account: AccountId): UsageSnapshot | undefined {
   try {
-    return JSON.parse(readFileSync(paths.usageFile(account), 'utf8')) as UsageSnapshot
+    const s = JSON.parse(readFileSync(paths.usageFile(account), 'utf8')) as UsageSnapshot
+    // How old its numbers are is when its session last talked to Anthropic, not when an idle window redrew them (14-11:
+    // «leído hace» and the pace were counted from the redraw).
+    if (typeof s.freshAt === 'number' && s.freshAt < s.capturedAt) s.capturedAt = s.freshAt
+    return s
   } catch {
     return undefined
   }

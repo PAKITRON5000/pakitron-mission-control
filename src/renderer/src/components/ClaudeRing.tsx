@@ -1,7 +1,8 @@
 import { locale, t } from '../../../core/i18n'
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { motion } from 'motion/react'
-import type { AgentCard } from '../lib/api'
+import { api, type AgentCard } from '../lib/api'
+import { useStore } from '../lib/store'
 import { ACCOUNT_COLOR, SPRING, STATE_META } from './ui'
 import { countdown } from '../lib/format'
 
@@ -118,8 +119,12 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
           <>
             <span className="num" style={{ fontSize: size * (small ? 0.24 : 0.2), fontWeight: 760, color: leftColor(tight.left, 'var(--label)'), letterSpacing: '-0.03em' }}>{Math.round(tight.left!)}<span style={{ fontSize: size * (small ? 0.13 : 0.11) }}>%</span></span>
             {small
-              // 14-11 (a Mac): «70 %» alone read as spent when it is what is left; the small ring says «queda» too.
-              ? <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{tight.which === 'five' ? t('queda · 5 h') : t('queda · sem.')}</span>
+              // 14-11 (a Mac): «70 %» alone read as spent when it is what is left; the small ring says «queda» too, in two
+              // short lines («queda · sem.» in one went over the inner ring in Cuentas, at 96 px).
+              ? <>
+                <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{t('queda')}</span>
+                <span style={{ fontSize: tiny(0.09), color: 'var(--label-3)', fontWeight: 600, marginTop: 1 }}>{tight.which === 'five' ? t('5 h') : t('sem.')}</span>
+              </>
               : <>
                 <span style={{ fontSize: tiny(0.09), color: 'var(--label-2)', fontWeight: 650, marginTop: 1 }}>{t('queda')}</span>
                 <span style={{ fontSize: tiny(0.085), color: 'var(--label-2)', fontWeight: 550 }}>{tight.which === 'five' ? t('5 horas') : t('semana')}</span>
@@ -192,7 +197,9 @@ export function UsageBars({ a, now, compact }: { a: AgentCard; now: number; comp
       <UsageBar a={a} which="week" now={now} compact={compact} />
       {/* EV105: an account that is not working keeps its last reading; say how old it is. */}
       {a.usage.snapshot && now - a.usage.snapshot.capturedAt > 30 * 60_000 && (
-        <span className="t-small c3">{t('Leído hace {v0}{v1}', { v0: countdown(now, a.usage.snapshot.capturedAt), v1: compact ? '' : t(', la última vez que trabajó') })}</span>
+        <span className="t-small c3">{t('Leído hace {v0}{v1}', { v0: countdown(now, a.usage.snapshot.capturedAt), v1: compact ? '' : t(', la última vez que trabajó') })}
+          {/* EV174: what it spent elsewhere (another computer, the phone, claude.ai) is only seen by asking. */}
+          {a.state !== 'baja' && window.pmc?.platform !== 'remote' && <CheckNow id={a.id} />}</span>
       )}
     </div>
   )
@@ -205,4 +212,25 @@ export function freeLabel(a: AgentCard, now: number): string {
   if (five.left == null && week.left == null) return t('Uso sin lectura')
   const f = (v: UsageView) => (v.out ? 'agotado' : v.left == null ? '—' : `${Math.round(v.left)} %`)
   return t('Queda {v0} de 5 h · {v1} de la semana', { v0: f(five), v1: f(week) })
+}
+
+/**
+ * EV174 «Comprobar ahora»: the account's real usage, asked to Anthropic with one tiny question (it counts as a request of
+ * that account). Only on the PC, only when pressed.
+ */
+function CheckNow({ id }: { id: string }) {
+  const { toast } = useStore()
+  const [busy, setBusy] = useState(false)
+  const go = () => {
+    setBusy(true)
+    void api<{ words: string; out: boolean }>('usageCheck', id).then(
+      (r) => toast(r.out ? t('Sin uso ahora: {v0}', { v0: r.words }) : t('Uso real: {v0}', { v0: r.words })),
+      (e: Error) => toast(e.message)
+    ).finally(() => setBusy(false))
+  }
+  return (
+    <button className="ml-1.5 underline decoration-dotted" style={{ color: 'var(--accent)', cursor: busy ? 'progress' : 'pointer' }} disabled={busy}
+      title={t('Pregunta a Anthropic con esta cuenta cuánto uso le queda de verdad, también lo gastado en otro ordenador, el móvil o claude.ai (gasta una pregunta mínima)')}
+      onClick={go}>{busy ? t('comprobando…') : t('Comprobar ahora')}</button>
+  )
 }

@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
-import { backSooner, dueProbe, hasUsage, parseProbe, probeWords, PROBE_ARGS, type ProbeCandidate, type ProbeReading } from '../core/probe'
+import { backLater, backSooner, dueProbe, hasUsage, parseProbe, probeWords, PROBE_ARGS, type ProbeCandidate, type ProbeReading } from '../core/probe'
 import { paths } from '../core/paths'
 
 export interface ProbeDeps {
@@ -16,6 +16,8 @@ export interface ProbeDeps {
   back: (account: string, reading: ProbeReading) => void
   /** Still out, but back sooner than the app believed: its limits older than `at` are dropped (the reading, taken at `at`, stays). */
   sooner: (account: string, reading: ProbeReading, at: number) => void
+  /** Still out, and back later than believed (or the app did not know when): the reading is written; tell the timeline. */
+  later?: (account: string, reading: ProbeReading) => void
   log: (line: string) => void
 }
 
@@ -30,7 +32,8 @@ export function runProbe(exe: string, env: NodeJS.ProcessEnv, cwd: string): Prom
 
 /** The reading where the status line keeps it (usage/<account>.json and its history), so every screen shows it. */
 export function writeReading(account: string, r: ProbeReading, now = Date.now()): void {
-  const snap: Record<string, unknown> = { account, capturedAt: now, source: 'statusline', sessionId: 'sonda', model: 'haiku' }
+  // Just asked to Anthropic: no idle window's older numbers may replace it (core/usagefresh.ts).
+  const snap: Record<string, unknown> = { account, capturedAt: now, freshAt: now, source: 'statusline', sessionId: 'sonda', model: 'haiku' }
   if (r.five) snap.fiveHour = { usedPct: r.five.pct, resetsAt: r.five.resetsAt }
   if (r.week) snap.sevenDay = { usedPct: r.week.pct, resetsAt: r.week.resetsAt }
   const file = paths.usageFile(account as never)
@@ -50,7 +53,7 @@ export function createProbe(deps: ProbeDeps) {
     return asked!
   }
   /** Asks one account and acts on the answer: back with usage, or still out but back sooner than believed. */
-  async function ask(id: string, how: string): Promise<ProbeReading | undefined> {
+  async function ask(id: string, how: string, keep = false): Promise<ProbeReading | undefined> {
     const last = load()
     last[id] = Date.now()
     try { writeFileSync(file(), JSON.stringify(last)) } catch { /* next time */ }
@@ -62,10 +65,12 @@ export function createProbe(deps: ProbeDeps) {
     deps.log(`sonda de uso de ${id}${how}: ${reading.status} (${reading.type ?? '?'}) · ${probeWords(reading)}`)
     const backAt = deps.candidates().find((c) => c.id === id)?.backAt
     const usage = hasUsage(reading)
-    if (!usage && !backSooner(backAt, reading)) return reading
+    const later = backLater(backAt, reading)
+    if (!keep && !usage && !backSooner(backAt, reading) && !later) return reading
     const at = Date.now()
     try { writeReading(id, reading, at) } catch (e) { deps.log(`sonda: no se pudo apuntar la lectura de ${id}: ${(e as Error).message}`) }
-    if (usage) deps.back(id, reading)
+    if (usage) { if (deps.candidates().find((c) => c.id === id)?.out) deps.back(id, reading) }
+    else if (later) deps.later?.(id, reading)
     else deps.sooner(id, reading, at)
     return reading
   }
@@ -73,6 +78,11 @@ export function createProbe(deps: ProbeDeps) {
   return {
     /** The user's «Ya está recargada»: asked now, whatever the last time was. */
     now: (id: string) => ask(id, ' (pedida)'),
+    /**
+     * EV174: the user's «Comprobar ahora» in Cuentas: the real figures, written whatever they say (usage spent on another
+     * computer, the phone or claude.ai is only seen this way until a session here asks something).
+     */
+    check: (id: string) => ask(id, ' (comprobada)', true),
     async tick(now = Date.now()): Promise<void> {
       if (running || process.env.PMC_SHOT_DIR) return
       const id = dueProbe(deps.candidates(), load(), now)
