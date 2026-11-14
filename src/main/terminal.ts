@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { paths } from '../core/paths'
 import { shQuote } from '../core/platform'
 import { INHERITED_CLAUDE_VARS } from '../core/sessions'
+import { t } from '../core/i18n'
 
 export const terminalDir = (): string => join(paths.root(), 'terminal')
 /** Part of the path of every script the app opens: what tells its windows from the ones the user opened by hand. */
@@ -98,9 +99,9 @@ export async function closePosixClaude(pid: number, byHandToo = false): Promise<
 // lets an app do only once the user allows it in Privacy & Security › Accessibility.
 
 async function ttyOf(pid: number): Promise<string> {
-  const t = await ps(['-o', 'tty=', '-p', String(Math.floor(pid))])
-  if (!t || t === '??') throw new Error('esa sesión no tiene ventana de Terminal')
-  return t.startsWith('/dev/') ? t : `/dev/${t}`
+  const tty = await ps(['-o', 'tty=', '-p', String(Math.floor(pid))])
+  if (!tty || tty === '??') throw new Error(t('esa sesión no tiene ventana de Terminal'))
+  return tty.startsWith('/dev/') ? tty : `/dev/${tty}`
 }
 
 const FIND_TAB = [
@@ -130,7 +131,7 @@ function osa(lines: string[], args: string[]): Promise<string> {
     if (err) {
       const msg = String(errOut || err.message)
       reject(new Error(/not allowed|no permitido|1002|-1743|assistive/i.test(msg)
-        ? 'macOS no deja escribir en Terminal: permite Mission Control en Ajustes del Sistema › Privacidad y seguridad › Accesibilidad (y en Automatización)'
+        ? t('macOS no deja escribir en Terminal: permite Mission Control en Ajustes del Sistema › Privacidad y seguridad › Accesibilidad (y en Automatización)')
         : msg.split('\n')[0].slice(0, 200)))
     } else resolve(String(out ?? ''))
   }))

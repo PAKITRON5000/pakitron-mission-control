@@ -164,7 +164,7 @@ export function createCleanup(d: { service: Service }) {
     const v = views.get(pid)!
     v.items = v.items.filter((x) => x !== it)
     v.totals.dudoso = Math.max(0, v.totals.dudoso - it.size)
-    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: `Apartado: ${it.rel} (${Math.round(it.size / 1048576)} MB) · ${it.why}`, detail: `${it.path} → ${to}`, source: 'Mission Control' })
+    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: t('Apartado: {rel} ({v0} MB) · {why}', { rel: it.rel, v0: Math.round(it.size / 1048576), why: it.why }), detail: `${it.path} → ${to}`, source: 'Mission Control' })
     service.push()
     return it.rel
   }

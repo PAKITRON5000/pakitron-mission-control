@@ -1,4 +1,4 @@
-import { t } from '../core/i18n'
+import { t, locale } from '../core/i18n'
 // Smart recharge, the part that acts (EV96; the decision and the reading are core/recharge.ts). At an account's limit the
 // app looks at its window for Claude Code's own `/limit-reset` offer; every two minutes it asks whether this is the moment
 // to use it and, when it is (and the user left it to the app, Decidir #130 «B»), types the command in that window and
@@ -56,7 +56,7 @@ export function createRecharge(d: RechargeDeps) {
     save(account, { ...offer, seenAt: Date.now(), ...(offer.available ? { noneAt: undefined } : { noneAt: Date.now() }) })
     if (offer.available) {
       const day = new Date().toDateString()
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} tiene una recarga de Claude Code a mano{v1}{v2}', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ' (5 horas)', v2: offer.useBy ? `, hasta ${offer.useBy}` : '' }), source: 'Mission Control', dedupe: `rc:${account}:${day}` })
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} tiene una recarga de Claude Code a mano{v1}{v2}', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : t(' (5 horas)'), v2: offer.useBy ? t(', hasta {v0}', { v0: offer.useBy }) : '' }), source: 'Mission Control', dedupe: `rc:${account}:${day}` })
     }
     return offer
   }
@@ -111,9 +111,9 @@ export function createRecharge(d: RechargeDeps) {
    * where it talks about a reset, then «go on». Anything unexpected: Esc, and it says so.
    */
   async function apply(account: string, kind?: string): Promise<string> {
-    if (busy.has(account)) return 'ya se está usando'
+    if (busy.has(account)) return t('ya se está usando')
     const w = windowOf(account)
-    if (!w?.pid) return 'no tiene ventana abierta'
+    if (!w?.pid) return t('no tiene ventana abierta')
     const pid = w.pid
     busy.add(account)
     const rec = records()[account]
@@ -142,9 +142,9 @@ export function createRecharge(d: RechargeDeps) {
         save(account, { usedAt: Date.now(), available: Boolean(left), left })
         // The app counts it back in the turn at once (the same as «Ya está recargada»).
         service.setSettings({ recharged: { ...(service.settings.recharged ?? {}), [account]: Date.now() } })
-        if (/send a message to continue/i.test(screen)) await d.typeText(pid, 'Mission Control: se ha usado tu recarga de Claude Code; sigue exactamente donde lo dejaste, sin repetir lo hecho.')
+        if (/send a message to continue/i.test(screen)) await d.typeText(pid, t('Mission Control: se ha usado tu recarga de Claude Code; sigue exactamente donde lo dejaste, sin repetir lo hecho.'))
         addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} ha usado su recarga{v1} y sigue trabajando', { v0: who(account), v1: kind ? ` (${kind})` : '' }), source: 'Mission Control' })
-        d.notify(`${who(account)} ha usado su recarga`, 'Era el mejor momento: estaba parada con trabajo y nadie más podía seguir. Sigue trabajando.')
+        d.notify(t('{v0} ha usado su recarga', { v0: who(account) }), t('Era el mejor momento: estaba parada con trabajo y nadie más podía seguir. Sigue trabajando.'))
         void service.refreshAgents()
         return 'hecho'
       }
@@ -155,8 +155,8 @@ export function createRecharge(d: RechargeDeps) {
       }
       // Esc only closes a chooser left open; on a plain line it would cancel Claude Code's automatic continue (13-11).
       if (/Use an? [\w -]+ \(|Enter to confirm|esc to (?:go back|exit)/i.test(screen)) { try { await d.typeKey(pid, 'esc') } catch { /* closed */ } }
-      addEvent(service.db, { at: Date.now(), account, kind: 'aviso', title: t('No se ha usado la recarga de {v0}: la ventana no mostraba lo esperado{v1}', { v0: who(account), v1: step === 'peligro' ? ' (hablaba de créditos o de pago: nunca se pulsa ahí)' : '' }), detail: screen.slice(-1500), source: 'Mission Control' })
-      return step === 'peligro' ? 'la pantalla hablaba de pagar: no se ha tocado' : 'no se ha podido confirmar'
+      addEvent(service.db, { at: Date.now(), account, kind: 'aviso', title: t('No se ha usado la recarga de {v0}: la ventana no mostraba lo esperado{v1}', { v0: who(account), v1: step === 'peligro' ? t(' (hablaba de créditos o de pago: nunca se pulsa ahí)') : '' }), detail: screen.slice(-1500), source: 'Mission Control' })
+      return step === 'peligro' ? t('la pantalla hablaba de pagar: no se ha tocado') : t('no se ha podido confirmar')
     } catch (e) {
       return (e as Error).message
     } finally {
@@ -173,10 +173,10 @@ export function createRecharge(d: RechargeDeps) {
    */
   async function probe(account: string): Promise<string> {
     const w = windowOf(account)
-    if (!w?.pid) return 'sin ventana abierta: se mira cuando llegue a su límite'
+    if (!w?.pid) return t('sin ventana abierta: se mira cuando llegue a su límite')
     const a = service.agents.find((x) => x.id === account)
-    if (a?.state === 'trabajando' || w.status === 'busy') return 'está trabajando: se mira cuando pare'
-    if (busy.has(account)) return 'ya se está mirando'
+    if (a?.state === 'trabajando' || w.status === 'busy') return t('está trabajando: se mira cuando pare')
+    if (busy.has(account)) return t('ya se está mirando')
     busy.add(account)
     const pid = w.pid
     try {
@@ -184,7 +184,7 @@ export function createRecharge(d: RechargeDeps) {
       // touched: on 13-11 the Esc of this look cancelled claude3's («Automatic continue cancelled»).
       let before = ''
       try { before = await d.readScreen(pid, 40) } catch { /* gone */ }
-      if (/continuing automatically|esc to cancel/i.test(before)) return 'va a seguir sola cuando vuelva su uso: no se toca su ventana'
+      if (/continuing automatically|esc to cancel/i.test(before)) return t('va a seguir sola cuando vuelva su uso: no se toca su ventana')
       await d.typeText(pid, '/limit-reset')
       await sleep(4000)
       let screen = ''
@@ -194,10 +194,10 @@ export function createRecharge(d: RechargeDeps) {
       const offer = readResetOffer(screen)
       // Out of a limit, the older single reset only says «isn't available right now»: that says nothing about later.
       const limited = Boolean(a?.usage.activeLimit && a.usage.activeLimit.resetsAt > Date.now())
-      if (!offer || (!offer.available && !limited)) return 'Claude Code no enseña sus recargas fuera del límite: se sabrá cuando llegue a él'
+      if (!offer || (!offer.available && !limited)) return t('Claude Code no enseña sus recargas fuera del límite: se sabrá cuando llegue a él')
       save(account, { ...offer, seenAt: Date.now() })
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: offer.available ? t('{v0} tiene recarga{v1}{v2} (revisado sin usarla)', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : '', v2: offer.useBy ? `, hasta ${offer.useBy}` : '' }) : t('{v0} no tiene recarga ahora', { v0: who(account) }), source: 'Mission Control', dedupe: `rp:${account}:${new Date().toDateString()}:${offer.available}` })
-      return offer.available ? `tiene recarga${offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ''}${offer.useBy ? `, hasta ${offer.useBy}` : ''}` : 'no tiene recarga ahora'
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: offer.available ? t('{v0} tiene recarga{v1}{v2} (revisado sin usarla)', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : '', v2: offer.useBy ? t(', hasta {v0}', { v0: offer.useBy }) : '' }) : t('{v0} no tiene recarga ahora', { v0: who(account) }), source: 'Mission Control', dedupe: `rp:${account}:${new Date().toDateString()}:${offer.available}` })
+      return offer.available ? t('tiene recarga{v0}{v1}', { v0: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : '', v1: offer.useBy ? t(', hasta {v0}', { v0: offer.useBy }) : '' }) : t('no tiene recarga ahora')
     } finally {
       busy.delete(account)
       service.push()
@@ -225,13 +225,13 @@ export function createRecharge(d: RechargeDeps) {
     const w = windowOf(account, sessionId)
     // Only where the app drives the work (autonomous mode or a wheel): a window the user is using is left to the user.
     if (!w?.pid || !(s.autonomous || inWheel)) {
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable hasta {v1}: sus ventanas nuevas irán con Opus', { v0: who(account), v1: new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable hasta {v1}: sus ventanas nuevas irán con Opus', { v0: who(account), v1: new Date(until).toLocaleString(locale(), { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
       return 'marcada sin Fable'
     }
     await d.typeText(w.pid, '/model opus')
     await sleep(2500)
-    await d.typeText(w.pid, 'Mission Control: se ha acabado tu límite de Fable y no hay cupón de Fable; sigue con Opus exactamente donde lo dejaste, sin repetir lo hecho.')
-    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable: sigue con Opus en la misma conversación (Fable vuelve {v1})', { v0: who(account), v1: new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
+    await d.typeText(w.pid, t('Mission Control: se ha acabado tu límite de Fable y no hay cupón de Fable; sigue con Opus exactamente donde lo dejaste, sin repetir lo hecho.'))
+    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable: sigue con Opus en la misma conversación (Fable vuelve {v1})', { v0: who(account), v1: new Date(until).toLocaleString(locale(), { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
     service.push()
     return 'sigue con Opus'
   }
@@ -260,7 +260,7 @@ export function createRecharge(d: RechargeDeps) {
         const at = a.usage.activeLimit?.resetsAt ?? 0
         if (warned.get(a.id) === at) continue
         warned.set(a.id, at)
-        d.notify(`Buen momento para la recarga de ${who(a.id)}`, `${dec.why}. Ábrela en Inicio o escribe /limit-reset en su ventana.`)
+        d.notify(t('Buen momento para la recarga de {v0}', { v0: who(a.id) }), t('{why}. Ábrela en Inicio o escribe /limit-reset en su ventana.', { why: dec.why }))
         addEvent(service.db, { at: now, account: a.id, kind: 'recarga', title: t('Buen momento para usar la recarga de {v0}: {why}', { v0: who(a.id), why: dec.why }), source: 'Mission Control' })
       }
     }

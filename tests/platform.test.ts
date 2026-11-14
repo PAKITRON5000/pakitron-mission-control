@@ -60,3 +60,27 @@ describe('macOS paths', () => {
     for (const r of ['/', '/Users', '/Users/ana', '/Users/ana/Downloads', '/Volumes/Disco', '/Applications', 'Claude/Subty']) expect(binnable(r, app, home, 'darwin')).toBe(false)
   })
 })
+
+import { backupTarget } from '../src/core/backup'
+
+describe('backups on a Mac', () => {
+  it('keep each folder its own separator', () => {
+    expect(backupTarget('/Volumes/Disco/Copias de proyectos/', 'mi juego')).toBe('/Volumes/Disco/Copias de proyectos/mi_juego.git')
+    expect(backupTarget('G:\\Copias', 'juego')).toBe('G:\\Copias\\juego.git')
+  })
+})
+
+import { withMacKeys } from '../src/core/i18n'
+
+describe('shortcuts on a Mac', () => {
+  it('say ⌘ instead of Ctrl, except Ctrl + Tab', () => {
+    expect(withMacKeys('Buscar (Ctrl+K)')).toBe('Buscar (⌘K)')
+    expect(withMacKeys('Ctrl K')).toBe('⌘K')
+    expect(withMacKeys('Ctrl + Intro para enviar')).toBe('⌘Intro para enviar')
+    expect(withMacKeys('Cambiar de proyecto (Ctrl + Tab)')).toBe('Cambiar de proyecto (Ctrl + Tab)')
+    expect(withMacKeys('Ctrl + / Ctrl − cambian el tamaño')).toBe('⌘ + / ⌘− cambian el tamaño')
+    expect(withMacKeys('Ctrl 0')).toBe('⌘0')
+    expect(withMacKeys('Ctrl + {v0}'.replace('{v0}', '3'))).toBe('⌘3')
+    expect(withMacKeys('Ctrl + 1…9, los apartados')).toBe('⌘1…9, los apartados')
+  })
+})

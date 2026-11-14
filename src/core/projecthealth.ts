@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, tn } from './i18n'
 // The health of a project in one line (EV47), for «Tus proyectos» in Inicio: do its checks pass, when was the last commit,
 // is there work left unsaved with nobody on it, how many tasks are left and who is working there. Everything comes from
 // what the app already reads (copies, verifications, tasks, sessions); nothing is run for it. No node imports.
@@ -80,34 +80,34 @@ export function projectHealth(i: HealthInput): HealthLine {
   let level: HealthLine['level'] = 'bien'
   const worse = (l: HealthLine['level']) => { if (l === 'mal' || (l === 'aviso' && level === 'bien')) level = l }
 
-  if (i.check && i.check.outcome !== 'bien') { worse('mal'); parts.push(`fallan las comprobaciones (${ago(i.check.at, i.now)}): ${i.check.summary.slice(0, 80)}`) }
-  else if (i.check) parts.push(`comprobaciones en verde (${ago(i.check.at, i.now)})`)
-  else if (i.checksDeclared) parts.push('sin comprobar todavía')
-  else { worse('aviso'); parts.push('sin comprobaciones: «Prepararlo» en Ajustes › Proyecto las propone') }
+  if (i.check && i.check.outcome !== 'bien') { worse('mal'); parts.push(t('fallan las comprobaciones ({ago}): {summary}', { ago: ago(i.check.at, i.now), summary: i.check.summary.slice(0, 80) })) }
+  else if (i.check) parts.push(t('comprobaciones en verde ({ago})', { ago: ago(i.check.at, i.now) }))
+  else if (i.checksDeclared) parts.push(t('sin comprobar todavía'))
+  else { worse('aviso'); parts.push(t('sin comprobaciones: «Prepararlo» en Ajustes › Proyecto las propone')) }
 
-  for (const c of i.copies.filter((x) => x.error)) { worse('mal'); parts.push(`no se puede leer la copia ${c.label}`) }
+  for (const c of i.copies.filter((x) => x.error)) { worse('mal'); parts.push(t('no se puede leer la copia {label}', { label: c.label })) }
   const last = Math.max(0, ...i.copies.map((c) => c.headAt ?? 0))
-  if (last) parts.push(`último commit ${ago(last, i.now)}`)
+  if (last) parts.push(t('último commit {ago}', { ago: ago(last, i.now) }))
   for (const c of i.copies) {
     const n = c.dirty + c.untracked
     if (!n) continue
     const stale = !i.working.length && c.headAt !== undefined && i.now - c.headAt > STALE_DIRTY_MS
     if (stale) worse('aviso')
-    parts.push(`${n} archivo${n === 1 ? '' : 's'} sin guardar en ${c.label}${stale ? ` y nadie trabajando (desde el commit de ${ago(c.headAt!, i.now)})` : ''}`)
+    parts.push(tn(n, '{n} archivo sin guardar en {label}', '{n} archivos sin guardar en {label}', { label: c.label }) + (stale ? t(' y nadie trabajando (desde el commit de {ago})', { ago: ago(c.headAt!, i.now) }) : ''))
   }
 
   for (const u of i.unsaved ?? []) {
     worse('aviso')
     const names = u.files.slice(0, 3).map((f) => f.split('/').pop()).join(', ')
-    parts.unshift(`Claude ${u.account.slice(6)} dejó ${u.files.length === 1 ? '1 archivo suyo' : `${u.files.length} archivos suyos`} sin guardar en ${u.copy} (lo último ${ago(u.lastAt, i.now)}): ${names}${u.files.length > 3 ? '…' : ''}; quien siga, que lo revise y lo guarde con pmc guarda`)
+    parts.unshift(t('Claude {n} dejó {files} sin guardar en {copy} (lo último {ago}): {names}{more}; quien siga, que lo revise y lo guarde con pmc guarda', { n: u.account.slice(6), files: tn(u.files.length, '1 archivo suyo', '{n} archivos suyos'), copy: u.copy, ago: ago(u.lastAt, i.now), names, more: u.files.length > 3 ? '…' : '' }))
   }
 
   const k = i.counts
-  const tasks = [k.pendiente && `${k.pendiente} pendiente${k.pendiente === 1 ? '' : 's'}`, k.enCurso && `${k.enCurso} a medias`, k.revision && `${k.revision} para revisar`, k.esperan && `${k.esperan} esperan a otras`].filter(Boolean)
-  parts.push(tasks.length ? tasks.join(' · ') : 'sin tareas abiertas')
-  if (i.mediaBytes && i.mediaBytes >= 50e6) parts.push(`${gigas(i.mediaBytes)} en imágenes y vídeos`)
-  if (i.claudeMdClashes?.length) { worse('aviso'); parts.push(`CLAUDE.md con ${i.claudeMdClashes.length === 1 ? 'dos órdenes que se contradicen' : i.claudeMdClashes.length + ' pares de órdenes que se contradicen'} («${i.claudeMdClashes[0][0].slice(0, 60)}» frente a «${i.claudeMdClashes[0][1].slice(0, 60)}»): pide a un Claude que lo aclare`) }
-  if (i.claudeMdLines && i.claudeMdLines > CLAUDE_MD_MAX_LINES) { worse('aviso'); parts.push(`CLAUDE.md de ${i.claudeMdLines} líneas: cada sesión lo lee entero; conviene pasar lo específico a skills o a Memoria`) }
-  parts.push(i.working.length ? `trabajando: ${i.working.map((a) => `Claude ${a.slice(6)}`).join(', ')}` : 'nadie trabajando')
+  const tasks = [k.pendiente && tn(k.pendiente, '{n} pendiente', '{n} pendientes'), k.enCurso && t('{n} a medias', { n: k.enCurso }), k.revision && t('{n} para revisar', { n: k.revision }), k.esperan && t('{n} esperan a otras', { n: k.esperan })].filter(Boolean)
+  parts.push(tasks.length ? tasks.join(' · ') : t('sin tareas abiertas'))
+  if (i.mediaBytes && i.mediaBytes >= 50e6) parts.push(t('{size} en imágenes y vídeos', { size: gigas(i.mediaBytes) }))
+  if (i.claudeMdClashes?.length) { worse('aviso'); parts.push(t('CLAUDE.md con {what} («{a}» frente a «{b}»): pide a un Claude que lo aclare', { what: tn(i.claudeMdClashes.length, 'dos órdenes que se contradicen', '{n} pares de órdenes que se contradicen'), a: i.claudeMdClashes[0][0].slice(0, 60), b: i.claudeMdClashes[0][1].slice(0, 60) })) }
+  if (i.claudeMdLines && i.claudeMdLines > CLAUDE_MD_MAX_LINES) { worse('aviso'); parts.push(t('CLAUDE.md de {n} líneas: cada sesión lo lee entero; conviene pasar lo específico a skills o a Memoria', { n: i.claudeMdLines })) }
+  parts.push(i.working.length ? t('trabajando: {list}', { list: i.working.map((a) => `Claude ${a.slice(6)}`).join(', ') }) : t('nadie trabajando'))
   return { level, parts }
 }

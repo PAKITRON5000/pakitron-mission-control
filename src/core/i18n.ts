@@ -30,7 +30,25 @@ export function getLang(): Lang {
  */
 export function t(es: string, vars?: Record<string, string | number | undefined>): string {
   const s = DICTS[current]?.[es] ?? es
-  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (vars[k] == null ? m : String(vars[k]))) : s
+  const out = vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (vars[k] == null ? m : String(vars[k]))) : s
+  return macKeys ? withMacKeys(out) : out
+}
+
+/** On a Mac the shortcuts are pressed with ⌘: the same texts say so (the app accepts both). Ctrl + Tab stays Ctrl there. */
+let macKeys = false
+export function setMacKeys(on: boolean): void {
+  macKeys = on
+}
+
+export function withMacKeys(s: string): string {
+  if (!s.includes('Ctrl')) return s
+  return s
+    .replace(/Ctrl ?\+ ?Tab/g, '\u0000')
+    .replace(/Ctrl ?\+ ?(?=[\p{L}\p{N}{…])/gu, '⌘')
+    .replace(/Ctrl (?=[−0-9])/g, '⌘')
+    .replace(/Ctrl \+/g, '⌘ +')
+    .replace(/Ctrl ?(?=[A-Z]\b)/g, '⌘')
+    .replace(/\u0000/g, 'Ctrl + Tab')
 }
 
 /** Singular or plural by count, both written in Spanish (the keys): `tn(n, '{n} tarea', '{n} tareas')`. */

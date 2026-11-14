@@ -1,7 +1,7 @@
 {
   "name": "pakitron-mission-control",
   "productName": "Pakitron Mission Control",
-  "version": "0.33.1",
+  "version": "0.34.0",
   "description": "Coordina tus cuentas de Claude Code en tus proyectos: quién trabaja dónde y quién sigue cuando una se queda sin uso",
   "author": "Pakitron",
   "license": "Apache-2.0",
@@ -10,7 +10,7 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build && vite build -c vite.cli.config.ts",
+    "build": "electron-vite build && vite build -c vite.cli.config.ts && vite build -c vite.ptyhost.config.ts",
     "start": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -75,6 +75,23 @@
       {
         "from": "out/cli/pmc.mjs",
         "to": "pmc/pmc.mjs"
+      },
+      {
+        "from": "out/ptyhost/host.cjs",
+        "to": "ptyhost/host.cjs"
+      },
+      {
+        "from": "node_modules/node-pty",
+        "to": "ptyhost/node_modules/node-pty",
+        "filter": [
+          "package.json",
+          "LICENSE",
+          "lib/**/*",
+          "prebuilds/**/*",
+          "!**/*.pdb",
+          "!lib/**/*.test.js",
+          "!lib/**/*.map"
+        ]
       }
     ],
     "asar": true,

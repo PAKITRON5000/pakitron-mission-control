@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccountId, UsageSnapshot } from './types'
 import { paths } from './paths'
+import { t, locale } from './i18n'
 import { readUsageHistory, readUsageSnapshot, type UsageReading } from './accounts'
 
 export const WARN_AT = [85, 95] as const
@@ -23,7 +24,7 @@ export function minutesLeft(history: UsageReading[], snap: UsageSnapshot, now = 
   return Math.max(1, Math.round((100 - last.five!) / (dp / dt)))
 }
 
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 const warnedFile = (account: string) => join(paths.usageDir(), `${account}.warned.json`)
 
 export interface PaceInput { snapshot?: UsageSnapshot; history: UsageReading[]; warned: Record<string, number>; autoRelay?: boolean; now?: number }
@@ -37,8 +38,8 @@ export function paceWarning(i: PaceInput): { text: string; key: string } | undef
   const s = i.snapshot
   if (!s || now - s.capturedAt > STALE_MS) return undefined
   const windows = [
-    { name: 'tus 5 horas', short: '5h', w: s.fiveHour },
-    { name: 'tu semana', short: 'sem', w: s.sevenDay }
+    { name: t('tus 5 horas'), short: '5h', w: s.fiveHour },
+    { name: t('tu semana'), short: 'sem', w: s.sevenDay }
   ].filter((x) => x.w && x.w.resetsAt > now && x.w.usedPct < 100) as { name: string; short: string; w: { usedPct: number; resetsAt: number } }[]
   // The window nearest its end decides.
   const hit = windows.sort((a, b) => b.w.usedPct - a.w.usedPct)[0]
@@ -48,14 +49,14 @@ export function paceWarning(i: PaceInput): { text: string; key: string } | undef
   const key = `${hit.short}:${hit.w.resetsAt}:${level}`
   if (i.warned[key]) return undefined
   const left = hit.short === '5h' ? minutesLeft(i.history, s, now) : undefined
-  const after = i.autoRelay ? 'Si te paras, Mission Control abrirá otra cuenta para seguir: lo que no esté guardado y apuntado, lo tendrá que adivinar.' : 'Si te paras, otra cuenta seguirá cuando el usuario la abra: lo que no esté guardado y apuntado, lo tendrá que adivinar.'
+  const after = i.autoRelay ? t('Si te paras, Mission Control abrirá otra cuenta para seguir: lo que no esté guardado y apuntado, lo tendrá que adivinar.') : t('Si te paras, otra cuenta seguirá cuando el usuario la abra: lo que no esté guardado y apuntado, lo tendrá que adivinar.')
   // With the automatic hand-off on, stopping early wastes what is left and the hand-off waits for a limit error that never
   // comes (claude3 stopped by itself at 99 %, 12-11; the user: «que no se paren al 99 %»). So: save, write the note, go on.
   const text = level >= 95 && i.autoRelay
-    ? `Mission Control: llevas el ${Math.round(hit.w.usedPct)} % de ${hit.name} (vuelve a las ${hhmm(hit.w.resetsAt)}). NO TE PARES NI TE DESPIDAS: el relevo automático está activo y otra cuenta seguirá sola cuando el límite te corte. Ahora mismo: deja lo que tienes en un estado que compile y ejecuta pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" (escribe el latido, hace el commit de lo tuyo y guarda tus reservas para quien te releve). Después SIGUE TRABAJANDO hasta que el límite te corte, en pasos pequeños, con un pmc guarda al cerrar cada uno. No escribas un resumen final para el usuario ni termines el turno por tu cuenta: gastar hasta el último punto es lo que él quiere.`
+    ? t('Mission Control: llevas el {pct} % de {name} (vuelve a las {time}). NO TE PARES NI TE DESPIDAS: el relevo automático está activo y otra cuenta seguirá sola cuando el límite te corte. Ahora mismo: deja lo que tienes en un estado que compile y ejecuta pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" (escribe el latido, hace el commit de lo tuyo y guarda tus reservas para quien te releve). Después SIGUE TRABAJANDO hasta que el límite te corte, en pasos pequeños, con un pmc guarda al cerrar cada uno. No escribas un resumen final para el usuario ni termines el turno por tu cuenta: gastar hasta el último punto es lo que él quiere.', { pct: Math.round(hit.w.usedPct), name: hit.name, time: hhmm(hit.w.resetsAt) })
     : level >= 95
-    ? `Mission Control: llevas el ${Math.round(hit.w.usedPct)} % de ${hit.name} (vuelve a las ${hhmm(hit.w.resetsAt)}). No empieces nada nuevo: deja lo que tienes en un estado que compile y ejecuta YA pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" (latido, commit de lo tuyo y reservas guardadas). ${after}`
-    : `Mission Control: llevas el ${Math.round(hit.w.usedPct)} % de ${hit.name} (vuelve a las ${hhmm(hit.w.resetsAt)}${left ? `; a este ritmo te quedan unos ${left} min, es una estimación` : ''}). Cierra el bloque en el que estás en un punto que compile y ejecuta pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" ahora, no al final; después sigue, pero con pasos pequeños que puedas cerrar.${i.autoRelay ? ' No te pares por tu cuenta aunque te quede poco: trabaja hasta que el límite te corte.' : ''} ${after}`
+    ? t('Mission Control: llevas el {pct} % de {name} (vuelve a las {time}). No empieces nada nuevo: deja lo que tienes en un estado que compile y ejecuta YA pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" (latido, commit de lo tuyo y reservas guardadas). {after}', { pct: Math.round(hit.w.usedPct), name: hit.name, time: hhmm(hit.w.resetsAt), after })
+    : t('Mission Control: llevas el {pct} % de {name} (vuelve a las {time}{left}). Cierra el bloque en el que estás en un punto que compile y ejecuta pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está" ahora, no al final; después sigue, pero con pasos pequeños que puedas cerrar.{keep} {after}', { pct: Math.round(hit.w.usedPct), name: hit.name, time: hhmm(hit.w.resetsAt), left: left ? t('; a este ritmo te quedan unos {n} min, es una estimación', { n: left }) : '', keep: i.autoRelay ? t(' No te pares por tu cuenta aunque te quede poco: trabaja hasta que el límite te corte.') : '', after })
   return { text, key }
 }
 

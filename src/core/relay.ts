@@ -8,7 +8,10 @@ import { isWorkingOn } from './coord'
 /** What the user says about an account that nothing else can tell: set aside (his brother's), or no longer paid. */
 export type AccountStatus = 'pausada' | 'baja'
 
-export const STATUS_LABEL: Record<AccountStatus, string> = { pausada: 'apartada por el usuario: no se usa', baja: 'de baja: ya no se paga' }
+export const STATUS_LABEL: Record<AccountStatus, string> = {
+  get pausada() { return t('apartada por el usuario: no se usa') },
+  get baja() { return t('de baja: ya no se paga') }
+}
 
 export interface RelayCandidate extends Pick<AgentCard, 'id' | 'state' | 'sessions'> {
   /** Free share of the week as last read; undefined when there is no reading. */
@@ -42,15 +45,15 @@ export function pickSuccessor(i: RelayInput): RelayChoice {
   const can = i.agents.filter((a) => {
     if (a.id === i.from) return false
     const s = i.status[a.id]
-    if (s) { out.push(`${a.id} ${s === 'baja' ? 'de baja' : 'apartada'}`); return false }
-    if (a.state === 'sin-uso') { out.push(`${a.id} sin uso`); return false }
-    if (a.state === 'desconectado') { out.push(`${a.id} sin sesión iniciada`); return false }
-    if (a.weekFree != null && a.weekFree < MIN_WEEK_FREE) { out.push(`${a.id} con el ${a.weekFree} % de la semana`); return false }
+    if (s) { out.push(`${a.id} ${s === 'baja' ? t('de baja') : t('apartada')}`); return false }
+    if (a.state === 'sin-uso') { out.push(t('{id} sin uso', { id: a.id })); return false }
+    if (a.state === 'desconectado') { out.push(t('{id} sin sesión iniciada', { id: a.id })); return false }
+    if (a.weekFree != null && a.weekFree < MIN_WEEK_FREE) { out.push(t('{id} con el {pct} % de la semana', { id: a.id, pct: a.weekFree })); return false }
     // Seen on 12-11: claude3, at 99 % of its 5 hours, was the one chosen to take over. It would have stopped at once.
-    if (a.fiveFree != null && a.fiveFree < MIN_WEEK_FREE) { out.push(`${a.id} con el ${a.fiveFree} % de sus 5 horas`); return false }
+    if (a.fiveFree != null && a.fiveFree < MIN_WEEK_FREE) { out.push(t('{id} con el {pct} % de sus 5 horas', { id: a.id, pct: a.fiveFree })); return false }
     return true
   })
-  if (!can.length) return { why: t('ninguna cuenta puede seguir ({v0})', { v0: out.join('; ') || 'no hay más cuentas' }) }
+  if (!can.length) return { why: t('ninguna cuenta puede seguir ({v0})', { v0: out.join('; ') || t('no hay más cuentas') }) }
   const hasFable = (a: RelayCandidate) => !i.noFable.includes(a.id)
   const place = (a: RelayCandidate) => { const n = i.order.indexOf(a.id); return n < 0 ? 1e6 : n }
   const sorted = [...can].sort((a, b) =>
@@ -81,9 +84,9 @@ export function shouldRelay(e: { at: number; error?: string; event?: string; use
 /** What the new window is told. It carries no context of its own: `pmc relevo` and `pmc parte` give it, short. */
 export function relayPrompt(from: AccountId, projectName: string, fable: boolean, wantsFable: boolean): string {
   return [
-    `Relevo automático de Mission Control: ${from} se ha quedado sin uso trabajando en ${projectName}.`,
-    `Ejecuta pmc relevo ${from} y pmc parte, y sigue su trabajo desde donde lo dejó, sin repetir lo hecho.`,
-    wantsFable && !fable ? 'Su trabajo iba con Fable y tú no lo tienes: haz solo las tareas que estén definidas para tu modelo y deja el resto apuntado en el relevo.' : '',
-    'Pon al día el relevo al cerrar cada bloque.'
+    t('Relevo automático de Mission Control: {from} se ha quedado sin uso trabajando en {project}.', { from, project: projectName }),
+    t('Ejecuta pmc relevo {from} y pmc parte, y sigue su trabajo desde donde lo dejó, sin repetir lo hecho.', { from }),
+    wantsFable && !fable ? t('Su trabajo iba con Fable y tú no lo tienes: haz solo las tareas que estén definidas para tu modelo y deja el resto apuntado en el relevo.') : '',
+    t('Pon al día el relevo al cerrar cada bloque.')
   ].filter(Boolean).join(' ')
 }

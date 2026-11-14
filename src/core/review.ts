@@ -60,10 +60,10 @@ export function addComment(db: DB, c: NewComment, assetLabel: string): { comment
     .prepare('INSERT INTO comments(project_id, asset_id, x, y, time_sec, shape, geom, frame_path, asset_mtime, body, status, target, history, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
     .run(c.projectId, c.assetId ?? null, c.x ?? null, c.y ?? null, c.timeSec ?? null, c.shape ?? 'pin', c.geom ? JSON.stringify(c.geom) : null, c.framePath ?? null, c.assetMtime ?? null, c.body, 'pendiente', c.target ?? null, history, now, now)
   const commentId = Number(r.lastInsertRowid)
-  const where = c.timeSec != null ? ` en el segundo ${fmtTime(c.timeSec)}` : c.x != null ? ` (punto ${Math.round(c.x * 100)} %, ${Math.round((c.y ?? 0) * 100)} %)` : ''
-  const point3d = c.geom?.p ? ` (punto del modelo ${c.geom.p.map((v) => v.toFixed(3)).join(', ')})` : ''
-  const shapeWord = point3d ? point3d : c.shape === 'circle' ? ', marcado con un círculo' : c.shape === 'arrow' ? ', señalado con una flecha' : c.shape === 'pen' ? ', marcado a mano sobre la imagen' : c.shape === 'rect' ? ', dentro del recuadro marcado' : ''
-  const body = `${c.body} — sobre ${assetLabel}${where}${shapeWord}${c.framePath ? `. Fotograma: ${c.framePath}` : ''}`
+  const where = c.timeSec != null ? t(' en el segundo {time}', { time: fmtTime(c.timeSec) }) : c.x != null ? t(' (punto {x} %, {y} %)', { x: Math.round(c.x * 100), y: Math.round((c.y ?? 0) * 100) }) : ''
+  const point3d = c.geom?.p ? t(' (punto del modelo {p})', { p: c.geom.p.map((v) => v.toFixed(3)).join(', ') }) : ''
+  const shapeWord = point3d ? point3d : c.shape === 'circle' ? t(', marcado con un círculo') : c.shape === 'arrow' ? t(', señalado con una flecha') : c.shape === 'pen' ? t(', marcado a mano sobre la imagen') : c.shape === 'rect' ? t(', dentro del recuadro marcado') : ''
+  const body = `${c.body} — ${t('sobre {asset}', { asset: assetLabel })}${where}${shapeWord}${c.framePath ? t('. Fotograma: {path}', { path: c.framePath }) : ''}`
   const ins = addInstruction(db, { projectId: c.projectId, kind: 'correccion', body, target: c.target, commentId, assetId: c.assetId })
   db.prepare('UPDATE comments SET instruction_id = ? WHERE id = ?').run(ins.id, commentId)
   addEvent(db, { projectId: c.projectId, at: now, account: c.target, kind: 'comentario', title: t('Has comentado {assetLabel}: «{v0}»', { assetLabel: assetLabel, v0: c.body.slice(0, 120) }), source: 'Mission Control', ref: `asset:${c.assetId}` })
@@ -87,7 +87,7 @@ export function editComment(db: DB, id: number, body: string): Comment {
     if (ins) {
       const newBody = String(ins.body).startsWith(r.body) ? body + String(ins.body).slice(r.body.length) : body
       const resend = ins.status === 'recibida' || ins.status === 'entregada'
-      db.prepare('UPDATE instructions SET body = ?, status = ?, updated_at = ? WHERE id = ?').run(resend ? `(Corregido) ${newBody}` : newBody, resend ? 'guardada' : ins.status, now, r.instruction_id)
+      db.prepare('UPDATE instructions SET body = ?, status = ?, updated_at = ? WHERE id = ?').run(resend ? t('(Corregido) {body}', { body: newBody }) : newBody, resend ? 'guardada' : ins.status, now, r.instruction_id)
     }
   }
   return rowToComment(db.prepare('SELECT * FROM comments WHERE id = ?').get(id))
@@ -143,12 +143,12 @@ export function guessKind(text: string): { kind: InstructionKind; target?: Accou
   const t = text.toLowerCase()
   const acc = t.match(/claude\s?(\d{1,2})/)
   const target = acc ? (`claude${acc[1]}` as AccountId) : undefined
-  if (/^(nota|apunte personal|recordatorio)\b|solo para m[ií]/.test(t)) return { kind: 'nota', target, confident: true }
-  if (/gu[aá]rda(la|lo)? en ideas|nueva idea|quiero añadir|se me ocurre|ser[ií]a (genial|chulo|bueno)/.test(t)) return { kind: 'idea', target, confident: true }
-  if (/prioriza|antes de seguir|lo primero|m[aá]s importante|urgente/.test(t)) return { kind: 'prioridad', target, confident: true }
-  if (/corrige|arregla|est[aá]n? mal|fallo|error|no funciona|atraviesa/.test(t)) return { kind: 'correccion', target, confident: true }
-  if (target && /encárgate|ocúpate|haz|revisa|mira/.test(t)) return { kind: 'mensaje', target, confident: true }
-  if (/haz|añade|implementa|crea|pon/.test(t)) return { kind: 'tarea', target, confident: false }
+  if (/^(nota|apunte personal|recordatorio|note|personal note|reminder)\b|solo para m[ií]|just for me/.test(t)) return { kind: 'nota', target, confident: true }
+  if (/gu[aá]rda(la|lo)? en ideas|nueva idea|quiero añadir|se me ocurre|ser[ií]a (genial|chulo|bueno)|save (it )?in ideas|new idea|i want to add|it occurred to me|would be (great|cool|nice)/.test(t)) return { kind: 'idea', target, confident: true }
+  if (/prioriza|antes de seguir|lo primero|m[aá]s importante|urgente|prioriti[sz]e|before (moving|carrying) on|first of all|most important/.test(t)) return { kind: 'prioridad', target, confident: true }
+  if (/corrige|arregla|est[aá]n? mal|fallo|error|no funciona|atraviesa|\bfix\b|(is|are) wrong|doesn't work|does not work|clips through/.test(t)) return { kind: 'correccion', target, confident: true }
+  if (target && /encárgate|ocúpate|haz|revisa|mira|take care of|\bdo\b|\breview\b|\blook at\b/.test(t)) return { kind: 'mensaje', target, confident: true }
+  if (/haz|añade|implementa|crea|pon|\badd\b|\bimplement\b|\bcreate\b|\bmake\b/.test(t)) return { kind: 'tarea', target, confident: false }
   return { kind: 'general', target, confident: false }
 }
 
@@ -161,8 +161,8 @@ export function buzonFile(project: ProjectConfig): string {
 const BUZON_TAG = (id: number) => `(MC-${id})`
 
 export function buzonLine(i: Instruction): string {
-  const who = i.target ? `para ${i.target}` : 'para quien entre'
-  return `- ${i.body.replace(/\s*\n\s*/g, ' ')} · ${KIND_LABEL[i.kind].toLowerCase()}, ${who}, desde Mission Control ${BUZON_TAG(i.id)}`
+  const who = i.target ? t('para {target}', { target: i.target }) : t('para quien entre')
+  return `- ${i.body.replace(/\s*\n\s*/g, ' ')} · ${t(KIND_LABEL[i.kind]).toLowerCase()}, ${who}${t(', desde Mission Control ')}${BUZON_TAG(i.id)}`
 }
 
 /**
@@ -186,9 +186,9 @@ export function deliverToBuzon(db: DB, project: ProjectConfig, id: number): Inst
     backupFile(file, `buzon-${project.id}`)
     const eol = text.includes('\r\n') ? '\r\n' : '\n'
     const lines = text.split(/\r?\n/)
-    const h = lines.findIndex((l) => /^##\s+Apuntes nuevos/i.test(l))
+    const h = lines.findIndex((l) => /^##\s+(?:Apuntes nuevos|New notes)/i.test(l))
     const line = buzonLine(ins)
-    if (h < 0) lines.push('', '## Apuntes nuevos', '', line)
+    if (h < 0) lines.push('', '## ' + t('Apuntes nuevos'), '', line)
     else {
       let j = h + 1
       while (j < lines.length && !/^##\s/.test(lines[j])) j++
@@ -202,7 +202,7 @@ export function deliverToBuzon(db: DB, project: ProjectConfig, id: number): Inst
     writeFileSync(tmp, lines.join(eol), 'utf8')
     renameSync(tmp, file)
     db.prepare("UPDATE instructions SET status = 'entregada', channel = ?, delivered_at = ?, error = NULL, updated_at = ? WHERE id = ?").run(file, now, now, id)
-    if (ins.commentId) setCommentStatus(db, ins.commentId, 'pendiente', 'Escrito en el Buzón')
+    if (ins.commentId) setCommentStatus(db, ins.commentId, 'pendiente', t('Escrito en el Buzón'))
     addEvent(db, { projectId: project.id, at: now, account: ins.target, kind: 'entrega', title: t('Instrucción escrita en el Buzón: «{v0}»', { v0: ins.body.slice(0, 100) }), source: 'Mission Control', ref: `ins:${id}` })
   } catch (e) {
     db.prepare("UPDATE instructions SET status = 'fallida', error = ?, updated_at = ? WHERE id = ?").run((e as Error).message, now, id)
@@ -221,7 +221,7 @@ export function checkBuzonReceipts(db: DB, project: ProjectConfig): number {
   for (const r of pending) {
     if (text.includes(BUZON_TAG(r.id))) continue
     db.prepare("UPDATE instructions SET status = 'recibida', updated_at = ? WHERE id = ?").run(now, r.id)
-    if (r.comment_id) setCommentStatus(db, r.comment_id, 'recibido', 'Ya no está en el Buzón: un agente lo ha pasado a la lista')
+    if (r.comment_id) setCommentStatus(db, r.comment_id, 'recibido', t('Ya no está en el Buzón: un agente lo ha pasado a la lista'))
     addEvent(db, { projectId: project.id, at: now, account: r.target ?? undefined, kind: 'recibida', title: t('Un agente ha recogido del Buzón: «{v0}»', { v0: String(r.body).slice(0, 100) }), source: 'Buzón.md', ref: `ins:${r.id}` })
     n++
   }

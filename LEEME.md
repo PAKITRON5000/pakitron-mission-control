@@ -51,7 +51,7 @@ Cada proyecto que añades queda preparado para los Claude: la app ve qué tipo d
 
 ## Tus datos
 
-Todo está en `%LOCALAPPDATA%\PakitronMC`, en tu PC. Cada día se hace una copia de la base de datos en `backups\`. Actualizar o desinstalar la app no borra esa carpeta. La app no tiene servidor ni cuenta propia: lo único que sale a internet es lo de siempre de Claude Code (tus conversaciones con Claude). La app en el móvil es opcional y va por tu propia red de Tailscale, cifrada y sin nada abierto a internet.
+Todo está en tu ordenador: en `%LOCALAPPDATA%\PakitronMC` en Windows y en `~/Library/Application Support/PakitronMC` en Mac. Cada día se hace una copia de la base de datos en `backups`. Las copias de seguridad de los proyectos en otro disco vienen encendidas en `G:\Copias de proyectos` en Windows; en Mac eliges tú la carpeta y las enciendes. Actualizar o desinstalar la app no borra esa carpeta. La app no tiene servidor ni cuenta propia: lo único que sale a internet es lo de siempre de Claude Code (tus conversaciones con Claude). La app en el móvil es opcional y va por tu propia red de Tailscale, cifrada y sin nada abierto a internet.
 
 La app no abre ni guarda tus credenciales de Claude: «Iniciar sesión» abre el inicio de sesión del propio Claude Code (`claude auth login`), y Claude Code se instala y se usa tal cual lo publica Anthropic, sin cambiarlo. Cada persona usa sus propias cuentas; tu uso de Claude sigue las condiciones de Anthropic (https://code.claude.com/docs/en/legal-and-compliance).
 

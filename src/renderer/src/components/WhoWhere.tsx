@@ -102,7 +102,7 @@ export function WhoWhere({ ids, bare }: { ids?: string[]; bare?: boolean } = {})
               return (
                 <div key={s.sessionId} className={`t-small ${pad} flex items-center gap-2 flex-wrap`}>
                   <span className="rounded-full flex-none" style={{ width: 7, height: 7, background: working ? 'var(--green)' : 'var(--label-3)' }} />
-                  <span className="c2"><b style={{ fontWeight: 580 }}>{projectName(s.projectId)}</b>{s.worktree ? ` · ${s.worktree}` : ''}</span>
+                  <span className="c2"><b style={{ fontWeight: 580 }}>{projectName(s.projectId)}</b>{s.worktree ? ` · ${t(s.worktree)}` : ''}</span>
                   <span className="c3">· {working ? t('trabajando') : s.rateLimited ? t('parada por el límite') : t('quieta')}{s.lastActivityAt ? `, ${ago(s.lastActivityAt, now)}` : ''}{/* The chat's name in quotes: bare, «· Recarga de créditos no detectada» read like a status of the account (13-11). */}{s.title ? t(' · chat «{v0}»', { v0: s.title.slice(0, 60) }) : ''}</span>
                   {!s.projectId && !(state.settings.declinedFolders ?? []).some((d) => d.toLowerCase() === s.cwd.toLowerCase()) && (
                     <button className="btn btn-sm btn-ghost" title={t('Mission Control empezará a seguir {cwd}: tareas, relevo, galería y ayudantes', { cwd: s.cwd })} onClick={() => void api('addProjectAt', s.cwd).then(() => toast(t('Añadido como proyecto: ya lo sigue Mission Control')), (e) => toast((e as Error).message))}>{t('+ Añadirlo como proyecto')}</button>

@@ -1,4 +1,4 @@
-import { t } from '../../../core/i18n'
+import { t, tn } from '../../../core/i18n'
 import { useState } from 'react'
 import { Check, Pencil, Repeat, RotateCcw, UserPlus, ChevronRight } from 'lucide-react'
 import { useStore, useAsync } from '../lib/store'
@@ -130,7 +130,7 @@ function AccountPanel({ a }: { a: AgentCard }) {
         <div className="t-micro c3">{t('Ahora')}</div>
         <WhoWhere ids={[a.id]} bare />
         <div className="t-small c3 mt-auto flex items-center gap-2 flex-wrap">
-          <span>{a.assigned.length ? t('{length} tareas a su nombre', { length: a.assigned.length }) : t('Sin tareas a su nombre')}</span>
+          <span>{a.assigned.length ? tn(a.assigned.length, '{n} tarea a su nombre', '{n} tareas a su nombre') : t('Sin tareas a su nombre')}</span>
           {a.heartbeat && <span>{t('· último relevo {v0}', { v0: whenFull(a.heartbeat.at, now) })}</span>}
           {a.lastActivityAt && <span>{t('· activa {v0}', { v0: ago(a.lastActivityAt, now) })}</span>}
           <button className="btn btn-sm btn-ghost ml-auto" onClick={() => setAgentOpen(a.id)}>{t('Su ficha')} <ChevronRight size={12} /></button>

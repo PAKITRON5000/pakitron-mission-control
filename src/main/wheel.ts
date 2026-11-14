@@ -1,4 +1,4 @@
-import { t } from '../core/i18n'
+import { t, locale } from '../core/i18n'
 // The relay wheel, carried out (core/chain.ts decides). Every minute and whenever an account stops: who holds each
 // project's turn, telling the next one in its window (or opening it) when the turn passes, telling one that works out
 // of turn to wait, and writing turns.json so the hooks of every window know whose turn it is.
@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import type { Service } from './service'
 import type { AccountId, ProjectConfig } from '../core/types'
 import { addEvent } from '../core/db'
-import { duplicateWindowsToClose, idleBackgroundToStop, idleWindowsToClose } from '../core/tidy'
+import { duplicateWindowsToClose, idleBackgroundToStop, idleWindowsToClose, strayWindowsToClose } from '../core/tidy'
 import { paths } from '../core/paths'
 import { isSessionWorking } from '../core/working'
 import { addNotice, nextTasks } from '../core/coord'
@@ -51,7 +51,7 @@ const OPEN_COOLDOWN_MS = 10 * 60_000
 const AGENDA_SKIPS_BLOCKED = true
 
 const who = (id: string) => `Claude ${id.slice(6)}`
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 
 export function createWheel(d: WheelDeps) {
   const { service } = d
@@ -128,15 +128,15 @@ export function createWheel(d: WheelDeps) {
    */
   async function tell(p: ProjectConfig, account: AccountId, text: string, wake = false): Promise<string | undefined> {
     const w = windowOn(account, p.id)
-    if (w?.pid) { await d.typeText(w.pid, text); return 'en su ventana' }
+    if (w?.pid) { await d.typeText(w.pid, text); return t('en su ventana') }
     if (!service.settings.bgSessions) return undefined
     const bg = bgOn(account, p.id)
     if (!bg) return undefined
-    if (isSessionWorking(bg)) { addNotice(account, text, [p.root, ...p.copies.map((x) => x.path)]); return 'en su sesión de fondo, en su próximo paso' }
+    if (isSessionWorking(bg)) { addNotice(account, text, [p.root, ...p.copies.map((x) => x.path)]); return t('en su sesión de fondo, en su próximo paso') }
     // «blocked» is also a session with usage that ended its turn waiting for a message: only out of usage it is left alone.
     if (!wake || !d.openBackground || service.agents.find((a) => a.id === account)?.state === 'sin-uso') return undefined
     await d.openBackground(account, bg.cwd, bgResumeArgs(bg.sessionId, text))
-    return 'en su sesión de fondo, retomada con el aviso'
+    return t('en su sesión de fondo, retomada con el aviso')
   }
 
   /** Tells `to` it has the turn: in its window on the project if it has one, else in a new window on the project's work copy. */
@@ -147,16 +147,16 @@ export function createWheel(d: WheelDeps) {
     if (service.settings.bgSessions && d.openBackground && !windowOn(to, p.id)?.pid) {
       const bg = bgOn(to, p.id)
       const busy = bg && (bg.state === 'working' || bg.status === 'busy')
-      if (busy) return 'su sesión de fondo está trabajando: se le dirá al terminar'
+      if (busy) return t('su sesión de fondo está trabajando: se le dirá al terminar')
       const last = d.lastOpened[to]
-      if (!bg && last && Date.now() - last < OPEN_COOLDOWN_MS) return 'ya se abrió hace un momento: se espera a que arranque'
+      if (!bg && last && Date.now() - last < OPEN_COOLDOWN_MS) return t('ya se abrió hace un momento: se espera a que arranque')
       const copy = d.workCopy(p)
       // Named «<project> · <its next task>» so Chats and `claude agents` tell them apart.
       const args = bg ? bgResumeArgs(bg.sessionId, text) : bgStartArgs({ name: `${p.name} · ${task ?? 'rueda'}`, prompt: text, model: fable ? 'fable' : undefined, extra: ['--permission-mode', 'auto'] })
       try {
         await d.openBackground(to, bg?.cwd || copy?.path || p.root, args)
         d.lastOpened[to] = Date.now()
-        return bg ? 'en su sesión de fondo, en su misma conversación' : 'en una sesión de fondo nueva (sin ventana; «Ver» en Chats o Relevos)'
+        return bg ? t('en su sesión de fondo, en su misma conversación') : t('en una sesión de fondo nueva (sin ventana; «Ver» en Chats o Relevos)')
       } catch (err) {
         // Still in tests: a background session that cannot be opened is not a turn lost; it goes to a window as before.
         service.log(`rueda sin ventanas: ${to} no se pudo abrir de fondo (${(err as Error).message}); va a una ventana`)
@@ -165,23 +165,23 @@ export function createWheel(d: WheelDeps) {
     const w = windowOn(to, p.id)
     if (w?.pid) {
       const stale = d.staleWindows().some((x) => x.sessionId === w.sessionId) && !isSessionWorking(w)
-      if (stale) { await d.reopenWindow(to, w.sessionId, text); return 'en su misma conversación (ventana reabierta con la coordinación nueva)' }
+      if (stale) { await d.reopenWindow(to, w.sessionId, text); return t('en su misma conversación (ventana reabierta con la coordinación nueva)') }
       await d.typeText(w.pid, text)
-      return 'en su ventana abierta'
+      return t('en su ventana abierta')
     }
     const last = d.lastOpened[to]
-    if (last && Date.now() - last < OPEN_COOLDOWN_MS) return 'ya se abrió hace un momento: se espera a que arranque'
+    if (last && Date.now() - last < OPEN_COOLDOWN_MS) return t('ya se abrió hace un momento: se espera a que arranque')
     // Never a second window of the same account (Relevos says so): one open in another folder or project is told instead
     // of opening another.
     const card = service.agents.find((a) => a.id === to)
     // Its windows could not be read last time (the PC full, 13-11): not opening one blind.
-    if (card?.sessionsError) return `no se pudieron leer sus ventanas (${card.sessionsError}): no se abre otra a ciegas; la próxima vuelta lo intenta`
+    if (card?.sessionsError) return t('no se pudieron leer sus ventanas ({v0}): no se abre otra a ciegas; la próxima vuelta lo intenta', { v0: card.sessionsError })
     const other = card?.sessions.find((s) => s.pid && s.kind !== 'background')
-    if (other?.pid) { await d.typeText(other.pid, text); return `en la ventana que ya tenía abierta (${other.projectId ? service.project(other.projectId)?.name ?? other.projectId : other.cwd}): no se abre una segunda` }
+    if (other?.pid) { await d.typeText(other.pid, text); return t('en la ventana que ya tenía abierta ({v0}): no se abre una segunda', { v0: other.projectId ? service.project(other.projectId)?.name ?? other.projectId : other.cwd }) }
     const copy = d.workCopy(p)
     d.openTerminal(to, copy?.path ?? p.root, ['--permission-mode', 'auto', ...(fable ? ['--model', 'fable'] : []), text], `${to} · rueda de relevos · ${p.name}`)
     d.lastOpened[to] = Date.now()
-    return `en una ventana nueva (${copy?.label ?? 'copia principal'})`
+    return t('en una ventana nueva ({v0})', { v0: copy?.label ?? t('copia principal') })
   }
 
   async function step(projectId: string, why?: string): Promise<void> {
@@ -221,9 +221,9 @@ export function createWheel(d: WheelDeps) {
         const text = takeTurnText({ from: act.from, to: act.to, project: p.name, after, fableLost: wantsFable && !fable })
         let how = 'ya estaba trabajando aquí: sigue con el turno'
         if (!act.adopt || act.from !== act.to) {
-          try { how = await deliver(p, act.to, text, fable, task) } catch (err) { how = `no se le pudo avisar (${(err as Error).message})` }
+          try { how = await deliver(p, act.to, text, fable, task) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) }
         }
-        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: act.from && act.from !== act.to ? t('Rueda de relevos: {why}; sigue {v0} en {name}', { why: act.why, v0: who(act.to), name: p.name }) : act.from ? t('Rueda de relevos: {why}', { why: act.why }) : t('Rueda de relevos: empieza {v0} en {name}', { v0: who(act.to), name: p.name }), detail: `Avisada ${how}.${why ? ` (${why})` : ''}`, source: 'Mission Control' })
+        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: act.from && act.from !== act.to ? t('Rueda de relevos: {why}; sigue {v0} en {name}', { why: act.why, v0: who(act.to), name: p.name }) : act.from ? t('Rueda de relevos: {why}', { why: act.why }) : t('Rueda de relevos: empieza {v0} en {name}', { v0: who(act.to), name: p.name }), detail: t('Avisada {how}.{v0}', { how: how, v0: why ? ` (${why})` : '' }), source: 'Mission Control' })
       } else if (act.kind === 'esperar') {
         save(projectId, { ...c, phase: 'espera' })
         addEvent(service.db, { projectId, at: now, account: act.from, kind: 'relevo-app', title: t('Rueda de relevos en espera: {v0}nadie más tiene uso{v1}', { v0: act.from ? `${who(act.from)} se ha quedado sin uso y ` : '', v1: act.firstBack && act.backAt ? `. Seguirá ${who(act.firstBack)} cuando vuelva (${hhmm(act.backAt)})` : '' }), detail: act.why, source: 'Mission Control' })
@@ -231,9 +231,9 @@ export function createWheel(d: WheelDeps) {
         // EV89: the next one takes the turn and the big tasks now; the one running out finishes small ones meanwhile.
         save(projectId, { ...chains()[projectId]!, holder: act.to, outgoing: act.from, since: now, phase: 'trabaja', last: { from: act.from, to: act.to, at: now, why: t('{v0} está a punto de agotarse: relevo con solape', { v0: who(act.from) }) } })
         let how = ''
-        try { how = await deliver(p, act.to, takeTurnText({ from: act.from, to: act.to, project: p.name, after: nextInLine({ ...c, holder: act.to }, ms, now)?.id }) + ` ${who(act.from)} sigue unos minutos en paralelo con tareas pequeñas hasta agotarse: coge tú lo grande, mejor en archivos distintos de los suyos (git status te dice cuáles tiene a medias), y, cuando se agote, pmc relevo ${act.from} para recoger lo suyo.`, false) } catch (err) { how = `no se le pudo avisar (${(err as Error).message})` }
+        try { how = await deliver(p, act.to, takeTurnText({ from: act.from, to: act.to, project: p.name, after: nextInLine({ ...c, holder: act.to }, ms, now)?.id }) + t(' {v0} sigue unos minutos en paralelo con tareas pequeñas hasta agotarse: coge tú lo grande, mejor en archivos distintos de los suyos (git status te dice cuáles tiene a medias), y, cuando se agote, pmc relevo {from} para recoger lo suyo.', { v0: who(act.from), from: act.from }), false) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) }
         { try { await tell(p, act.from, `Mission Control · rueda de ${p.name}: te quedan pocos minutos. ${who(act.to)} ya tiene el turno y coge lo grande. Tú sigue con tareas pequeñas (documentos, pruebas, arreglos cortos) que no toquen los mismos archivos que ella (un archivo que editáis las dos no entra en tu pmc guarda: lo guarda ella entero, así que apunta en el relevo qué cambiaste en él), suelta las grandes que tengas (pmc release <ID>), guarda a menudo (pmc guarda) y no empieces nada grande.`) } catch { /* next round */ } }
-        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: t('Rueda de relevos con solape: {v0} está a punto de agotarse; entra ya {v1} con lo grande y {v2} termina lo pequeño', { v0: who(act.from), v1: who(act.to), v2: who(act.from) }), detail: `Avisada ${how}.`, source: 'Mission Control' })
+        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: t('Rueda de relevos con solape: {v0} está a punto de agotarse; entra ya {v1} con lo grande y {v2} termina lo pequeño', { v0: who(act.from), v1: who(act.to), v2: who(act.from) }), detail: t('Avisada {how}.', { how: how }), source: 'Mission Control' })
       } else if (act.kind === 'fin-solape') {
         save(projectId, { ...chains()[projectId]!, outgoing: undefined })
         if (act.holder) { try { await tell(p, act.holder, `Mission Control · rueda de ${p.name}: ${who(act.account)} se ha quedado sin uso. Recoge lo que dejó (pmc relevo ${act.account}) y sigue.`, true) } catch { /* next round */ } }
@@ -241,10 +241,10 @@ export function createWheel(d: WheelDeps) {
       } else if (act.kind === 'pareja') {
         // EV152: two at once; the partner takes what needs no shared resource.
         save(projectId, { ...chains()[projectId]!, partner: act.to })
-        let how = 'ya estaba trabajando aquí'
+        let how = t('ya estaba trabajando aquí')
         const m = ms.find((x) => x.id === act.to)
-        if (!m?.workingHere) { try { how = await deliver(p, act.to, partnerText({ to: act.to, holder: act.holder, project: p.name }), false) } catch (err) { how = `no se le pudo avisar (${(err as Error).message})` } }
-        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: t('Rueda de relevos de dos en dos: {v0} trabaja a la vez que {v1} en {name} (lo que no necesita Unity ni la gráfica)', { v0: who(act.to), v1: who(act.holder), name: p.name }), detail: `Avisada ${how}.`, source: 'Mission Control' })
+        if (!m?.workingHere) { try { how = await deliver(p, act.to, partnerText({ to: act.to, holder: act.holder, project: p.name }), false) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) } }
+        addEvent(service.db, { projectId, at: now, account: act.to, kind: 'relevo-app', title: t('Rueda de relevos de dos en dos: {v0} trabaja a la vez que {v1} en {name} (lo que no necesita Unity ni la gráfica)', { v0: who(act.to), v1: who(act.holder), name: p.name }), detail: t('Avisada {how}.', { how: how }), source: 'Mission Control' })
       } else if (act.kind === 'fin-pareja') {
         save(projectId, { ...chains()[projectId]!, partner: undefined })
         addEvent(service.db, { projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Rueda de relevos: {v0} deja de trabajar a la vez ({why})', { v0: who(act.account), why: act.why }), source: 'Mission Control' })
@@ -255,8 +255,8 @@ export function createWheel(d: WheelDeps) {
         if (service.agents.find((a) => a.id === act.account)?.identity.plan?.paysPerUse) continue
         woken.set(act.account, now)
         let how = ''
-        try { how = await deliver(p, act.account, `Mission Control · rueda de relevos de ${p.name}: tienes el turno y llevas un rato parada con uso. Sigue con lo pendiente (pmc parte), sin resumir ni preguntar si sigues, y trabaja sin parar hasta que te quedes sin uso; entonces seguirá la siguiente de la rueda.`, false) } catch (err) { how = `no se le pudo avisar (${(err as Error).message})` }
-        addEvent(service.db, { projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Rueda de relevos: {v0} tenía el turno y estaba parada con uso; se le ha pedido que siga', { v0: who(act.account) }), detail: `Avisada ${how}.`, source: 'Mission Control', dedupe: `despierta:${act.account}:${Math.floor(now / WAKE_EVERY_MS)}` })
+        try { how = await deliver(p, act.account, `Mission Control · rueda de relevos de ${p.name}: tienes el turno y llevas un rato parada con uso. Sigue con lo pendiente (pmc parte), sin resumir ni preguntar si sigues, y trabaja sin parar hasta que te quedes sin uso; entonces seguirá la siguiente de la rueda.`, false) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) }
+        addEvent(service.db, { projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Rueda de relevos: {v0} tenía el turno y estaba parada con uso; se le ha pedido que siga', { v0: who(act.account) }), detail: t('Avisada {how}.', { how: how }), source: 'Mission Control', dedupe: `despierta:${act.account}:${Math.floor(now / WAKE_EVERY_MS)}` })
       } else if (act.kind === 'llamar') {
         // EV153: the next with usage is at work on another project: told there to leave it safe and come.
         const last = called.get(act.account)
@@ -267,8 +267,8 @@ export function createWheel(d: WheelDeps) {
         if (!there) continue
         called.set(act.account, now)
         let how: string | undefined
-        try { how = await tell(there, act.account, callText({ account: act.account, holder: act.holder, project: p.name, elsewhere: there.name, why: act.why })) } catch (err) { how = `no se le pudo avisar (${(err as Error).message})` }
-        addEvent(service.db, { projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Rueda de relevos: {why}; se ha llamado a {v0}, que trabajaba en {name}, para que lo deje a salvo y venga', { why: act.why, v0: who(act.account), name: there.name }), detail: how ? `Avisada ${how}.` : t('No tiene ventana ni sesión en {name} a la que escribir: se le dará el turno en cuanto quede libre.', { name: there.name }), source: 'Mission Control', dedupe: `llama:${act.account}:${Math.floor(now / CALL_EVERY_MS)}` })
+        try { how = await tell(there, act.account, callText({ account: act.account, holder: act.holder, project: p.name, elsewhere: there.name, why: act.why })) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) }
+        addEvent(service.db, { projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Rueda de relevos: {why}; se ha llamado a {v0}, que trabajaba en {name}, para que lo deje a salvo y venga', { why: act.why, v0: who(act.account), name: there.name }), detail: how ? t('Avisada {how}.', { how: how }) : t('No tiene ventana ni sesión en {name} a la que escribir: se le dará el turno en cuanto quede libre.', { name: there.name }), source: 'Mission Control', dedupe: `llama:${act.account}:${Math.floor(now / CALL_EVERY_MS)}` })
       } else if (act.kind === 'frenar') {
         const last = braked.get(act.account)
         if (last && now - last < BRAKE_EVERY_MS) continue
@@ -302,8 +302,8 @@ export function createWheel(d: WheelDeps) {
     const m = holder ? members(to.id).find((x) => x.id === holder) : undefined
     if (holder && m && m.state !== 'sin-uso') {
       // Told in its window on the old project to close there, and started on the new one.
-      try { await tell(from, holder, `Mission Control · rueda de relevos: la lista «${c.until.section}» de ${from.name} está terminada y la rueda sigue en ${to.name}. Guarda lo tuyo aquí (pmc guarda) y termina tu turno en esta sesión: se te abre otra en ${to.name}.`) } catch { /* next round */ }
-      try { await deliver(to, holder, `Mission Control · rueda de relevos: terminada la lista «${c.until.section}» de ${from.name}, la rueda sigue en ${to.name} y te toca empezar. Ejecuta pmc parte y sigue con lo pendiente, primero lo que otras cuentas dejaron a medias (pmc relevo <cuenta>). Trabaja sin parar hasta que te quedes sin uso; entonces seguirá la siguiente de la rueda.`, false) } catch { /* the tick will retry */ }
+      try { await tell(from, holder, t('Mission Control · rueda de relevos: la lista «{section}» de {from} está terminada y la rueda sigue en {to}. Guarda lo tuyo aquí (pmc guarda) y termina tu turno en esta sesión: se te abre otra en {to}.', { section: c.until.section, from: from.name, to: to.name })) } catch { /* next round */ }
+      try { await deliver(to, holder, t('Mission Control · rueda de relevos: terminada la lista «{section}» de {from}, la rueda sigue en {to} y te toca empezar. Ejecuta pmc parte y sigue con lo pendiente, primero lo que otras cuentas dejaron a medias (pmc relevo <cuenta>). Trabaja sin parar hasta que te quedes sin uso; entonces seguirá la siguiente de la rueda.', { section: c.until.section, from: from.name, to: to.name }), false) } catch { /* the tick will retry */ }
     }
     service.push()
     return true
@@ -326,7 +326,7 @@ export function createWheel(d: WheelDeps) {
       for (const s of idleBackgroundToStop(chains(), accounts, now, stopped)) {
         stopped.add(s.shortId)
         try { await d.stopBackground(s.account as AccountId, s.shortId) } catch { continue }
-        addEvent(service.db, { projectId: s.projectId, at: now, account: s.account, kind: 'relevo-app', title: t('Rueda de relevos: parada la sesión de fondo de {v0}, sin uso hasta {v1}', { v0: who(s.account), v1: new Date(s.backAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }), detail: t('Para no dejar procesos quietos. Su conversación queda guardada y lo que dejó está en el relevo; cuando le vuelva a tocar, la rueda le abre otra sesión de fondo.'), source: 'Mission Control', dedupe: `para:${s.shortId}` })
+        addEvent(service.db, { projectId: s.projectId, at: now, account: s.account, kind: 'relevo-app', title: t('Rueda de relevos: parada la sesión de fondo de {v0}, sin uso hasta {v1}', { v0: who(s.account), v1: new Date(s.backAt).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }), detail: t('Para no dejar procesos quietos. Su conversación queda guardada y lo que dejó está en el relevo; cuando le vuelva a tocar, la rueda le abre otra sesión de fondo.'), source: 'Mission Control', dedupe: `para:${s.shortId}` })
       }
     }
     // EV130: a second window of the same account that the app opened, idle 15 min, while the other one goes on.
@@ -342,7 +342,27 @@ export function createWheel(d: WheelDeps) {
       // Its turn already went to another (the user, 13-11 16:20: «que los claude que no se usen y hayáis cogido relevo se
       // cierren solos»): also a window the user opened by hand, once it has been idle 15 min.
       try { closed = await d.closeIdleWindow(w.pid, true) } catch { /* left open */ }
-      if (closed) addEvent(service.db, { projectId: w.projectId, at: now, account: w.account, kind: 'relevo-app', title: t('Rueda de relevos: cerrada la ventana de {v0}, sin uso hasta {v1}', { v0: who(w.account), v1: new Date(w.backAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }), detail: t('Para no tener ventanas abiertas que no hacen nada. Su conversación queda guardada y lo que dejó está en el relevo; cuando le vuelva a tocar, la rueda le abre otra.'), source: 'Mission Control', dedupe: `cierra:${w.pid}` })
+      if (closed) addEvent(service.db, { projectId: w.projectId, at: now, account: w.account, kind: 'relevo-app', title: t('Rueda de relevos: cerrada la ventana de {v0}, sin uso hasta {v1}', { v0: who(w.account), v1: new Date(w.backAt).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }), detail: t('Para no tener ventanas abiertas que no hacen nada. Su conversación queda guardada y lo que dejó está en el relevo; cuando le vuelva a tocar, la rueda le abre otra.'), source: 'Mission Control', dedupe: `cierra:${w.pid}` })
+    }
+    // The user (14-11 03:13): «que se vayan cerrando y abriendo según corresponda… hay muchas ventanas de claude que ni se
+    // ven». A wheel's account left quiet in another project, and an account set aside, out of usage for a while.
+    for (const w of strayWindowsToClose(chains(), accounts, now, tidied)) {
+      tidied.add(w.pid)
+      let closed = false
+      try { closed = await d.closeIdleWindow(w.pid, true) } catch { /* left open */ }
+      if (!closed) continue
+      const until = new Date(w.backAt).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+      const there = w.projectId ? service.project(w.projectId)?.name : undefined
+      addEvent(service.db, {
+        projectId: w.projectId ?? service.projects[0]?.id ?? '', at: now, account: w.account, kind: 'relevo-app',
+        title: w.why === 'apartada'
+          ? t('Cerrada la ventana de {v0}, apartada y sin uso hasta {v1}', { v0: who(w.account), v1: until })
+          : t('Cerrada la ventana de {v0} en {name}, sin uso hasta {v1}: su rueda está en otro proyecto', { v0: who(w.account), name: there ?? t('otro proyecto'), v1: until }),
+        detail: w.why === 'apartada'
+          ? t('Llevaba 15 min quieta y la cuenta está apartada: no hace nada y gasta memoria. Su conversación queda guardada.')
+          : t('Llevaba 15 min quieta. Cuando vuelva a tener uso, su rueda le abre otra ventana donde le toque. Su conversación queda guardada y lo que dejó está en el relevo.'),
+        source: 'Mission Control', dedupe: `cierra:${w.pid}`
+      })
     }
   }
 
@@ -412,9 +432,9 @@ export function createWheel(d: WheelDeps) {
     const from = c.holder
     const now = Date.now()
     save(projectId, { ...c, holder: to, since: now, phase: 'trabaja', last: { from, to, at: now, why: t('se lo has dado tú') } })
-    let how = 'ya estaba trabajando aquí'
+    let how = t('ya estaba trabajando aquí')
     if (!m?.workingHere && c.on) how = await deliver(p, to, takeTurnText({ from: from && from !== to ? from : undefined, to, project: p.name, after: nextInLine({ ...c, holder: to }, members(projectId), now)?.id }), false)
-    addEvent(service.db, { projectId, at: now, account: to, kind: 'relevo-app', title: t('Rueda de relevos: le has dado el turno a {v0} en {name}', { v0: who(to), name: p.name }), detail: `Avisada ${how}.`, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: now, account: to, kind: 'relevo-app', title: t('Rueda de relevos: le has dado el turno a {v0} en {name}', { v0: who(to), name: p.name }), detail: t('Avisada {how}.', { how: how }), source: 'Mission Control' })
     braked.delete(to)
     void tick('turno dado por el usuario')
   }

@@ -2,16 +2,50 @@ import { t } from './i18n'
 // Two small things the hooks and the app share through plain files, so neither costs any usage:
 //   - what each account is doing right now (the last tool it ran, what it said when it stopped), written by `pmc hook`;
 //   - the files the user left a note on, which no Claude may overwrite or delete, and the copy kept of each.
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, closeSync, fstatSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, closeSync, fstatSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import type { AccountActivity, AccountId, Activity } from './types'
-import { paths } from './paths'
+import { isInside, paths } from './paths'
 import type { DB } from './db'
 
 // ---- activity -------------------------------------------------------------------------------------------------------
 
 export const activityDir = () => join(paths.root(), 'activity')
 export const activityFile = (account: string) => join(activityDir(), `${account}.jsonl`)
+
+/**
+ * When the other accounts called a tool in this folder since `since` (`pmc guarda`: a file changed by an order leaves no
+ * «archivo» event, so whose script it was is told by who was running something here then). Not from the copies of
+ * `.claude/worktrees` inside it: another copy. Only the tail of each file is read.
+ */
+export function toolCallsIn(folder: string, since: number, except: string): number[] {
+  const out: number[] = []
+  let names: string[] = []
+  try { names = readdirSync(activityDir()) } catch { return out }
+  const copies = join(folder, '.claude', 'worktrees')
+  for (const n of names) {
+    if (!n.endsWith('.jsonl') || n === `${except}.jsonl`) continue
+    let text = ''
+    try {
+      const fd = openSync(join(activityDir(), n), 'r')
+      try {
+        const size = fstatSync(fd).size
+        const len = Math.min(size, 512 * 1024)
+        const buf = Buffer.alloc(len)
+        readSync(fd, buf, 0, len, size - len)
+        text = buf.toString('utf8')
+      } finally { closeSync(fd) }
+    } catch { continue }
+    for (const line of text.split('\n')) {
+      if (!line.includes('"PreToolUse"')) continue
+      try {
+        const a = JSON.parse(line) as Activity
+        if (a.at >= since && a.cwd && isInside(a.cwd, folder) && !isInside(a.cwd, copies)) out.push(a.at)
+      } catch { /* a line cut by the tail */ }
+    }
+  }
+  return out
+}
 
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
 

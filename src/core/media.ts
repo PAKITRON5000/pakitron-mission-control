@@ -60,9 +60,9 @@ const CATEGORY_RULES: [RegExp, string][] = [
 /** What a file is, from the words of its folder and name. */
 export function categoryOf(rel: string, kind: AssetKind): string {
   const words = tokens(rel)
-  for (const [re, cat] of CATEGORY_RULES) if (words.some((w) => re.test(w))) return cat
-  if (kind === 'video') return 'Vídeos'
-  if (kind === 'model') return 'Modelos 3D'
+  for (const [re, cat] of CATEGORY_RULES) if (words.some((w) => re.test(w))) return t(cat)
+  if (kind === 'video') return t('Vídeos')
+  if (kind === 'model') return t('Modelos 3D')
   if (kind === 'audio') return t('Sonidos y voces')
   return t('Otras imágenes')
 }
@@ -82,7 +82,7 @@ const NAMES: Record<string, string> = {
 /** A folder's name for people: known words in Spanish, the rest with spaces and a capital. */
 export function prettyFolder(seg: string): string {
   const known = NAMES[seg.toLowerCase()]
-  if (known) return known
+  if (known) return t(known)
   const s = seg.replace(/^_+/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   return s ? s[0].toUpperCase() + s.slice(1) : seg
 }
@@ -104,12 +104,12 @@ export function placeOf(project: ProjectConfig, file: string): { rel: string; fo
   if (copy) {
     const inside = relative(copy.path, file).split(sep).join('/')
     const folder = inside.includes('/') ? inside.slice(0, inside.lastIndexOf('/')) : ''
-    return { rel: (copy.label !== 'Copia principal' ? copy.label + '/' : '') + inside, folder, source: sourceOf(folder) }
+    return { rel: (copy.label !== 'Copia principal' && copy.label !== t('Copia principal') ? copy.label + '/' : '') + inside, folder, source: sourceOf(folder) }
   }
   // Outside the project: what Astra delivers (Documents\Codex\<date>\<chat>\…), or a folder the user added.
   const parts = file.split(/[\\/]/)
   const codex = parts.findIndex((p) => p.toLowerCase() === 'codex')
-  const dirs = codex >= 0 ? ['Astra', ...parts.slice(codex + 1, -1)] : ['Otras', ...parts.slice(Math.max(0, parts.length - 3), -1)]
+  const dirs = codex >= 0 ? ['Astra', ...parts.slice(codex + 1, -1)] : [t('Otras'), ...parts.slice(Math.max(0, parts.length - 3), -1)]
   const folder = dirs.join('/')
   return { rel: `${folder}/${parts[parts.length - 1]}`, folder, source: codex >= 0 ? 'astra' : 'otros' }
 }

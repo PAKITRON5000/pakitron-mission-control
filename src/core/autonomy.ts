@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, writeFileSync, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { paths } from './paths'
+import { t } from './i18n'
 
 /** More refusals than this in the window means the session cannot go on (it ends at once each time): let it stop. */
 export const MAX_BLOCKS = 4
@@ -67,28 +68,28 @@ export function keepGoing(i: StopInput): string | undefined {
   if (i.outgoing) {
     if (i.blocks.filter((at) => now - at < OUTGOING_WINDOW_MS).length >= OUTGOING_BLOCKS) return undefined
     return [
-      'Mission Control, rueda de relevos: el turno ya es de otra cuenta y tú estás en el solape.',
-      'Sigue solo con cosas pequeñas que no toquen sus archivos (documentos, pruebas, arreglos cortos) y guarda con pmc guarda.',
-      `Lo tuyo: ${i.next.slice(0, 3).join('; ') || 'nada en tu cola'}.`,
-      'Si no te queda nada pequeño que no la pise, dilo en una línea en el relevo y termina.'
+      t('Mission Control, rueda de relevos: el turno ya es de otra cuenta y tú estás en el solape.'),
+      t('Sigue solo con cosas pequeñas que no toquen sus archivos (documentos, pruebas, arreglos cortos) y guarda con pmc guarda.'),
+      t('Lo tuyo: {list}.', { list: i.next.slice(0, 3).join('; ') || t('nada en tu cola') }),
+      t('Si no te queda nada pequeño que no la pise, dilo en una línea en el relevo y termina.')
     ].join(' ')
   }
   if (!i.next.length) {
-    const here = i.project ? `en ${i.project}` : 'en este proyecto'
+    const here = i.project ? t('en {project}', { project: i.project }) : t('en este proyecto')
     const other = i.elsewhere?.[0]
     return [
-      `Mission Control, modo autónomo: no te quedan tareas ${here}, pero el usuario no quiere que nadie se quede parado.`,
-      `Primero piensa qué se puede mejorar ${here} (lo que falla, lo que falta, lo que el usuario pidió y no está, pruebas, rendimiento, lo que se ve) y apúntalo en docs/TASKS.md como tareas nuevas, cada una con «se da por buena cuando…»; reserva la primera (pmc claim) y empiézala ya.`,
+      t('Mission Control, modo autónomo: no te quedan tareas {here}, pero el usuario no quiere que nadie se quede parado.', { here }),
+      t('Primero piensa qué se puede mejorar {here} (lo que falla, lo que falta, lo que el usuario pidió y no está, pruebas, rendimiento, lo que se ve) y apúntalo en docs/TASKS.md como tareas nuevas, cada una con «se da por buena cuando…»; reserva la primera (pmc claim) y empiézala ya.', { here }),
       other
-        ? `Solo si de verdad no hay nada que añadir, pasa a otro proyecto: ${other.project} (${other.root}), donde te espera ${other.next.slice(0, 3).join('; ')}; trabaja allí con rutas absolutas y las órdenes pmc desde su carpeta.`
-        : 'Solo si de verdad no hay nada que añadir ni otro proyecto con trabajo para ti, dilo en una línea en el relevo.'
+        ? t('Solo si de verdad no hay nada que añadir, pasa a otro proyecto: {project} ({root}), donde te espera {list}; trabaja allí con rutas absolutas y las órdenes pmc desde su carpeta.', { project: other.project, root: other.root, list: other.next.slice(0, 3).join('; ') })
+        : t('Solo si de verdad no hay nada que añadir ni otro proyecto con trabajo para ti, dilo en una línea en el relevo.')
     ].join(' ')
   }
   return [
-    'Mission Control, modo autónomo: no termines el turno. El usuario quiere que trabajes sin parar hasta que el límite de uso te corte (entonces Mission Control te vuelve a abrir cuando se restablezca) o hasta que él quite el modo autónomo.',
-    'No resumas ni preguntes si sigues: guarda lo hecho (commit), pon al día el relevo y empieza ya la siguiente tarea.',
-    `Lo siguiente en tu cola: ${i.next.slice(0, 4).join('; ')}.`,
-    'Si necesitas una decisión del usuario, pídela con pmc decide y sigue con otra tarea. Si de verdad no puedes avanzar en nada, dilo en una línea en el relevo.'
+    t('Mission Control, modo autónomo: no termines el turno. El usuario quiere que trabajes sin parar hasta que el límite de uso te corte (entonces Mission Control te vuelve a abrir cuando se restablezca) o hasta que él quite el modo autónomo.'),
+    t('No resumas ni preguntes si sigues: guarda lo hecho (commit), pon al día el relevo y empieza ya la siguiente tarea.'),
+    t('Lo siguiente en tu cola: {list}.', { list: i.next.slice(0, 4).join('; ') }),
+    t('Si necesitas una decisión del usuario, pídela con pmc decide y sigue con otra tarea. Si de verdad no puedes avanzar en nada, dilo en una línea en el relevo.')
   ].join(' ')
 }
 

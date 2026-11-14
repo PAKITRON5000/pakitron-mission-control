@@ -1,4 +1,4 @@
-import { t } from '../core/i18n'
+import { t, locale } from '../core/i18n'
 // The assistant's data (EV85): what each answer of core/assistant.ts is made from, read from the app itself, and the two
 // things it does: passing a request on (through the same calls as «Nueva instrucción») and «Pregúntale a Claude», the
 // only one that spends usage (Haiku, with the account that has the most week left, without hooks or CLAUDE.md).
@@ -157,7 +157,7 @@ export function createAssistant(d: AssistantDeps) {
       case 'recargas': {
         // EV96: what each window showed at its limit, and what the app will do (the same as Ajustes › Recargas regaladas).
         const v = (d.call('recharges') ?? {}) as Record<string, { record?: { available: boolean; kinds?: string[]; useBy?: string; usedAt?: number }; decision: { action: string; why: string } }>
-        const rows = Object.entries(v).filter(([, x]) => x.record).map(([id, x]) => ({ title: `Claude ${id.slice(6)}: ${x.record!.available ? `tiene recarga${x.record!.kinds?.length ? ' (' + x.record!.kinds.join(', ') + ')' : ''}${x.record!.useBy ? ', hasta ' + x.record!.useBy : ''}` : x.record!.usedAt ? 'ya la usó' : 'sin recarga ahora'}`, sub: x.record!.available ? (x.decision.action === 'usar' ? t('Es el momento: se usa ya') : t('Ahora no: {why}', { why: x.decision.why })) : undefined, account: id }))
+        const rows = Object.entries(v).filter(([, x]) => x.record).map(([id, x]) => ({ title: `Claude ${id.slice(6)}: ${x.record!.available ? t('tiene recarga{v0}{v1}', { v0: x.record!.kinds?.length ? ' (' + x.record!.kinds.join(', ') + ')' : '', v1: x.record!.useBy ? t(', hasta {v0}', { v0: x.record!.useBy }) : '' }) : x.record!.usedAt ? t('ya la usó') : t('sin recarga ahora')}`, sub: x.record!.available ? (x.decision.action === 'usar' ? t('Es el momento: se usa ya') : t('Ahora no: {why}', { why: x.decision.why })) : undefined, account: id }))
         return { intent: 'recargas', text: rows.length ? t('Lo que sé de las recargas regaladas (se ven en la ventana de cada cuenta al llegar a su límite):') : t('Aún no he visto ninguna recarga: se ven en la ventana de cada cuenta cuando llega a su límite. En Ajustes › Cuentas › Recargas puedes revisarlas sin usarlas.'), rows, more: { label: t('Abrir Recargas regaladas'), go: { route: 'ajustes', projectId } } }
       }
       case 'disco': {
@@ -171,8 +171,8 @@ export function createAssistant(d: AssistantDeps) {
         // EV112: who loads the PC now, with the Claude behind each process (read by the app every two minutes).
         const l = (await Promise.resolve(d.call('machineLoad')).catch(() => undefined)) as { loaded: boolean; text: string; top: { name: string; account?: string; doing: string; cpuPct: number; ramMb: number }[] } | undefined
         if (!l) return { intent: 'carga', text: t('Aún no he leído la carga del PC (la leo cada dos minutos): pregúntamelo otra vez en un momento.') }
-        const rows = l.top.map((p) => ({ title: `${p.account === 'claude' ? 'Un Claude' : p.account ? `Claude ${p.account.slice(6)}` : 'El PC'}: ${p.name}`, sub: t('{v0}{v1} % del procesador · {v2}', { v0: p.doing === p.name ? '' : p.doing + ' · ', v1: String(p.cpuPct).replace('.', ','), v2: p.ramMb >= 1024 ? `${(p.ramMb / 1024).toFixed(1).replace('.', ',')} GB` : `${p.ramMb} MB` }), color: p.cpuPct >= 10 || p.ramMb >= 2048 ? 'var(--orange)' : 'var(--green)' }))
-        return { intent: 'carga', text: `${l.loaded ? 'El PC va cargado.' : 'El PC va bien ahora mismo.'} ${l.text}`, rows }
+        const rows = l.top.map((p) => ({ title: `${p.account === 'claude' ? t('Un Claude') : p.account ? `Claude ${p.account.slice(6)}` : t('El PC')}: ${p.name}`, sub: t('{v0}{v1} % del procesador · {v2}', { v0: p.doing === p.name ? '' : p.doing + ' · ', v1: String(p.cpuPct).replace('.', ','), v2: p.ramMb >= 1024 ? `${(p.ramMb / 1024).toFixed(1).replace('.', ',')} GB` : `${p.ramMb} MB` }), color: p.cpuPct >= 10 || p.ramMb >= 2048 ? 'var(--orange)' : 'var(--green)' }))
+        return { intent: 'carga', text: `${l.loaded ? t('El PC va cargado.') : t('El PC va bien ahora mismo.')} ${l.text}`, rows }
       }
       default: return answerUnknown()
     }
@@ -206,15 +206,15 @@ export function createAssistant(d: AssistantDeps) {
     const p = service.project(projectId) ?? service.projects[0]
     const v = d.wheel()?.view(p.id)
     const facts = [
-      `Hoy es ${new Date(now).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}. Proyecto en pantalla: ${p.name}. Proyectos: ${service.projects.map((x) => x.name).join(', ')}.`,
-      'Lo que espera al usuario:', replyAsText(waiting()),
-      'Los Claude:', replyAsText(answerWho(agents(), projects(), undefined, now)),
-      'Uso:', replyAsText(answerUsage(agents(), undefined, now)),
-      'Rueda:', replyAsText(answerWheel({ id: p.id, name: p.name }, v?.chain, v?.members ?? [], now)),
-      'Últimas 12 horas:', replyAsText(did(undefined, { from: now - 12 * 3600_000, to: now, label: t('las últimas 12 horas') })),
-      `Tareas de ${p.name}:`, replyAsText(answerTasks({ project: { id: p.id, name: p.name }, tasks: tasksOf(p.id), projects: projects(), claims: [], agenda: v?.chain?.until?.section }))
+      t('Hoy es {v0}. Proyecto en pantalla: {name}. Proyectos: {v1}.', { v0: new Date(now).toLocaleString(locale(), { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), name: p.name, v1: service.projects.map((x) => x.name).join(', ') }),
+      t('Lo que espera al usuario:'), replyAsText(waiting()),
+      t('Los Claude:'), replyAsText(answerWho(agents(), projects(), undefined, now)),
+      t('Uso:'), replyAsText(answerUsage(agents(), undefined, now)),
+      t('Rueda:'), replyAsText(answerWheel({ id: p.id, name: p.name }, v?.chain, v?.members ?? [], now)),
+      t('Últimas 12 horas:'), replyAsText(did(undefined, { from: now - 12 * 3600_000, to: now, label: t('las últimas 12 horas') })),
+      t('Tareas de {name}:', { name: p.name }), replyAsText(answerTasks({ project: { id: p.id, name: p.name }, tasks: tasksOf(p.id), projects: projects(), claims: [], agenda: v?.chain?.until?.section }))
     ].join('\n')
-    const prompt = `Eres el asistente de Mission Control, la app con la que el usuario coordina varias cuentas de Claude Code («Claude 1», «Claude 3»…) que trabajan en sus proyectos. Contesta en español sencillo, para alguien que no programa, en 2 a 5 frases, usando solo estos datos; si no están, dilo claramente y no te lo inventes.\n\nDatos de la app:\n${facts}\n\nPregunta del usuario: ${text}`
+    const prompt = t('Eres el asistente de Mission Control, la app con la que el usuario coordina varias cuentas de Claude Code («Claude 1», «Claude 3»…) que trabajan en sus proyectos. Contesta en español sencillo, para alguien que no programa, en 2 a 5 frases, usando solo estos datos; si no están, dilo claramente y no te lo inventes.\n\nDatos de la app:\n{facts}\n\nPregunta del usuario: {text}', { facts: facts, text: text })
     const cwd = join(paths.root(), 'asistente')
     mkdirSync(cwd, { recursive: true })
     const out = await new Promise<string>((resolve, reject) => {
@@ -225,7 +225,7 @@ export function createAssistant(d: AssistantDeps) {
       child.stdin?.end(prompt)
     })
     addEvent(service.db, { projectId: p.id, at: Date.now(), account: pick.id as AccountId, kind: 'asistente', title: t('El asistente le ha preguntado a Claude {v0} (Haiku): «{v1}»', { v0: pick.id.slice(6), v1: text.slice(0, 120) }), source: 'Mission Control' })
-    return { intent: 'nose', text: out || t('No ha contestado nada.'), by: `Claude ${pick.id.slice(6)} con Haiku · ha gastado un poco de su uso`, chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
+    return { intent: 'nose', text: out || t('No ha contestado nada.'), by: t('Claude {v0} con Haiku · ha gastado un poco de su uso', { v0: pick.id.slice(6) }), chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
   }
 
   /**
@@ -239,7 +239,7 @@ export function createAssistant(d: AssistantDeps) {
       const r = did(a.id, range)
       const h = a.usage.history.filter((x) => x.at >= from && x.week != null)
       const spent = weekSpent(h)
-      return { id: a.id, text: r.text, rows: (r.rows ?? []).slice(0, 4), quiet: /^No veo nada/.test(r.text), spentWeek: spent }
+      return { id: a.id, text: r.text, rows: (r.rows ?? []).slice(0, 4), quiet: /^(No veo nada|I see nothing)/.test(r.text), spentWeek: spent }
     }).filter((x) => !x.quiet || (x.spentWeek ?? 0) > 0)
     const photos = service.projects.flatMap((p) => queryAssets(service.db, { projectId: p.id, kind: 'image', from, limit: 8 }).items.map((x) => ({ id: x.id, name: x.name, projectId: p.id, mtime: x.mtime })))
       .sort((a, b) => b.mtime - a.mtime).slice(0, 10)

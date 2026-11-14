@@ -11,7 +11,10 @@ import webpush from 'web-push'
 import { paths } from '../core/paths'
 
 export const REMOTE_PORT = 8377
-const TAILSCALE = 'C:\\Program Files\\Tailscale\\tailscale.exe'
+// Tailscale's command: in its folder on Windows; on a Mac inside the app from the App Store or its website, or Homebrew's.
+const TAILSCALE = process.platform === 'win32'
+  ? 'C:\\Program Files\\Tailscale\\tailscale.exe'
+  : ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale', '/usr/bin/tailscale'].find((p) => existsSync(p)) ?? '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.ttf': 'font/ttf'

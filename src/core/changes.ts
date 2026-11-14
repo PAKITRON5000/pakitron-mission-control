@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, t as tr } from './i18n'
 // What the user asks to change after reviewing a task (the user, 5-11): the note stays attached to the task, can be edited
 // or taken back, says where it is on its way to the Claude, and moves the task out of «Para revisar» until it is done.
 import type { DB } from './db'
@@ -40,8 +40,8 @@ export function responsibleFor(db: DB, projectId: string, owner?: string): Accou
 }
 
 function bodyFor(extId: string | undefined, title: string, note: string): string {
-  const after = extId ? `Cuando esté, enséñaselo con pmc entrega ${extId} --que … --mirar … --foto …: así vuelve a «Para revisar».` : 'Cuando esté, díselo para que lo vuelva a mirar.'
-  return t('{REVIEW_PREFIX} de {v0} («{title}»): {note} {after}', { REVIEW_PREFIX: REVIEW_PREFIX, v0: extId ?? 'una tarea', title: title, note: note, after: after })
+  const after = extId ? tr('Cuando esté, enséñaselo con pmc entrega {extId} --que … --mirar … --foto …: así vuelve a «Para revisar».', { extId }) : tr('Cuando esté, díselo para que lo vuelva a mirar.')
+  return tr('{REVIEW_PREFIX} de {v0} («{title}»): {note} {after}', { REVIEW_PREFIX: REVIEW_PREFIX, v0: extId ?? tr('una tarea'), title: title, note: note, after: after })
 }
 
 const send = (db: DB, c: { projectId: string; target?: AccountId; urgent: boolean; body: string }) =>
@@ -59,7 +59,7 @@ function taskOf(db: DB, projectId: string, key: string): { ext_id?: string; titl
 
 export function askChange(db: DB, a: { projectId: string; taskKey: string; note: string; target?: AccountId; urgent?: boolean }, now = Date.now()): TaskChange {
   const note = a.note.trim()
-  if (!note) throw new Error('Escribe qué hay que cambiar')
+  if (!note) throw new Error(tr('Escribe qué hay que cambiar'))
   // A task has one open note: writing again on it is editing it.
   const open = db.prepare("SELECT id FROM task_changes WHERE project_id = ? AND task_key = ? AND status = 'pedido' ORDER BY id DESC LIMIT 1").get(a.projectId, a.taskKey) as { id: number } | undefined
   if (open) return updateChange(db, open.id, { note, target: a.target ?? null, urgent: a.urgent }, now)
@@ -87,8 +87,8 @@ export function updateChange(db: DB, id: number, p: { note?: string; target?: Ac
   if (c.delivered_at == null && c.instruction_id) {
     db.prepare('UPDATE instructions SET body = ?, target = ?, kind = ?, updated_at = ? WHERE id = ?').run(body, target, urgent ? 'prioridad' : 'correccion', now, c.instruction_id)
   } else {
-    if (c.target && target !== c.target) send(db, { projectId: c.project_id, target: c.target, urgent: false, body: `Ya no hace falta el cambio que te pidió el usuario en ${t.ext_id ?? t.title} («${c.note}»): lo hará ${target ?? 'otra cuenta'}.` })
-    const again = note === c.note ? 'Lo pide ahora, antes que lo demás. ' : `Cambia lo que pidió antes («${c.note}»). `
+    if (c.target && target !== c.target) send(db, { projectId: c.project_id, target: c.target, urgent: false, body: tr('Ya no hace falta el cambio que te pidió el usuario en {task} («{note}»): lo hará {who}.', { task: t.ext_id ?? t.title, note: c.note, who: target ?? tr('otra cuenta') }) })
+    const again = note === c.note ? tr('Lo pide ahora, antes que lo demás. ') : tr('Cambia lo que pidió antes («{note}»). ', { note: c.note })
     instruction = send(db, { projectId: c.project_id, target: target ?? undefined, urgent, body: `${again}${body}` }).id
   }
   db.prepare('UPDATE task_changes SET note = ?, target = ?, urgent = ?, instruction_id = ?, updated_at = ? WHERE id = ?').run(note, target, urgent ? 1 : 0, instruction, now, id)
@@ -105,9 +105,9 @@ export function removeChange(db: DB, id: number, now = Date.now()): void {
   const c = getRow(db, id)
   const t = taskOf(db, c.project_id, c.task_key)
   if (c.delivered_at == null && c.instruction_id) db.prepare("UPDATE instructions SET status = 'anulada', updated_at = ? WHERE id = ?").run(now, c.instruction_id)
-  else send(db, { projectId: c.project_id, target: c.target ?? undefined, urgent: false, body: `Olvida el cambio que te pidió el usuario en ${t.ext_id ?? t.title} («${c.note}»): ya no hace falta. Si lo habías empezado, déjalo como estaba.` })
+  else send(db, { projectId: c.project_id, target: c.target ?? undefined, urgent: false, body: tr('Olvida el cambio que te pidió el usuario en {task} («{note}»): ya no hace falta. Si lo habías empezado, déjalo como estaba.', { task: t.ext_id ?? t.title, note: c.note }) })
   db.prepare("UPDATE task_changes SET status = 'quitado', updated_at = ? WHERE id = ?").run(now, id)
-  addEvent(db, { projectId: c.project_id, at: now, kind: 'instruccion', title: `Has quitado tu nota sobre ${t.ext_id ?? t.title}: «${c.note.slice(0, 100)}»`, source: 'Mission Control' })
+  addEvent(db, { projectId: c.project_id, at: now, kind: 'instruccion', title: tr('Has quitado tu nota sobre {task}: «{note}»', { task: t.ext_id ?? t.title, note: c.note.slice(0, 100) }), source: 'Mission Control' })
 }
 
 /**

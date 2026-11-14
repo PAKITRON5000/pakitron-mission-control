@@ -202,14 +202,27 @@ export function futureHours(diff: string, now = Date.now()): string[] {
   return [...new Set(out)]
 }
 
-export function pickFiles(o: { changed: string[]; mine: string[]; others: string[]; leaving?: boolean; othersLast?: number; mtime?: (p: string) => number | undefined }): { commit: string[]; left: string[] } {
+/** How long an order of another account can go on writing files after it starts (a script over many files, a build). */
+export const ORDER_WRITES_FOR_MS = 3 * 60_000
+
+export function pickFiles(o: { changed: string[]; mine: string[]; others: string[]; leaving?: boolean; othersLast?: number; mtime?: (p: string) => number | undefined; othersBusy?: number[] }): { commit: string[]; left: string[] } {
   const others = o.others.map(norm)
   const hit = (set: string[], p: string) => { const n = norm(p); return set.some((w) => w === n || w.startsWith(n + '/')) }
-  if (!others.length) return { commit: [...o.changed], left: [] }
+  const busy = (t: number) => (o.othersBusy ?? []).some((at) => at <= t + 10_000 && t - at <= ORDER_WRITES_FOR_MS)
+  if (!others.length) {
+    if (!o.othersBusy?.length) return { commit: [...o.changed], left: [] }
+    // Others here only through orders: what changed while they were running something is left, unless this one wrote it.
+    const mineToo = o.mine.map(norm)
+    const commit = o.changed.filter((p) => { const t = o.mtime?.(p); return hit(mineToo, p) || t == null || !busy(t) })
+    return { commit, left: o.changed.filter((p) => !commit.includes(p)) }
+  }
   // EV143: what this session changed through an order (a version raised by a script, pmc preparar) leaves no «archivo» event:
   // a file no other account touched and that changed after their last write is this one's too (13-11: package.json was
   // left out of every checkpoint). A file another account touched still follows the rules below.
-  const late = (p: string) => { const t = o.othersLast != null ? o.mtime?.(p) : undefined; return t != null && t > o.othersLast! && !hit(others, p) }
+  // But not when another account was running something in this copy just before it changed (`othersBusy`, the times of
+  // their tool calls here): its scripts leave no «archivo» event either (14-11 17:23: claude1's checkpoint took claude5's
+  // version raise and three files of src/core that claude5's translation script was rewriting).
+  const late =(p: string) => { const t = o.othersLast != null ? o.mtime?.(p) : undefined; return t != null && t > o.othersLast! && !hit(others, p) && !busy(t) }
   const mine = [...o.mine.map(norm), ...o.changed.filter(late).map(norm)]
   // A file both wrote goes in: its changes cannot be split, and leaving it out would leave this account's half behind.
   // EV42: the one leaving in a wheel's overlap leaves the shared files to the one who stays (13-11: claude6's checkpoint took

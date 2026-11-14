@@ -6,7 +6,14 @@ declare global {
   interface Window {
     pmc: {
       call: <T = any>(method: string, ...args: unknown[]) => Promise<T>
-      on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding', cb: (...args: unknown[]) => void) => () => void
+      on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding' | 'pty' | 'pty-exit' | 'pty-focus', cb: (...args: unknown[]) => void) => () => void
+      /** EV156: the terminals inside the app (only in the app itself; the phone has none). */
+      pty?: {
+        attach: (id: string) => Promise<{ data: string; seq: number; cols: number; rows: number; alive: boolean }>
+        detach: (id: string) => void
+        input: (id: string, data: string) => void
+        resize: (id: string, cols: number, rows: number) => void
+      }
       platform: string
     }
   }

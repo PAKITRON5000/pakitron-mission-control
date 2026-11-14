@@ -83,15 +83,17 @@ export function fitTeam(s: ModeSettings & { workModeBy?: 'app' | 'usuario'; maxF
 
 export const RELAY_RULES = {
   get title() { return t('Antes de que tus cuentas se releven') },
-  points: [
-    'Con esto, cuando una cuenta se queda sin uso, sigue el trabajo otra de tus cuentas.',
-    'Las normas de Anthropic dicen que los límites de Pro y Max «suponen un uso normal e individual» de Claude Code. No aclaran si una misma persona puede juntar varias suscripciones así.',
-    'Anthropic puede limitar o cerrar cuentas, sin avisar, si cree que no se cumplen sus normas.',
-    'Mission Control no es de Anthropic: la usas bajo tu responsabilidad. Si dudas, pregúntales antes.'
-  ],
+  get points() {
+    return [
+      t('Con esto, cuando una cuenta se queda sin uso, sigue el trabajo otra de tus cuentas.'),
+      t('Las normas de Anthropic dicen que los límites de Pro y Max «suponen un uso normal e individual» de Claude Code. No aclaran si una misma persona puede juntar varias suscripciones así.'),
+      t('Anthropic puede limitar o cerrar cuentas, sin avisar, si cree que no se cumplen sus normas.'),
+      t('Mission Control no es de Anthropic: la usas bajo tu responsabilidad. Si dudas, pregúntales antes.')
+    ]
+  },
   link: 'https://code.claude.com/docs/en/legal-and-compliance',
-  accept: 'Lo he leído: que se releven',
-  refused: 'Para encenderlo, antes hay que leer el aviso de las normas de Anthropic (Relevos › Cómo trabajan los Claude).'
+  get accept() { return t('Lo he leído: que se releven') },
+  get refused() { return t('Para encenderlo, antes hay que leer el aviso de las normas de Anthropic (Relevos › Cómo trabajan los Claude).') }
 }
 
 /** A settings change that starts accounts taking over from each other (the relay, or the automatic sharing out). */

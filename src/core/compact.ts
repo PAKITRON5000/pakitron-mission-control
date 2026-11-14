@@ -14,24 +14,26 @@ export interface CompactInput {
   enCurso?: string
 }
 
+import { t } from './i18n'
+
 const MAX = 3_500
 
 export function compactInstructions(i: CompactInput): string {
   const lines: string[] = [
-    `Instrucciones de Mission Control para este resumen (${i.project}). Quien siga después del resumen eres tú mismo: conserva lo que necesitarás para seguir sin repetir ni romper nada.`,
-    'Conserva, con detalle y literalmente cuando se diga:',
-    '1. La tarea en curso (su ID) y el paso exacto en el que estás: qué está hecho, qué está a medias y qué falta.',
-    '2. Los archivos que has cambiado y si están guardados en un commit (con su hash) o no.',
-    '3. Lo que el usuario ha pedido, corregido o decidido en esta conversación, con sus propias palabras entre comillas y la hora.',
-    '4. Lo que falta comprobar antes de dar algo por hecho (pruebas, capturas, pmc verifica) y lo que ya se comprobó y cómo.',
-    '5. Los errores que ya ocurrieron y cómo se resolvieron, para no repetirlos.',
-    '6. Las preguntas hechas al usuario en Decidir (su número) que siguen sin respuesta.',
-    '7. El siguiente paso concreto.',
-    'Puedes quitar: salidas largas de órdenes, contenidos de archivos que se pueden volver a leer, búsquedas que no llevaron a nada y capturas ya revisadas.'
+    t('Instrucciones de Mission Control para este resumen ({project}). Quien siga después del resumen eres tú mismo: conserva lo que necesitarás para seguir sin repetir ni romper nada.', { project: i.project }),
+    t('Conserva, con detalle y literalmente cuando se diga:'),
+    t('1. La tarea en curso (su ID) y el paso exacto en el que estás: qué está hecho, qué está a medias y qué falta.'),
+    t('2. Los archivos que has cambiado y si están guardados en un commit (con su hash) o no.'),
+    t('3. Lo que el usuario ha pedido, corregido o decidido en esta conversación, con sus propias palabras entre comillas y la hora.'),
+    t('4. Lo que falta comprobar antes de dar algo por hecho (pruebas, capturas, pmc verifica) y lo que ya se comprobó y cómo.'),
+    t('5. Los errores que ya ocurrieron y cómo se resolvieron, para no repetirlos.'),
+    t('6. Las preguntas hechas al usuario en Decidir (su número) que siguen sin respuesta.'),
+    t('7. El siguiente paso concreto.'),
+    t('Puedes quitar: salidas largas de órdenes, contenidos de archivos que se pueden volver a leer, búsquedas que no llevaron a nada y capturas ya revisadas.')
   ]
-  if (i.claims.length) lines.push(`Tus reservas ahora (no las pierdas de vista): ${i.claims.map((c) => `${c.id}${c.title ? ' · ' + c.title.slice(0, 70) : ''}${c.note ? ` (${c.note.slice(0, 60)})` : ''}`).join('; ')}.`)
-  if (i.rules.length) lines.push(`Reglas del usuario que siguen en pie: ${i.rules.slice(0, 6).map((r) => r.slice(0, 160)).join(' · ')}`)
-  if (i.enCurso) lines.push(`En curso según el relevo: ${i.enCurso.slice(0, 500)}`)
+  if (i.claims.length) lines.push(t('Tus reservas ahora (no las pierdas de vista): {list}.', { list: i.claims.map((c) => `${c.id}${c.title ? ' · ' + c.title.slice(0, 70) : ''}${c.note ? ` (${c.note.slice(0, 60)})` : ''}`).join('; ') }))
+  if (i.rules.length) lines.push(t('Reglas del usuario que siguen en pie: {list}', { list: i.rules.slice(0, 6).map((r) => r.slice(0, 160)).join(' · ') }))
+  if (i.enCurso) lines.push(t('En curso según el relevo: {text}', { text: i.enCurso.slice(0, 500) }))
   const text = lines.join('\n')
   return text.length > MAX ? text.slice(0, MAX - 1) + '…' : text
 }

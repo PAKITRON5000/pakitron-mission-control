@@ -120,6 +120,8 @@ export function ProjectSwitcher() {
 /** A newer version on GitHub (core/updates.ts): a button in the bar that opens its installer for this system. */
 function UpdatePill() {
   const [u, setU] = useState<{ version: string } | undefined>()
+  const [busy, setBusy] = useState(false)
+  const { toast } = useStore()
   useEffect(() => {
     if (window.pmc?.platform === 'remote') return
     const look = () => { void api<any>('updateInfo').then((r) => setU(r?.update)).catch(() => undefined) }
@@ -131,7 +133,8 @@ function UpdatePill() {
   if (!u) return null
   return (
     <button className="btn btn-sm no-drag flex-none inline-flex items-center gap-1.5" style={{ background: 'var(--accent)', color: 'white', borderRadius: 99 }}
-      title={t('Descarga el instalador. Se instala encima de esta versión y no pierdes nada.')} onClick={() => void api('openUpdate')}>
+      title={t('Descarga el instalador. Se instala encima de esta versión y no pierdes nada.')} disabled={busy}
+      onClick={() => { setBusy(true); toast(t('Descargando la versión {v0}…', { v0: u.version })); void api('installUpdate').catch((e: Error) => { toast(e.message); void api('openUpdate') }).finally(() => setBusy(false)) }}>
       <Download size={14} strokeWidth={2.4} /> {t('Versión {v0} disponible', { v0: u.version })}
     </button>
   )

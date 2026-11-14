@@ -49,6 +49,23 @@ describe('pmc guarda', () => {
     expect(pickFiles({ changed, mine: ['docs/RELEVO.md'], others: ['src/b.ts'], mtime }).commit).toEqual(['docs/RELEVO.md'])
   })
 
+  it('leaves a late file when another account was running something here just before it changed (14-11 17:23)', () => {
+    const changed = ['package.json', 'src/core/brief.ts', 'docs/RELEVO.md']
+    const min = 60_000
+    const mtime = (p: string) => ({ 'package.json': 100 * min, 'src/core/brief.ts': 50 * min } as Record<string, number>)[p]
+    // The other's script started a minute before brief.ts changed; nobody else ran anything near package.json's change.
+    const r = pickFiles({ changed, mine: ['docs/RELEVO.md'], others: ['src/b.ts'], othersLast: 10 * min, mtime, othersBusy: [49 * min, 20 * min] })
+    expect(r.commit).toEqual(['package.json', 'docs/RELEVO.md'])
+    expect(r.left).toEqual(['src/core/brief.ts'])
+    // Long after, or well after the change, their calls say nothing about it.
+    expect(pickFiles({ changed, mine: ['docs/RELEVO.md'], others: ['src/b.ts'], othersLast: 10 * min, mtime, othersBusy: [40 * min, 51 * min] }).left).toEqual([])
+    // The others here only through orders (no file written with a tool): the same, with what this one wrote always in.
+    const only = pickFiles({ changed, mine: ['docs/RELEVO.md', 'src/core/brief.ts'], others: [], mtime, othersBusy: [49 * min, 99 * min] })
+    expect(only.commit).toEqual(['src/core/brief.ts', 'docs/RELEVO.md'])
+    expect(only.left).toEqual(['package.json'])
+    expect(pickFiles({ changed, mine: [], others: [], mtime }).commit).toEqual(changed)
+  })
+
   it('leaving in an overlap, leaves the files both touched to the one who stays, but not the handover (EV42)', () => {
     const changed = ['src/main/index.ts', 'src/a.ts', 'docs/RELEVO.md', 'docs/archivo/relevo-2026-11.md']
     const mine = ['src/main/index.ts', 'src/a.ts', 'docs/RELEVO.md', 'docs/archivo/relevo-2026-11.md']

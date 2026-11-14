@@ -14,9 +14,11 @@ import { createRemote } from './remote'
 import { bringToFront, fontLine, fontPrefix, readScreen, typeKey, typeText } from './consoleTyper'
 import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
 import { closePosixClaude, openTerminalWindow, writeTerminalScript, type TerminalJob } from './terminal'
+import { attachView, detachView, dock, embeddedByPid, embeddedList, findEmbedded, forgetEmbedded, initEmbedded, inputEmbedded, killEmbedded, popOut, poppedIds, resizeEmbedded, startEmbedded } from './embedded'
+import { typedLine } from '../core/ptyproto'
 import { asTasklist, fixPosixPath, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
-import { t, tn, pickLang, setLang } from '../core/i18n'
+import { t, tn, getLang, pickLang, setLang, locale } from '../core/i18n'
 import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
 import { readChat } from '../core/chats'
 import { paths } from '../core/paths'
@@ -282,7 +284,7 @@ function launcherFor(id: AccountId): string | undefined {
   return existsSync(f) ? f : undefined
 }
 
-function openTerminal(account: AccountId, cwd: string, args: string[], title: string): void {
+function openTerminal(account: AccountId, cwd: string, args: string[], title: string, where?: 'ventana' | 'app'): void {
   const acc = service.accounts.find((a) => a.id === account)
   if (!acc) throw new Error(t('Cuenta desconocida'))
   if (!existsSync(cwd)) throw new Error(t('La carpeta no existe'))
@@ -292,6 +294,14 @@ function openTerminal(account: AccountId, cwd: string, args: string[], title: st
   const trust = ensureTrusted(claudeJsonOf(acc), [cwd])
   if (trust.added.length) service.log(`confianza: ${account} ya confía en ${trust.added.join(', ')}`)
   else if (trust.skipped) service.log(`confianza: ${account} en ${cwd}: ${trust.skipped}`)
+  // EV156: inside the app (Chats) when the user chose so; if that cannot start, its usual window, so nothing is lost.
+  if ((where ?? service.settings.sessionsWhere) === 'app' && !process.env.PMC_SHOT_DIR) {
+    void openEmbedded(acc, cwd, args, title).catch((e) => {
+      service.log(`terminal de la app: ${(e as Error).message}; se abre en su ventana`)
+      try { openTerminal(account, cwd, args, title, 'ventana') } catch (err) { service.log(`ventana: ${(err as Error).message}`) }
+    })
+    return
+  }
   if (!isWin) { openTerminalWindow({ title, cwd, configDir: acc.configDir, argv: [findClaude(), ...args] }); return }
   const launcher = launcherFor(account)
   const cmdline = launcher ? [launcher, ...safe].join(' ') : [`"${findClaude()}"`, ...safe].join(' ')
@@ -308,6 +318,17 @@ function openTerminal(account: AccountId, cwd: string, args: string[], title: st
     stdio: 'ignore'
   })
   child.unref()
+}
+
+/**
+ * EV156: a Claude inside the app (src/main/embedded.ts), the same program, account and folder as its window would have.
+ * The account's own launcher (claude-accesos) always adds `--permission-mode auto`: so does this.
+ */
+function openEmbedded(acc: AccountConfig, cwd: string, args: string[], title: string) {
+  const full = launcherFor(acc.id) && !args.includes('--permission-mode') ? ['--permission-mode', 'auto', ...args] : args
+  const project = service.projects.find((p) => isInside(cwd, p.root))
+  return startEmbedded({ file: findClaude(), args: full, cwd, env: envFor(acc), meta: { account: acc.id, projectId: project?.id, cwd, title, resume: args[0] === '--resume' ? args[1] : undefined } })
+    .then((info) => { setTimeout(() => void service.refreshAgents(), 4000); return info })
 }
 
 /** EV103: the project folders (roots and copies) marked as trusted in every account that has started on this PC. */
@@ -1013,12 +1034,12 @@ function allOutCheck(now: number): void {
   if (allOutSaid) return
   allOutSaid = true
   const back = Math.min(...usable.map((a) => a.usage.activeLimit?.resetsAt ?? Infinity))
-  const when = Number.isFinite(back) ? new Date(back).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : undefined
+  const when = Number.isFinite(back) ? new Date(back).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : undefined
   // EV128: and whether anything has to be done then (with one account this is its own limit).
   const goesOn = service.settings.autonomous || relayModeOf(service.settings) === 'proyecto'
-  const body = `Nadie puede trabajar ahora.${when ? ` La primera vuelve el ${when}.` : ''} ${goesOn ? 'Seguirá sola donde lo dejó: no tienes que hacer nada.' : 'Ábrela cuando vuelva, o en Relevos elige que siga sola.'}`
+  const body = `${t('Nadie puede trabajar ahora.')}${when ? ' ' + t('La primera vuelve el {when}.', { when }) : ''} ${goesOn ? t('Seguirá sola donde lo dejó: no tienes que hacer nada.') : t('Ábrela cuando vuelva, o en Relevos elige que siga sola.')}`
   addEvent(service.db, { at: now, kind: 'aviso', title: t('Todas las cuentas se han quedado sin uso. {body}', { body: body }), source: 'Mission Control' })
-  void remote.push(usable.length === 1 ? 'Tu Claude se ha quedado sin uso' : 'Todas las cuentas sin uso', body, 'inicio').catch(() => undefined)
+  void remote.push(usable.length === 1 ? t('Tu Claude se ha quedado sin uso') : t('Todas las cuentas sin uso'), body, 'inicio').catch(() => undefined)
   if (!process.env.PMC_SHOT_DIR) try { if (Notification.isSupported()) new Notification({ title: usable.length === 1 ? t('Tu Claude se ha quedado sin uso') : t('Todas las cuentas sin uso'), body, silent: true }).show() } catch { /* no notifications */ }
 }
 
@@ -1390,7 +1411,7 @@ const api: Record<string, Handler> = {
   removeProject: async (projectId: string, toBin?: boolean) => {
     const r = service.removeProject(projectId)
     if (!toBin) return { ...r, binned: false }
-    if (!binnable(r.root, process.cwd())) return { ...r, binned: false, error: 'esa carpeta no se manda a la papelera desde aquí' }
+    if (!binnable(r.root, process.cwd())) return { ...r, binned: false, error: t('esa carpeta no se manda a la papelera desde aquí') }
     try {
       await shell.trashItem(r.root)
       return { ...r, binned: true }
@@ -1490,8 +1511,8 @@ const api: Record<string, Handler> = {
     if (!task) throw new Error(t('La tarea no existe'))
     const prio = Math.max(0, Math.min(3, Math.round(priority)))
     service.db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(prio, id)
-    const label = ['urgente', 'alta', 'normal', 'baja'][prio]
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'prioridad', title: `Prioridad ${label}: ${task.ext_id ? task.ext_id + ' · ' : ''}${task.title}`, source: 'Mission Control', ref: task.key })
+    const label = [t('urgente'), t('alta'), t('normal'), t('baja')][prio]
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'prioridad', title: t('Prioridad {label}: {task}', { label, task: `${task.ext_id ? task.ext_id + ' · ' : ''}${task.title}` }), source: 'Mission Control', ref: task.key })
     // Raised: the first Claude at work hears it (and takes it if nobody has it); every new session sees the list.
     if (prio <= 1 && prio < task.priority) {
       const name = task.ext_id ?? task.title.slice(0, 50)
@@ -1534,7 +1555,7 @@ const api: Record<string, Handler> = {
   stopClaude: (account: AccountId, mode: 'pedir' | 'ya', sessionId?: string) => {
     const roots = service.projects.flatMap((p) => [p.root, ...p.copies.map((c) => c.path)])
     if (mode === 'pedir') {
-      addNotice(account, 'Mission Control: el usuario te pide que cierres esta sesión. Termina el paso en curso sin dejar nada roto (no cortes una compilación ni una captura a medias), deja docs/RELEVO.md al día, libera tus reservas con pmc release y para. No empieces nada nuevo.', roots)
+      addNotice(account, t('Mission Control: el usuario te pide que cierres esta sesión. Termina el paso en curso sin dejar nada roto (no cortes una compilación ni una captura a medias), deja docs/RELEVO.md al día, libera tus reservas con pmc release y para. No empieces nada nuevo.'), roots)
       addEvent(service.db, { at: Date.now(), account, kind: 'sesion', title: t('Has pedido a Claude {v0} que cierre', { v0: account.slice(6) }), source: 'Mission Control' })
       return { asked: true }
     }
@@ -1908,10 +1929,45 @@ const api: Record<string, Handler> = {
     applyTheme()
     // EV161: the main process speaks the same language (statuses it sends, notices).
     setLang(pickLang(s.lang, app.getLocale()))
+    writeLangFile()
     return s
   },
   /** The size the app is shown at now (the chosen one, or the default for this screen). */
   uiScale: () => uiScale(),
+  /** EV156: the Claudes living inside the app, with the conversation each one is (from `claude agents`, by its process). */
+  embedList: () => {
+    const out = poppedIds()
+    return embeddedList().map((s) => {
+      const live = service.agents.flatMap((a) => a.sessions).find((x) => x.pid === s.pid)
+      return { ...s, popped: out.includes(s.id), sessionId: live?.sessionId, status: live?.status, projectName: s.meta.projectId ? service.project(s.meta.projectId)?.name : undefined }
+    })
+  },
+  /** A new Claude inside the app, in a project (its work copy, as «Poner a trabajar»), with a first message or none. */
+  embedNew: async (account: AccountId, projectId: string, text?: string) => {
+    const p = service.project(projectId)
+    const acc = service.accounts.find((a) => a.id === account)
+    if (!p || !acc) throw new Error(t('Proyecto desconocido'))
+    const cwd = workCopy(p)?.path ?? p.root
+    const first = text ? typedLine(text) : ''
+    ensureTrusted(claudeJsonOf(acc), [cwd])
+    const info = await openEmbedded(acc, cwd, first ? [first] : [], `Claude ${account.slice(6)} · ${p.name}`)
+    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: t('Has abierto a Claude {v0} dentro de la app', { v0: account.slice(6) }), source: 'Mission Control' })
+    service.push()
+    return info
+  },
+  /** A saved conversation continued inside the app. */
+  embedResume: async (account: AccountId, cwd: string, sessionId: string) => {
+    if (!/^[0-9a-f-]{8,36}$/i.test(sessionId)) throw new Error(t('Sesión no válida'))
+    const acc = service.accounts.find((a) => a.id === account)
+    if (!acc) throw new Error(t('Cuenta desconocida'))
+    if (!existsSync(cwd)) throw new Error(t('La carpeta no existe'))
+    ensureTrusted(claudeJsonOf(acc), [cwd])
+    return openEmbedded(acc, cwd, ['--resume', sessionId], `Claude ${account.slice(6)} · ${basename(cwd)}`)
+  },
+  embedKill: (id: string) => killEmbedded(id),
+  embedForget: (id: string) => { forgetEmbedded(id); return true },
+  embedPopOut: (id: string) => { popOut(id); return true },
+  embedDock: (id: string) => { dock(id); return true },
   /** EV96: each account's reset and what the app will do with it; «Usarla ya» and «Mirar su ventana». */
   recharges: () => recharge.view(),
   useRecharge: (account: AccountId) => recharge.apply(account, recharge.inputFor(account).limit?.kind === 'semanal' ? 'weekly' : '5-hour'),
@@ -1949,7 +2005,8 @@ const api: Record<string, Handler> = {
   diskFree: async () => {
     const out: { drive: string; free: number; total: number; projects: string[] }[] = []
     for (const p of service.projects) {
-      const drive = p.root.slice(0, 3).toUpperCase()
+      // On a Mac the disk is /Volumes/<name> for an external one, else the system's («/»).
+      const drive = isWin ? p.root.slice(0, 3).toUpperCase() : p.root.match(/^\/Volumes\/[^/]+/)?.[0] ?? '/'
       let row = out.find((x) => x.drive === drive)
       if (!row) { try { const s = await statfs(drive); row = { drive, free: s.bavail * s.bsize, total: s.blocks * s.bsize, projects: [] }; out.push(row) } catch { continue } }
       row.projects.push(p.id)
@@ -2144,6 +2201,28 @@ const api: Record<string, Handler> = {
   updateInfo: async (check?: boolean) => { if (check) await checkUpdate(); return { current: app.getVersion(), update } },
   /** Opens the installer of the new version for this system (or its page) in the browser. */
   openUpdate: async () => { if (update) await shell.openExternal(update.download ?? update.page); return Boolean(update) },
+  /**
+   * The new version's installer, downloaded by the app and opened: on Windows it installs over this one (the app closes
+   * first, the data stay), on a Mac its .dmg opens for the app to be dragged to Applications. Without one for this system,
+   * its page in the browser.
+   */
+  installUpdate: async () => {
+    if (!update) return false
+    if (!update.download) { await shell.openExternal(update.page); return true }
+    const file = join(app.getPath('temp'), decodeURIComponent(update.download.split('/').pop() || 'mission-control-update'))
+    const r = await fetch(update.download, { headers: { 'user-agent': 'mission-control-app' }, signal: AbortSignal.timeout(10 * 60_000) })
+    if (!r.ok || !r.body) throw new Error(t('No se pudo descargar la versión nueva ({v0})', { v0: r.status }))
+    writeFileSync(file, Buffer.from(await r.arrayBuffer()))
+    service.log(`actualización: ${update.version} descargada en ${file}`)
+    if (isWin) {
+      spawn(file, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref()
+      setTimeout(() => app.quit(), 1500)
+    } else {
+      const err = await shell.openPath(file)
+      if (err) throw new Error(err)
+    }
+    return true
+  },
   /**
    * EV126: Claude Code's own installer, in a window the user sees (the command its web page gives for Windows). The app
    * sees the program when it finishes (claudeInstalled looks again each time).
@@ -2632,7 +2711,7 @@ const api: Record<string, Handler> = {
         // usage (13-11: Claude 5's windows said «Trabajando» next to «Se quedó sin uso… vuelve a las 19:50»).
         const outOfUsage = a.state === 'sin-uso' && live.rateLimited && !fresh
         const status = (live.status === 'waiting' && tail?.midTurn && Date.now() - tail.mtime < ASKING_FOR_MS) ? 'waiting' : outOfUsage ? 'limit' : live.status === 'busy' || (tail?.midTurn && fresh && live.status !== 'waiting') ? 'working' : 'idle'
-        out.push({ sessionId: live.sessionId, account: a.id, alias: a.alias, cwd: live.cwd, title: live.name || basename(live.cwd), status, live: true, background: live.kind === 'background' ? live.shortId : undefined, waitingFor: live.waitingFor,
+        out.push({ sessionId: live.sessionId, account: a.id, alias: a.alias, cwd: live.cwd, title: live.name || basename(live.cwd), status, live: true, background: live.kind === 'background' ? live.shortId : undefined, inApp: embeddedByPid(live.pid)?.id, waitingFor: live.waitingFor,
           doing: status === 'working' && focus && (!focus.sessionId || focus.sessionId === live.sessionId) ? focus.text : undefined, last: tail?.messages.at(-1)?.text.slice(0, 140), lastAt: tail?.mtime ?? live.startedAt ?? 0 })
       }
     }
@@ -3213,7 +3292,8 @@ async function screenshots(dir: string): Promise<void> {
 // works with it).
 let tray: Tray | undefined
 let traySig = ''
-const TRAY_STATE: Record<string, string> = { trabajando: 'trabajando', esperando: 'te espera', 'sin-uso': 'sin uso', bloqueado: 'bloqueada', disponible: 'libre', desconectado: 'sin abrir' }
+// In the reader's language (EV163, 14-11 17:35: the tray was still in Spanish with the app in English).
+const TRAY_STATE: Record<string, () => string> = { trabajando: () => t('trabajando'), esperando: () => t('te espera'), 'sin-uso': () => t('sin uso'), bloqueado: () => t('bloqueada'), disponible: () => t('libre'), desconectado: () => t('sin abrir') }
 
 function updateTray(): void {
   if (!tray || !service) return
@@ -3221,16 +3301,16 @@ function updateTray(): void {
   const lines = service.agents.filter((a) => a.state !== 'baja' && a.state !== 'apartada').map((a) => {
     const s = a.sessions.find((x) => isSessionWorking(x)) ?? a.sessions.find((x) => x.pid)
     const where = s?.projectId ? service.project(s.projectId)?.name : undefined
-    return `${a.state === 'trabajando' ? '●' : '○'} Claude ${a.id.slice(6)}${a.alias ? ` (${a.alias})` : ''} · ${TRAY_STATE[a.state] ?? a.state}${where ? ` · ${where}` : ''}`
+    return `${a.state === 'trabajando' ? '●' : '○'} Claude ${a.id.slice(6)}${a.alias ? ` (${a.alias})` : ''} · ${TRAY_STATE[a.state]?.() ?? a.state}${where ? ` · ${where}` : ''}`
   })
   // The relay wheels that are on: whose turn it is, at a glance from the tray (13-11).
   const wheels = Object.entries(service.settings.relayChains ?? {}).filter(([, c]) => c?.on).map(([pid, c]) =>
-    `↻ ${service.project(pid)?.name ?? pid}: ${c!.phase === 'espera' ? 'esperando a que alguien recupere su uso' : c!.holder ? `turno de Claude ${c!.holder.slice(6)}` : 'empezando'} (${c!.order.map((id) => id.slice(6)).join('→')})`)
+    `↻ ${service.project(pid)?.name ?? pid}: ${c!.phase === 'espera' ? t('esperando a que alguien recupere su uso') : c!.holder ? t('turno de Claude {n}', { n: c!.holder.slice(6) }) : t('empezando')} (${c!.order.map((id) => id.slice(6)).join('→')})`)
   const working = service.agents.filter((a) => a.state === 'trabajando')
   const sig = JSON.stringify([lines, mode, wheels])
   if (sig === traySig) return
   traySig = sig
-  tray.setToolTip(`Mission Control · ${working.length ? `${working.length} trabajando` : 'nadie trabajando'}`)
+  tray.setToolTip(`Mission Control · ${working.length ? t('{n} trabajando', { n: working.length }) : t('nadie trabajando')}`)
   const show = () => { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus() }
   const setMode = (m: WorkMode) => { service.setSettings({ ...settingsFor(m), workModeBy: 'usuario' }); service.push(); traySig = ''; updateTray() }
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -3246,6 +3326,11 @@ function updateTray(): void {
     { label: t('Abrir Mission Control'), click: show },
     { label: t('Salir'), click: () => app.quit() }
   ]))
+}
+
+/** The language for pmc and the hooks (src/cli/pmc.ts › loadLang): one word, read without opening the database. */
+function writeLangFile(): void {
+  try { writeFileSync(join(paths.root(), 'lang.txt'), getLang()) } catch { /* pmc falls back to the database */ }
 }
 
 // ---- installing what this machine lacks (14-11) --------------------------------------------------------------------------
@@ -3294,7 +3379,7 @@ async function checkUpdate(): Promise<void> {
     if (update && updateToldFor !== update.version && Notification.isSupported()) {
       updateToldFor = update.version
       const n = new Notification({ title: t('Hay una versión nueva de Mission Control: {v0}', { v0: update.version }), body: t('Pulsa para descargarla. Se instala encima y no pierdes nada.') })
-      n.on('click', () => { void api.openUpdate() })
+      n.on('click', () => { if (win) { win.show(); win.focus() } })
       n.show()
     }
   } catch { /* offline: next time */ }
@@ -3386,6 +3471,7 @@ app.whenReady().then(async () => {
   if (isWin) app.setAppUserModelId('es.pakitron.missioncontrol')
   service = new Service()
   setLang(pickLang(service.settings.lang, app.getLocale()))
+  writeLangFile()
   service.on('stop-failure', autoRelay)
   service.on('stop', autoRelay)
   service.on('stop-failure', autoWake)
@@ -3508,6 +3594,32 @@ app.whenReady().then(async () => {
   setTimeout(() => void autoSkillSearch(), 5 * 60_000).unref()
   setInterval(() => void autoSkillSearch(), 3600_000).unref()
   registerProtocol()
+  // EV156: the terminals inside the app. Keys go one way and fast (no answer awaited); a view asks for the screen once.
+  initEmbedded({
+    nodeArgs: (args) => nodeArgs(service.nodeExe ?? nodeShimPath(), args),
+    log: (line) => service.log(line),
+    changed: () => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('pmc:state') },
+    openWindow: (w, hash) => {
+      if (process.env.ELECTRON_RENDERER_URL) void w.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)
+      else void w.loadFile(join(here, '../renderer/index.html'), { hash })
+    },
+    preload: join(here, '../preload/index.cjs'),
+    icon: join(here, '../../build/icon.png'),
+    zoom: () => uiScale(),
+    showInApp: (id) => {
+      if (!win) return
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+      win.webContents.send('pmc:pty-focus', id)
+    }
+  })
+  ipcMain.handle('pmc:pty-attach', (e, id: string) => attachView(String(id), e.sender))
+  ipcMain.on('pmc:pty-detach', (e, id: string) => detachView(String(id), e.sender))
+  ipcMain.on('pmc:pty-in', (_e, id: string, data: string) => inputEmbedded(String(id), data))
+  ipcMain.on('pmc:pty-resize', (_e, id: string, cols: number, rows: number) => resizeEmbedded(String(id), Number(cols), Number(rows)))
+  // The ones that kept running while the app was closed (an update, a restart), found again without starting anything.
+  setTimeout(() => void findEmbedded(), 1500).unref()
   ipcMain.handle('pmc', async (_e, method: string, ...args: any[]) => {
     const fn = api[method]
     if (!fn) throw new Error(t('Método desconocido: {method}', { method: method }))

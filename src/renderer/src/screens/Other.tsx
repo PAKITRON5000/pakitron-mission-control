@@ -84,7 +84,7 @@ export function Agents() {
         ))}
         {saved.data && saved.data.length === 0 && <Empty title={t('Sin conversaciones guardadas')} text={t('Cuando un Claude trabaje en este proyecto, su conversación queda aquí y podrás retomarla donde la dejó.')} />}
       </div>
-      {project && <div className="t-small c3 mt-3">{t('Retomar abre una ventana con el lanzador de la cuenta (claude-accesos\\claudeN.cmd), en la carpeta de la copia. No se arranca nada sin que pulses.')}</div>}
+      {project && <div className="t-small c3 mt-3">{t('Retomar abre una ventana de esa cuenta en la carpeta de la copia. No se arranca nada sin que pulses.')}</div>}
     </div>
   )
 }
@@ -540,7 +540,7 @@ function TextSize() {
   const pick = (v: number) => void api('setSettings', { uiScale: v }).then(() => { cur.reload(); toast(t('Letra: {v0} ({v1} %)', { v0: SIZES.find((s) => s.v === v)?.label.toLowerCase(), v1: Math.round(v * 100) })) })
   return (
     <div className="group p-5 mb-3 flex flex-col gap-3">
-      <div className="flex items-baseline gap-3 flex-wrap"><span className="t-head">{t('Tamaño de la letra')}</span><span className="t-small c3">{t('Todo crece a la vez: texto, botones y fotos. Desde cualquier pantalla:')} <span className="kbd">{t('Ctrl +')}</span> <span className="kbd">{t('Ctrl −')}</span> y <span className="kbd">{t('Ctrl 0')}</span> {t('para volver al de serie.')}</span></div>
+      <div className="flex items-baseline gap-3 flex-wrap"><span className="t-head">{t('Tamaño de la letra')}</span><span className="t-small c3">{t('Todo crece a la vez: texto, botones y fotos. Desde cualquier pantalla:')} <span className="kbd">{t('Ctrl +')}</span> <span className="kbd">{t('Ctrl −')}</span> {t('y')} <span className="kbd">{t('Ctrl 0')}</span> {t('para volver al de serie.')}</span></div>
       <div className="flex gap-2 flex-wrap" role="radiogroup" aria-label={t('Tamaño de la letra')}>
         {SIZES.map((s) => {
           const sel = Math.abs(on - s.v) < 0.01
@@ -634,7 +634,7 @@ function RemoveProject({ id, name, root }: { id: string; name: string; root: str
       <div className="t-small c3 mb-2">{t('Mission Control olvida sus tareas, su historia, su galería y sus ajustes. Antes hace una copia de sus datos, que se recupera en Ajustes › Copias. Las cuentas que trabajen en él no se cierran solas.')}</div>
       <div className="flex gap-2 flex-wrap">
         <button className="btn btn-sm" style={{ color: 'var(--red)' }} disabled={busy} onClick={() => void remove(false)}><Trash2 size={13} /> {t('Quitar de Mission Control')}</button>
-        <button className="btn btn-sm" style={{ color: 'var(--red)' }} disabled={busy} title={t('La carpeta va a la papelera de Windows: se puede recuperar desde allí')} onClick={() => void remove(true)}><Trash2 size={13} /> {t('Quitar y mandar la carpeta a la papelera')}</button>
+        <button className="btn btn-sm" style={{ color: 'var(--red)' }} disabled={busy} title={t('La carpeta va a la papelera: se puede recuperar desde allí')} onClick={() => void remove(true)}><Trash2 size={13} /> {t('Quitar y mandar la carpeta a la papelera')}</button>
       </div>
     </div>
   )
@@ -655,7 +655,7 @@ function CleanupSection({ pid }: { pid: string }) {
   const items = (v.data?.items ?? []) as { path: string; rel: string; copy: string; size: number; pile: keyof typeof pile; why: string }[]
   return (
     <section className="mb-8" id="limpieza">
-      <SectionTitle title={t('Limpieza')} sub={t('Lo que ocupa el proyecto y sus copias, en tres montones. Nada se borra a ciegas: lo que sobra va a la papelera de Windows y lo dudoso se aparta, con vuelta atrás')} right={<button className="btn btn-sm" disabled={v.data?.running} onClick={() => void api('cleanupStart', pid).then(() => setTick((x) => x + 1))}>{v.data?.running ? t('Midiendo… ({n} archivos)', { n: v.data.scanned }) : t('Medir ahora')}</button>} />
+      <SectionTitle title={t('Limpieza')} sub={t('Lo que ocupa el proyecto y sus copias, en tres montones. Nada se borra a ciegas: lo que sobra va a la papelera y lo dudoso se aparta, con vuelta atrás')} right={<button className="btn btn-sm" disabled={v.data?.running} onClick={() => void api('cleanupStart', pid).then(() => setTick((x) => x + 1))}>{v.data?.running ? t('Midiendo… ({n} archivos)', { n: v.data.scanned }) : t('Medir ahora')}</button>} />
       <div className="group p-5 flex flex-col gap-4">
         {(!v.data || v.data.never) && <div className="t-small c3">{t('Aún sin medir. Tarda unos minutos en los proyectos grandes y no frena la app.')}</div>}
         {v.data && !v.data.never && (
@@ -676,7 +676,7 @@ function CleanupSection({ pid }: { pid: string }) {
             <span className="dot flex-none" style={{ background: pile[x.pile].color }} />
             <span className="num flex-none w-16 text-right" style={{ fontWeight: 650 }}>{size(x.size)}</span>
             <span className="min-w-0 flex-1"><span className="block truncate" style={{ fontWeight: 600 }} title={x.path}>{x.rel}</span><span className="block truncate c3">{x.copy} · {x.why}</span></span>
-            {x.pile === 'sobra' ? <button className="btn btn-sm flex-none" title={t('A la papelera de Windows: se puede recuperar desde ahí')} onClick={() => void api<string>('cleanupTrash', pid, x.path).then((r) => { toast(t('A la papelera: {r}', { r: r })); setTick((t) => t + 1) }, (e) => toast((e as Error).message))}>{t('A la papelera')}</button>
+            {x.pile === 'sobra' ? <button className="btn btn-sm flex-none" title={t('A la papelera: se puede recuperar desde ahí')} onClick={() => void api<string>('cleanupTrash', pid, x.path).then((r) => { toast(t('A la papelera: {r}', { r: r })); setTick((t) => t + 1) }, (e) => toast((e as Error).message))}>{t('A la papelera')}</button>
               : <button className="btn btn-sm flex-none" title={t('Se mueve a una carpeta de Mission Control con su ficha; se devuelve con un clic')} onClick={() => void api<string>('cleanupAside', pid, x.path).then((r) => { toast(t('Apartado: {r}', { r: r })); setTick((t) => t + 1) }, (e) => toast((e as Error).message))}>{t('Apartar')}</button>}
           </div>
         ))}
@@ -773,7 +773,7 @@ export function SettingsScreen() {
         <SectionTitle title={t('Comportamiento')} />
         <div className="group p-5 flex flex-col gap-4">
           <div className="flex items-center gap-4 flex-wrap"><span className="w-44 c2">{t('Si nadie contesta un «1. Yes / 2. No»')}</span><Segmented value={state.settings.awayPolicy ?? 'todo'} onChange={(v) => set({ awayPolicy: v })} options={[{ value: 'todo', label: t('Pulsar 1 (sí)') }, { value: 'seguro', label: t('Sí, menos lo arriesgado') }, { value: 'esperar', label: t('Esperarme') }]} /><span className="c3 t-small">{t('a los')}</span><Segmented value={String(state.settings.awayMinutes ?? 3)} onChange={(v) => set({ awayMinutes: Number(v) })} options={[{ value: '1', label: t('1 min') }, { value: '3', label: t('3 min') }, { value: '10', label: t('10 min') }]} /></div>
-          <div className="flex items-center gap-4"><span className="w-44 c2">{t('Reducir movimiento')}</span><Segmented value={state.settings.reduceMotion} onChange={(v) => set({ reduceMotion: v })} options={[{ value: 'system', label: t('Como Windows') }, { value: 'on', label: t('Sí') }, { value: 'off', label: t('No') }]} /></div>
+          <div className="flex items-center gap-4"><span className="w-44 c2">{t('Reducir movimiento')}</span><Segmented value={state.settings.reduceMotion} onChange={(v) => set({ reduceMotion: v })} options={[{ value: 'system', label: t('Como el sistema') }, { value: 'on', label: t('Sí') }, { value: 'off', label: t('No') }]} /></div>
         </div>
       </section>
       </>)}
@@ -929,7 +929,7 @@ function LanguagePicker() {
   const set = (l: Lang) => void api('setSettings', { lang: l }).then(refresh).then(() => toast(t('Idioma: {lang}', { lang: LANGS.find((x) => x.id === l)?.label ?? l })), (e) => toast((e as Error).message))
   return (
     <section className="mb-8" id="idioma">
-      <SectionTitle title={t('Idioma')} sub={t('El de la app, y el de lo que se les dice a los Claude a medida que se traduce. Sin elegir, el de Windows.')} />
+      <SectionTitle title={t('Idioma')} sub={t('El de la app, y el de lo que se les dice a los Claude a medida que se traduce. Sin elegir, el del sistema.')} />
       <div className="group p-5">
         <Segmented value={chosen ?? getLang()} onChange={(v) => set(v as Lang)} options={LANGS.map((l) => ({ value: l.id, label: l.label }))} />
       </div>

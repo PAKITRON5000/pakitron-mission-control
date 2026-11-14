@@ -23,8 +23,8 @@ export const other: Record<string, string> = {
   'Sin conversaciones guardadas': 'No saved conversations',
   'Cuando un Claude trabaje en este proyecto, su conversación queda aquí y podrás retomarla donde la dejó.':
     'When a Claude works on this project, its conversation stays here and you can pick it up where it left off.',
-  'Retomar abre una ventana con el lanzador de la cuenta (claude-accesos\\claudeN.cmd), en la carpeta de la copia. No se arranca nada sin que pulses.':
-    'Pick up opens a window with the account\'s launcher (claude-accesos\\claudeN.cmd), in the copy\'s folder. Nothing starts until you click.',
+  'Retomar abre una ventana de esa cuenta en la carpeta de la copia. No se arranca nada sin que pulses.':
+    'Pick up opens a window of that account in the copy\'s folder. Nothing starts until you click.',
   'Escrito en el Buzón': 'Written in the Inbox',
   'No se pudo': 'It could not be done',
   'Tus comentarios y qué ha pasado con cada uno.': 'Your comments and what happened with each one.',
@@ -158,8 +158,8 @@ export const other: Record<string, string> = {
   'Se queda': 'Stays',
   'se usa, es reciente o tiene nota tuya': 'it is used, recent or has a note of yours',
   'Limpieza': 'Clean-up',
-  'Lo que ocupa el proyecto y sus copias, en tres montones. Nada se borra a ciegas: lo que sobra va a la papelera de Windows y lo dudoso se aparta, con vuelta atrás':
-    'What the project and its copies take up, in three piles. Nothing is deleted blindly: what is spare goes to the Windows recycle bin and what is doubtful is set aside, with a way back',
+  'Lo que ocupa el proyecto y sus copias, en tres montones. Nada se borra a ciegas: lo que sobra va a la papelera y lo dudoso se aparta, con vuelta atrás':
+    'What the project and its copies take up, in three piles. Nothing is deleted blindly: what is spare goes to the bin and what is doubtful is set aside, with a way back',
   'Aún sin medir. Tarda unos minutos en los proyectos grandes y no frena la app.': 'Not measured yet. It takes a few minutes on big projects and does not slow the app down.',
   'Borrado inteligente': 'Smart deletion',
   'No: solo cuando yo pulse': 'No: only when I click',
@@ -169,7 +169,7 @@ export const other: Record<string, string> = {
   ', se queda apartado': ', it stays set aside',
   'Devuelto: {r}': 'Brought back: {r}',
   'Devolver': 'Bring back',
-  'A la papelera de Windows: se puede recuperar desde ahí': 'To the Windows recycle bin: it can be recovered from there',
+  'A la papelera: se puede recuperar desde ahí': 'To the bin: it can be recovered from there',
   'A la papelera: {r}': 'To the bin: {r}',
   'A la papelera': 'To the bin',
   'Apartado: {r}': 'Set aside: {r}',
@@ -204,7 +204,7 @@ export const other: Record<string, string> = {
   '3 min': '3 min',
   '10 min': '10 min',
   'Reducir movimiento': 'Reduce motion',
-  'Como Windows': 'Like Windows',
+  'Como el sistema': 'Like the system',
   'Sí': 'Yes',
   'Lectura de consumo (statusLine)': 'Usage reading (statusLine)',
   'Así llegan el % de 5 horas y semanal, con sus reinicios, sin pedir nada a Anthropic ni gastar uso':
@@ -265,6 +265,6 @@ export const other: Record<string, string> = {
   'Borrar proyecto': 'Delete project',
   'Mission Control olvida sus tareas, su historia, su galería y sus ajustes. Antes hace una copia de sus datos, que se recupera en Ajustes › Copias. Las cuentas que trabajen en él no se cierran solas.': 'Mission Control forgets its tasks, history, gallery and settings. It makes a copy of its data first, which you can bring back in Settings › Backups. Accounts working on it are not closed.',
   'Quitar de Mission Control': 'Remove from Mission Control',
-  'La carpeta va a la papelera de Windows: se puede recuperar desde allí': 'The folder goes to the Windows Recycle Bin: it can be restored from there',
+  'La carpeta va a la papelera: se puede recuperar desde allí': 'The folder goes to the bin: it can be restored from there',
   'Quitar y mandar la carpeta a la papelera': 'Remove and send the folder to the Recycle Bin',
 }

@@ -1,4 +1,6 @@
-import { t } from './i18n'
+import { t, tn, getLang } from './i18n'
+import { tasksIntro } from './templates'
+import { cardWords, docWords } from './docwords'
 // What a project is, read from its folder (the user, 12-11: «que la app entienda sola cómo funciona cada proyecto… la
 // colocación de carpetas sin que el usuario tenga que colocar él la galería»). Nothing is asked and nothing is written by
 // `detectProfile`; `prepareProject` only creates what is missing and never overwrites a file.
@@ -16,11 +18,11 @@ export type ProjectKind =
   | 'rust' | 'go' | 'dotnet' | 'java' | 'android' | 'flutter' | 'swift' | 'cpp' | 'data' | 'writing' | 'audio'
 
 export const KIND_LABEL: Record<ProjectKind, string> = {
-  unity: 'juego de Unity', unreal: 'juego de Unreal', godot: 'juego de Godot', blender: 'arte 3D con Blender', electron: 'aplicación de escritorio (Electron)',
-  web: 'web', node: 'programa en Node', python: 'programa en Python', video: 'vídeo', docs: 'documentos',
-  rust: 'programa en Rust', go: 'programa en Go', dotnet: 'programa en C# (.NET)', java: 'programa en Java o Kotlin', android: 'app de Android',
-  flutter: 'app de Flutter', swift: 'app de Apple (Swift)', cpp: 'programa en C o C++', data: 'análisis de datos', writing: 'escritura (libro, artículo o guion)',
-  audio: 'música y audio'
+  get unity() { return t('juego de Unity') }, get unreal() { return t('juego de Unreal') }, get godot() { return t('juego de Godot') }, get blender() { return t('arte 3D con Blender') }, get electron() { return t('aplicación de escritorio (Electron)') },
+  get web() { return t('web') }, get node() { return t('programa en Node') }, get python() { return t('programa en Python') }, get video() { return t('vídeo') }, get docs() { return t('documentos') },
+  get rust() { return t('programa en Rust') }, get go() { return t('programa en Go') }, get dotnet() { return t('programa en C# (.NET)') }, get java() { return t('programa en Java o Kotlin') }, get android() { return t('app de Android') },
+  get flutter() { return t('app de Flutter') }, get swift() { return t('app de Apple (Swift)') }, get cpp() { return t('programa en C o C++') }, get data() { return t('análisis de datos') }, get writing() { return t('escritura (libro, artículo o guion)') },
+  get audio() { return t('música y audio') }
 }
 
 /**
@@ -28,27 +30,27 @@ export const KIND_LABEL: Record<ProjectKind, string> = {
  * shared or merged, and how its work is shown to the user. Goes into the project's card (docs/PROYECTO.md).
  */
 export const WORK_TIPS: Record<ProjectKind, string> = {
-  unity: 'El editor y las compilaciones de Unity, uno cada vez: una cuenta con Unity y las demás en scripts y documentos. Escenas y prefabs se mezclan mal en git: que no los toquen dos cuentas a la vez. Una copia de trabajo nueva reimporta Library (horas): pocas y que duren.',
-  unreal: 'El editor de Unreal pesa mucho: uno cada vez. Los .uasset son binarios: nunca dos cuentas en el mismo.',
-  godot: 'Las escenas (.tscn) son texto pero se mezclan mal: una cuenta por escena. Se prueba sin ventana con `godot --headless`.',
-  blender: 'Los .blend son binarios: nunca dos cuentas en el mismo, y uno con nota del usuario no se sobrescribe. Mejor por guiones de Python, que se repiten y se corrigen.',
-  electron: 'Lo que se ve, con captura de la app abierta de verdad antes de darlo por bueno. El proceso principal y las pantallas se pueden repartir entre cuentas. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.',
-  web: 'Cada pantalla, con captura a tamaño de móvil y de escritorio. Las dependencias (package-lock.json) las cambia una sola cuenta cada vez. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.',
-  node: 'Tipos y pruebas antes y después de cada cambio; package-lock.json lo cambia una sola cuenta cada vez. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.',
-  python: 'Un entorno virtual (`.venv`) fuera de git; pruebas con pytest antes de cerrar. Las dependencias las cambia una sola cuenta cada vez. El .venv no pasa a las copias de trabajo: cada una, el suyo.',
-  video: 'Renderizar usa la gráfica: uno cada vez, y nunca mientras el usuario edita o juega. Cada versión nueva va con otro nombre.',
-  docs: 'Una cuenta por documento o capítulo; cada dato con su fuente.',
-  rust: 'Compilar en Rust tarda: `cargo check` mientras se trabaja y `cargo test` para cerrar. Dos cuentas compilando en la misma copia se esperan la una a la otra (la carpeta target): mejor cada una en su copia.',
-  go: '`go vet ./...` y `go test ./...` antes de cerrar; go.mod y go.sum los cambia una sola cuenta cada vez.',
-  dotnet: '`dotnet build` y `dotnet test` antes de cerrar. Los .sln y .csproj se mezclan mal en git: una cuenta cada vez.',
-  java: 'Las compilaciones de Maven o Gradle son largas: se lanzan al cerrar, no en cada cambio. Las dependencias, una sola cuenta cada vez.',
-  android: 'Gradle y el emulador pesan mucho: uno cada vez (`pmc recurso build`). Cada pantalla, con captura del emulador o del móvil.',
-  flutter: '`flutter analyze` y `flutter test` antes de cerrar; cada pantalla, con captura. pubspec.lock lo cambia una sola cuenta cada vez.',
-  swift: 'Una app de iPhone o de Mac solo se compila y se prueba en un Mac: desde Windows se escribe y se revisa el código, pero no se ve funcionar. Dilo en cada entrega.',
-  cpp: 'Cada cuenta compila en su propia carpeta (`build-<cuenta>`) para no pisarse; los avisos del compilador cuentan como fallos.',
-  data: 'Cada cifra sale de código que se puede volver a ejecutar, nunca a mano. Los cuadernos se guardan sin salidas pesadas (`jupyter nbconvert --clear-output --inplace`) y los datos grandes, fuera de git. Antes de entregar una conclusión, que la compruebe el subagente revisor-datos.',
-  writing: 'Un capítulo o parte por cuenta. El estilo, los nombres y lo que ya ha pasado van en docs/DECISIONS.md para que nadie se contradiga. Se entrega texto para leer, no resúmenes, y antes lo repasa el subagente corrector.',
-  audio: 'Los proyectos de la estación de audio (Ableton, FL Studio, Reaper…) son binarios: uno por cuenta, y nunca se sobrescriben. Cada mezcla nueva va con otro nombre y se entrega para oírla.'
+  get unity() { return t('El editor y las compilaciones de Unity, uno cada vez: una cuenta con Unity y las demás en scripts y documentos. Escenas y prefabs se mezclan mal en git: que no los toquen dos cuentas a la vez. Una copia de trabajo nueva reimporta Library (horas): pocas y que duren.') },
+  get unreal() { return t('El editor de Unreal pesa mucho: uno cada vez. Los .uasset son binarios: nunca dos cuentas en el mismo.') },
+  get godot() { return t('Las escenas (.tscn) son texto pero se mezclan mal: una cuenta por escena. Se prueba sin ventana con `godot --headless`.') },
+  get blender() { return t('Los .blend son binarios: nunca dos cuentas en el mismo, y uno con nota del usuario no se sobrescribe. Mejor por guiones de Python, que se repiten y se corrigen.') },
+  get electron() { return t('Lo que se ve, con captura de la app abierta de verdad antes de darlo por bueno. El proceso principal y las pantallas se pueden repartir entre cuentas. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.') },
+  get web() { return t('Cada pantalla, con captura a tamaño de móvil y de escritorio. Las dependencias (package-lock.json) las cambia una sola cuenta cada vez. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.') },
+  get node() { return t('Tipos y pruebas antes y después de cada cambio; package-lock.json lo cambia una sola cuenta cada vez. Las copias de .claude/worktrees usan el node_modules de la principal; si cambian dependencias, npm install en ellas.') },
+  get python() { return t('Un entorno virtual (`.venv`) fuera de git; pruebas con pytest antes de cerrar. Las dependencias las cambia una sola cuenta cada vez. El .venv no pasa a las copias de trabajo: cada una, el suyo.') },
+  get video() { return t('Renderizar usa la gráfica: uno cada vez, y nunca mientras el usuario edita o juega. Cada versión nueva va con otro nombre.') },
+  get docs() { return t('Una cuenta por documento o capítulo; cada dato con su fuente.') },
+  get rust() { return t('Compilar en Rust tarda: `cargo check` mientras se trabaja y `cargo test` para cerrar. Dos cuentas compilando en la misma copia se esperan la una a la otra (la carpeta target): mejor cada una en su copia.') },
+  get go() { return t('`go vet ./...` y `go test ./...` antes de cerrar; go.mod y go.sum los cambia una sola cuenta cada vez.') },
+  get dotnet() { return t('`dotnet build` y `dotnet test` antes de cerrar. Los .sln y .csproj se mezclan mal en git: una cuenta cada vez.') },
+  get java() { return t('Las compilaciones de Maven o Gradle son largas: se lanzan al cerrar, no en cada cambio. Las dependencias, una sola cuenta cada vez.') },
+  get android() { return t('Gradle y el emulador pesan mucho: uno cada vez (`pmc recurso build`). Cada pantalla, con captura del emulador o del móvil.') },
+  get flutter() { return t('`flutter analyze` y `flutter test` antes de cerrar; cada pantalla, con captura. pubspec.lock lo cambia una sola cuenta cada vez.') },
+  get swift() { return t('Una app de iPhone o de Mac solo se compila y se prueba en un Mac: desde Windows se escribe y se revisa el código, pero no se ve funcionar. Dilo en cada entrega.') },
+  get cpp() { return t('Cada cuenta compila en su propia carpeta (`build-<cuenta>`) para no pisarse; los avisos del compilador cuentan como fallos.') },
+  get data() { return t('Cada cifra sale de código que se puede volver a ejecutar, nunca a mano. Los cuadernos se guardan sin salidas pesadas (`jupyter nbconvert --clear-output --inplace`) y los datos grandes, fuera de git. Antes de entregar una conclusión, que la compruebe el subagente revisor-datos.') },
+  get writing() { return t('Un capítulo o parte por cuenta. El estilo, los nombres y lo que ya ha pasado van en docs/DECISIONS.md para que nadie se contradiga. Se entrega texto para leer, no resúmenes, y antes lo repasa el subagente corrector.') },
+  get audio() { return t('Los proyectos de la estación de audio (Ableton, FL Studio, Reaper…) son binarios: uno por cuenta, y nunca se sobrescriben. Cada mezcla nueva va con otro nombre y se entrega para oírla.') }
 }
 
 export interface ProfileCheck { nombre: string; orden: string; recurso?: string; minutos?: number; fallaSi?: string; pasaSi?: string; resumen?: string }
@@ -225,7 +227,7 @@ function detectMoreKinds(root: string, kinds: ProjectKind[], details: Record<str
   if (pubspec !== undefined) {
     const flutter = /^\s*flutter\s*:/m.test(pubspec) || /sdk:\s*flutter/.test(pubspec)
     kinds.push('flutter')
-    if (!flutter) details.dart = 'sin Flutter'
+    if (!flutter) details.dart = t('sin Flutter')
     checks.push({ nombre: 'revisa', orden: flutter ? 'flutter analyze' : 'dart analyze', minutos: 10 })
     if (has(root, 'test')) checks.push({ nombre: 'pruebas', orden: flutter ? 'flutter test' : 'dart test', minutos: 15 })
   }
@@ -247,7 +249,7 @@ function detectMoreKinds(root: string, kinds: ProjectKind[], details: Record<str
   } else if (list(root).some((e) => /\.(xcodeproj|xcworkspace)$/i.test(e.name))) {
     // Only a Mac builds it: no check that would always fail here (the card and WORK_TIPS say so).
     kinds.push('swift')
-    details.xcode = 'se compila en un Mac'
+    details.xcode = t('se compila en un Mac')
   }
   const cmake = readText(join(root, 'CMakeLists.txt'))
   if (cmake !== undefined && !game) {
@@ -262,14 +264,14 @@ function detectMoreKinds(root: string, kinds: ProjectKind[], details: Record<str
   const tables = counted(c, 'csv', 'tsv', 'parquet', 'feather', 'arrow', 'xlsx', 'xls', 'sav', 'dta', 'rds')
   if (notebooks || tables >= 5 || has(root, 'DESCRIPTION') && list(root).some((e) => /\.Rproj$/i.test(e.name))) {
     kinds.push('data')
-    details.datos = [notebooks ? `${notebooks} ${notebooks === 1 ? 'cuaderno' : 'cuadernos'}` : '', tables ? `${tables} ${tables === 1 ? 'tabla' : 'tablas'}` : ''].filter(Boolean).join(', ') || 'proyecto de R'
+    details.datos = [notebooks ? tn(notebooks, '{n} cuaderno', '{n} cuadernos') : '', tables ? tn(tables, '{n} tabla', '{n} tablas') : ''].filter(Boolean).join(', ') || t('proyecto de R')
   }
   const tex = counted(c, 'tex')
   if (tex) {
     kinds.push('writing')
     const main = list(root).find((e) => e.isFile() && /\.tex$/i.test(e.name) && /\\documentclass/.test(readText(join(root, e.name)) ?? ''))
     if (main) checks.push({ nombre: 'compila', orden: `latexmk -pdf -interaction=nonstopmode -halt-on-error "${main.name}"`, minutos: 10 })
-    details.latex = `${tex} archivos .tex`
+    details.latex = t('{n} archivos .tex', { n: tex })
   } else if (!kinds.length && c.manuscripts >= 5) {
     kinds.push('writing')
   }
@@ -279,7 +281,7 @@ function detectMoreKinds(root: string, kinds: ProjectKind[], details: Record<str
   const sounds = kinds.length || counted(c, 'mp4', 'mov', 'mkv', 'prproj', 'drp') >= 3 ? 0 : counted(c, 'wav', 'flac', 'aif', 'aiff', 'mp3', 'ogg', 'm4a')
   if (daw || sounds >= 10) {
     kinds.push('audio')
-    if (daw) details.audio = `${daw} ${daw === 1 ? 'proyecto' : 'proyectos'} de estación de audio`
+    if (daw) details.audio = tn(daw, '{n} proyecto de estación de audio', '{n} proyectos de estación de audio')
   }
 }
 
@@ -296,18 +298,19 @@ export function detectProfile(dir: string, skills: string[] = installedSkills())
     const v = (() => { try { return readFileSync(join(root, 'ProjectSettings', 'ProjectVersion.txt'), 'utf8').match(/m_EditorVersion:\s*(\S+)/)?.[1] } catch { return undefined } })()
     if (v) details.unity = v
     heavy.add('unity')
-    if (has(root, 'tools', 'unity.ps1')) {
+    // tools/unity.ps1 is a PowerShell script: on a Mac the editor is called directly (below).
+    if (has(root, 'tools', 'unity.ps1') && process.platform === 'win32') {
       checks.push({ nombre: 'compila', orden: 'powershell -NoProfile -ExecutionPolicy Bypass -File tools/unity.ps1 build', recurso: 'unity', minutos: 45, fallaSi: 'error CS[0-9]+|Scripts have compiler errors|another Unity instance is running|ExitCode=-?[1-9]' })
       checks.push({ nombre: 'pruebas', orden: 'powershell -NoProfile -ExecutionPolicy Bypass -File tools/unity.ps1 test', recurso: 'unity', minutos: 120, fallaSi: 'error CS[0-9]+|Scripts have compiler errors', pasaSi: 'Tests: total=[0-9]+ passed=[0-9]+ failed=0', resumen: 'Tests: total=.*' })
     } else if (v) {
-      const editor = `C:/Program Files/Unity/Hub/Editor/${v}/Editor/Unity.exe`
+      const editor = process.platform === 'darwin' ? `/Applications/Unity/Hub/Editor/${v}/Unity.app/Contents/MacOS/Unity` : `C:/Program Files/Unity/Hub/Editor/${v}/Editor/Unity.exe`
       checks.push({ nombre: 'compila', orden: `"${editor}" -batchmode -quit -projectPath . -logFile -`, recurso: 'unity', minutos: 45, fallaSi: 'error CS[0-9]+|Scripts have compiler errors' })
     }
   }
   if (list(root).some((e) => e.isFile() && /\.uproject$/i.test(e.name))) { kinds.push('unreal'); heavy.add('unreal') }
   if (has(root, 'project.godot')) kinds.push('godot')
   const blends = filesWith(root, /\.blend$/i, 3)
-  if (blends) { kinds.push('blender'); heavy.add('gpu'); details.blender = `${blends} archivos .blend` }
+  if (blends) { kinds.push('blender'); heavy.add('gpu'); details.blender = t('{n} archivos .blend', { n: blends }) }
   if (pkg) {
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
     kinds.push(deps.electron ? 'electron' : deps.react || deps.vue || deps.svelte || deps.next || deps.vite || deps.astro ? 'web' : 'node')
@@ -331,7 +334,7 @@ export function detectProfile(dir: string, skills: string[] = installedSkills())
   const agentsDir = join(root, '.claude', 'agents')
   const docs = {
     tasks: existsSync(join(docsDir, 'TASKS.md')), relevo: existsSync(join(docsDir, 'RELEVO.md')), state: existsSync(join(docsDir, 'STATE.md')) || existsSync(join(docsDir, 'ESTADO.md')),
-    decisions: existsSync(join(docsDir, 'DECISIONS.md')), card: existsSync(join(docsDir, 'PROYECTO.md')), claudeMd: Boolean(claudeMd), cadaSesion: /^##\s+Cada sesi[oó]n/m.test(claudeMd), pmcJson: has(root, 'pmc.json'),
+    decisions: existsSync(join(docsDir, 'DECISIONS.md')), card: existsSync(join(docsDir, 'PROYECTO.md')), claudeMd: Boolean(claudeMd), cadaSesion: /^##\s+(?:Cada sesi[oó]n|Every session)/m.test(claudeMd), pmcJson: has(root, 'pmc.json'),
     agents: list(agentsDir).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name.replace(/\.md$/, '')),
     skill: existsSync(join(root, '.claude', 'skills', 'mission-control', 'SKILL.md'))
   }
@@ -339,7 +342,7 @@ export function detectProfile(dir: string, skills: string[] = installedSkills())
   const name = basename(root)
   const main = kinds[0]
   const extra = kinds.slice(1).map((k) => KIND_LABEL[k])
-  const summary = `${KIND_LABEL[main][0].toUpperCase()}${KIND_LABEL[main].slice(1)}${details.unity ? ` ${details.unity}` : ''}${extra.length ? `, con ${extra.join(' y ')}` : ''}${has(root, '.git') ? '; con git' : '; sin git'}`
+  const summary = `${KIND_LABEL[main][0].toUpperCase()}${KIND_LABEL[main].slice(1)}${details.unity ? ` ${details.unity}` : ''}${extra.length ? t(', con {list}', { list: extra.join(t(' y ')) }) : ''}${has(root, '.git') ? t('; con git') : t('; sin git')}`
   return { root, name, kinds, summary, details, mediaDirs: findMediaDirs(root), checks, heavy: [...heavy], docs, skills: fitting, agents: agentsFor(kinds, [...heavy], fitting) }
 }
 
@@ -352,7 +355,7 @@ export function profileAs(dir: string, kinds: ProjectKind[], heavy: string[], sk
   if (!kinds.length) return p
   const fitting = [...new Set(kinds.flatMap((k) => skills.filter((s) => SKILL_MATCH[k].test(s))))].sort()
   const label = KIND_LABEL[kinds[0]]
-  return { ...p, kinds, heavy, skills: fitting, agents: agentsFor(kinds, heavy, fitting), summary: `${label[0].toUpperCase()}${label.slice(1)} (proyecto nuevo); con git` }
+  return { ...p, kinds, heavy, skills: fitting, agents: agentsFor(kinds, heavy, fitting), summary: `${label[0].toUpperCase()}${label.slice(1)}${t(' (proyecto nuevo); con git')}` }
 }
 
 // ---- subagents ------------------------------------------------------------------------------------------------------
@@ -360,43 +363,41 @@ export function profileAs(dir: string, kinds: ProjectKind[], heavy: string[], sk
 // model: the main agent hands them the reading, checking and note-keeping, and gets back a few lines. That is the saving:
 // the long logs and the big files never enter the main conversation.
 
-const PMC = 'pmc'
-
 export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[]): AgentSpec[] {
   const out: AgentSpec[] = [
     {
       name: 'explorador', model: 'haiku', tools: 'Read, Grep, Glob, Bash', maxTurns: 15, memory: 'project',
       description: t('Úsalo por tu cuenta, sin que te lo pidan, para orientarte sin gastar tu contexto: dónde está algo, qué archivos toca una tarea, qué llama a qué. Devuelve rutas con número de línea y un resumen corto; no cambia nada.'),
       body: [
-        'Eres el explorador del proyecto. Te piden encontrar algo; tú buscas y devuelves solo lo útil.',
-        `- Empieza por \`${PMC} tarea <ID>\` si te dan una tarea, y por \`graphify query "<pregunta>" --budget 1200\` si existe \`graphify-out/graph.json\`.`,
-        '- Busca con Grep y Glob; abre solo los tramos que importan.',
-        '- No leas enteros docs/TASKS.md, docs/STATE.md ni docs/DECISIONS.md: busca en ellos.',
-        '- Devuelve como mucho 15 líneas: `ruta:línea` y qué hay ahí. Nada de copiar archivos enteros.',
-        '- No edites ni ejecutes nada que cambie el proyecto.'
+        t('Eres el explorador del proyecto. Te piden encontrar algo; tú buscas y devuelves solo lo útil.'),
+        t('- Empieza por `pmc tarea <ID>` si te dan una tarea, y por `graphify query "<pregunta>" --budget 1200` si existe `graphify-out/graph.json`.'),
+        t('- Busca con Grep y Glob; abre solo los tramos que importan.'),
+        t('- No leas enteros docs/TASKS.md, docs/STATE.md ni docs/DECISIONS.md: busca en ellos.'),
+        t('- Devuelve como mucho 15 líneas: `ruta:línea` y qué hay ahí. Nada de copiar archivos enteros.'),
+        t('- No edites ni ejecutes nada que cambie el proyecto.')
       ].join('\n')
     },
     {
       name: 'verificador', model: 'haiku', tools: 'Bash, Read, Grep',
       description: t('Úsalo por tu cuenta, sin que te lo pidan, al terminar una tarea, antes de darla por hecha: pasa las comprobaciones del proyecto y, si fallan, lee el registro y dice en pocas líneas qué falla y dónde. No arregla nada.'),
       body: [
-        'Eres el verificador. Compruebas con pruebas objetivas, nunca con opiniones.',
-        `1. Ejecuta \`${PMC} verifica <ID>\` (la tarea que te digan). Si dice «aplazada», devuelve eso y por qué: no es un fallo.`,
-        '2. Si falla, abre el registro que indica y busca la primera causa real (el primer error de compilación, la primera prueba que falla con su mensaje).',
-        '3. Devuelve: BIEN o FALLA, la causa en una o dos líneas con `ruta:línea`, y el registro. Como mucho 10 líneas.',
-        '- No cambies código ni des la tarea por buena tú: eso lo decide quien te llamó con tu resultado.',
-        '- Si el proyecto no tiene comprobaciones (pmc.json), dilo y sugiere cuáles tendría.'
+        t('Eres el verificador. Compruebas con pruebas objetivas, nunca con opiniones.'),
+        t('1. Ejecuta `pmc verifica <ID>` (la tarea que te digan). Si dice «aplazada», devuelve eso y por qué: no es un fallo.'),
+        t('2. Si falla, abre el registro que indica y busca la primera causa real (el primer error de compilación, la primera prueba que falla con su mensaje).'),
+        t('3. Devuelve: BIEN o FALLA, la causa en una o dos líneas con `ruta:línea`, y el registro. Como mucho 10 líneas.'),
+        t('- No cambies código ni des la tarea por buena tú: eso lo decide quien te llamó con tu resultado.'),
+        t('- Si el proyecto no tiene comprobaciones (pmc.json), dilo y sugiere cuáles tendría.')
       ].join('\n')
     },
     {
       name: 'relevo', model: 'haiku', tools: 'Read, Edit, Bash',
       description: t('Úsalo por tu cuenta, sin que te lo pidan, al cerrar un bloque de trabajo o cuando Mission Control avise de que se acaba el uso: pone al día docs/RELEVO.md y la tarea en docs/TASKS.md y guarda con un commit, para que otra cuenta pueda seguir sin adivinar.'),
       body: [
-        'Eres quien deja el relevo escrito. Te dicen qué se ha hecho, qué falta y por dónde seguir.',
-        '1. En docs/TASKS.md: marca la tarea (`[x]` hecha, `[~]` a medias) con una nota breve de cómo quedó.',
-        '2. En docs/RELEVO.md: pon al día la línea «**En curso:**» (quién, desde cuándo, en qué).',
-        '3. Ejecuta `pmc guarda "qué quedó hecho y probado, qué falta y el siguiente paso concreto, con archivos"`: escribe el «Último latido» con la hora real, hace el commit solo de lo de esta cuenta y guarda sus reservas para quien la releve. Si dice que algo quedó sin guardar, devuélvelo tal cual: no hagas `git add -A` a ciegas ni borres nada.',
-        '4. Devuelve en dos líneas qué has escrito.'
+        t('Eres quien deja el relevo escrito. Te dicen qué se ha hecho, qué falta y por dónde seguir.'),
+        t('1. En docs/TASKS.md: marca la tarea (`[x]` hecha, `[~]` a medias) con una nota breve de cómo quedó.'),
+        t('2. En docs/RELEVO.md: pon al día la línea «**En curso:**» (quién, desde cuándo, en qué).'),
+        t('3. Ejecuta `pmc guarda "qué quedó hecho y probado, qué falta y el siguiente paso concreto, con archivos"`: escribe el «Último latido» con la hora real, hace el commit solo de lo de esta cuenta y guarda sus reservas para quien la releve. Si dice que algo quedó sin guardar, devuélvelo tal cual: no hagas `git add -A` a ciegas ni borres nada.'),
+        t('4. Devuelve en dos líneas qué has escrito.')
       ].join('\n')
     }
   ]
@@ -404,12 +405,12 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     name: 'coordinador', model: 'sonnet', tools: 'Bash, Read, Grep',
     description: t('Úsalo por tu cuenta, sin que te lo pidan, cuando haya que decidir qué hacer después o quién hace qué: mira el estado del equipo con las órdenes de Mission Control y devuelve la siguiente tarea para ti, qué tienen las demás cuentas y si conviene reservar, soltar o pasar algo.'),
     body: [
-      'Eres el coordinador del equipo de cuentas de Claude en este proyecto. No programas: decides con datos y devuelves poco.',
-      `1. Mira: \`${PMC} parte\` (en curso, último latido, cola, equipo), \`${PMC} plan\` (cuántos frentes caben a la vez), \`${PMC} claims\` (reservas) y \`${PMC} recursos\` (Unity, gráfica, si el usuario juega).`,
-      '2. Decide la siguiente tarea para quien te llama: la primera de su cola que no espere a otra («tras:»), que no tenga otra cuenta y cuyo recurso esté libre. Si su modelo no es el que pide la tarea ([sonnet], [opus], [fable]) y hay otra libre que sí, elige esa.',
-      `3. Si te piden reservar o soltar: \`${PMC} claim <ID>\` o \`${PMC} release <ID>\`. Si una reserva lleva horas caducada y su cuenta no trabaja, dilo: se puede recoger.`,
-      '4. Devuelve como mucho 8 líneas: la tarea elegida y por qué, lo que tienen las otras cuentas y cualquier conflicto (dos en el mismo sistema, recurso ocupado, tarea bloqueada).',
-      '- No abras ventanas ni lances cuentas: eso lo hace Mission Control.'
+      t('Eres el coordinador del equipo de cuentas de Claude en este proyecto. No programas: decides con datos y devuelves poco.'),
+      t('1. Mira: `pmc parte` (en curso, último latido, cola, equipo), `pmc plan` (cuántos frentes caben a la vez), `pmc claims` (reservas) y `pmc recursos` (Unity, gráfica, si el usuario juega).'),
+      t('2. Decide la siguiente tarea para quien te llama: la primera de su cola que no espere a otra («tras:»), que no tenga otra cuenta y cuyo recurso esté libre. Si su modelo no es el que pide la tarea ([sonnet], [opus], [fable]) y hay otra libre que sí, elige esa.'),
+      t('3. Si te piden reservar o soltar: `pmc claim <ID>` o `pmc release <ID>`. Si una reserva lleva horas caducada y su cuenta no trabaja, dilo: se puede recoger.'),
+      t('4. Devuelve como mucho 8 líneas: la tarea elegida y por qué, lo que tienen las otras cuentas y cualquier conflicto (dos en el mismo sistema, recurso ocupado, tarea bloqueada).'),
+      t('- No abras ventanas ni lances cuentas: eso lo hace Mission Control.')
     ].join('\n')
   })
   const visual = kinds.some((k) => ['unity', 'unreal', 'godot', 'blender', 'web', 'electron', 'video', 'android', 'flutter', 'swift'].includes(k))
@@ -417,21 +418,21 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     name: 'revisor-visual', model: 'sonnet', tools: 'Read, Glob, Bash',
     description: t('Úsalo por tu cuenta, sin que te lo pidan, para juzgar capturas, renders o fotogramas antes de enseñárselos al usuario: compara lo que se ve con lo que se pidió y dice qué está mal, con dónde está en la imagen. No aprueba lo que no se ve.'),
     body: [
-      'Eres el revisor visual. Miras imágenes de verdad (ábrelas con Read) y comparas con lo pedido.',
-      '- Recorta o amplía mentalmente la zona de la que se habla; si la pieza es pequeña en la captura, dilo: hace falta una captura más cerca.',
-      '- Devuelve una lista corta: qué cumple, qué no, y dónde (arriba a la izquierda, sobre el castillo…).',
-      '- Si no puedes juzgarlo con lo que hay (falta la imagen, está oscura, no se ve la pieza), di exactamente qué captura hace falta.',
-      '- Nunca digas que algo está bien sin haberlo visto en una imagen.'
+      t('Eres el revisor visual. Miras imágenes de verdad (ábrelas con Read) y comparas con lo pedido.'),
+      t('- Recorta o amplía mentalmente la zona de la que se habla; si la pieza es pequeña en la captura, dilo: hace falta una captura más cerca.'),
+      t('- Devuelve una lista corta: qué cumple, qué no, y dónde (arriba a la izquierda, sobre el castillo…).'),
+      t('- Si no puedes juzgarlo con lo que hay (falta la imagen, está oscura, no se ve la pieza), di exactamente qué captura hace falta.'),
+      t('- Nunca digas que algo está bien sin haberlo visto en una imagen.')
     ].join('\n')
   })
   if (kinds.includes('unity') || kinds.includes('unreal') || kinds.includes('godot')) out.push({
     name: 'jugabilidad', model: 'sonnet', tools: 'Read, Grep, Glob, Bash',
     description: t('Úsalo por tu cuenta, sin que te lo pidan, para revisar un cambio de jugabilidad antes de cerrarlo: lee el código tocado y las reglas del proyecto (CLAUDE.md, docs/DESIGN.md) y avisa si rompe una regla, la red, el equilibrio o algo validado por el usuario.'),
     body: [
-      'Eres el revisor de jugabilidad. Te dan un cambio (archivos o un diff).',
-      '- Lee las reglas del proyecto en CLAUDE.md y, si hace falta, el apartado que toque de docs/DESIGN.md o docs/ARCHITECTURE.md (busca, no leas entero).',
-      '- Comprueba: autoridad del servidor y red, datos en ScriptableObjects y no en constantes, lógica separada de la presentación, que no toque lo que el usuario dio por bueno.',
-      '- Devuelve solo problemas reales con `ruta:línea` y por qué; si no hay, di «sin problemas» en una línea.'
+      t('Eres el revisor de jugabilidad. Te dan un cambio (archivos o un diff).'),
+      t('- Lee las reglas del proyecto en CLAUDE.md y, si hace falta, el apartado que toque de docs/DESIGN.md o docs/ARCHITECTURE.md (busca, no leas entero).'),
+      t('- Comprueba: autoridad del servidor y red, datos en ScriptableObjects y no en constantes, lógica separada de la presentación, que no toque lo que el usuario dio por bueno.'),
+      t('- Devuelve solo problemas reales con `ruta:línea` y por qué; si no hay, di «sin problemas» en una línea.')
     ].join('\n')
   })
   // EV127: the ones whose work is not code: what a reviewer of numbers and a proofreader catch before the user sees it.
@@ -439,22 +440,22 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     name: 'revisor-datos', model: 'sonnet', tools: 'Read, Grep, Glob, Bash',
     description: t('Úsalo por tu cuenta, sin que te lo pidan, antes de dar por buena una cifra, una tabla o un gráfico: vuelve a sacar el resultado desde los datos y avisa de filas perdidas, unidades, duplicados o un gráfico que no dice lo que dice el texto. No cambia nada.'),
     body: [
-      'Eres el revisor de datos. Te dan una conclusión, una tabla o un gráfico y de dónde salen.',
-      '- Vuelve a calcularlo desde los datos originales con un guion corto (no a mano): cuántas filas entran y cuántas salen, nulos, duplicados, unidades y fechas.',
-      '- Comprueba que el gráfico y el texto dicen lo mismo, con los ejes y la escala correctos.',
-      '- Devuelve como mucho 10 líneas: qué cuadra, qué no y con qué cifra, y el guion que usaste.',
-      '- No edites los datos ni los cuadernos: eso lo decide quien te llamó.'
+      t('Eres el revisor de datos. Te dan una conclusión, una tabla o un gráfico y de dónde salen.'),
+      t('- Vuelve a calcularlo desde los datos originales con un guion corto (no a mano): cuántas filas entran y cuántas salen, nulos, duplicados, unidades y fechas.'),
+      t('- Comprueba que el gráfico y el texto dicen lo mismo, con los ejes y la escala correctos.'),
+      t('- Devuelve como mucho 10 líneas: qué cuadra, qué no y con qué cifra, y el guion que usaste.'),
+      t('- No edites los datos ni los cuadernos: eso lo decide quien te llamó.')
     ].join('\n')
   })
   if (kinds.includes('writing')) out.push({
     name: 'corrector', model: 'sonnet', tools: 'Read, Grep, Glob',
     description: t('Úsalo por tu cuenta, sin que te lo pidan, antes de entregar un capítulo, un artículo o una escena: lo lee contra la guía de estilo y lo ya escrito (docs/DECISIONS.md, CLAUDE.md, capítulos anteriores) y devuelve solo los fallos. No reescribe.'),
     body: [
-      'Eres el corrector. Te dan un texto (archivo y tramo) para revisar antes de que lo lea el usuario.',
-      '- Busca en docs/DECISIONS.md y CLAUDE.md el estilo, el tono y los nombres fijados; busca en los capítulos anteriores lo que ya pasó (no los leas enteros).',
-      '- Señala: contradicciones con lo anterior, nombres o datos que cambian, saltos de tono, frases que no se entienden y erratas.',
-      '- Devuelve una lista corta con `archivo:línea`, el fallo y una propuesta de una línea. Si no hay nada, dilo en una línea.',
-      '- No reescribas el texto ni cambies el estilo del autor.'
+      t('Eres el corrector. Te dan un texto (archivo y tramo) para revisar antes de que lo lea el usuario.'),
+      t('- Busca en docs/DECISIONS.md y CLAUDE.md el estilo, el tono y los nombres fijados; busca en los capítulos anteriores lo que ya pasó (no los leas enteros).'),
+      t('- Señala: contradicciones con lo anterior, nombres o datos que cambian, saltos de tono, frases que no se entienden y erratas.'),
+      t('- Devuelve una lista corta con `archivo:línea`, el fallo y una propuesta de una línea. Si no hay nada, dilo en una línea.'),
+      t('- No reescribas el texto ni cambies el estilo del autor.')
     ].join('\n')
   })
   if (kinds.includes('blender') || heavy.includes('gpu')) {
@@ -463,11 +464,11 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
       name: 'arte-3d', model: 'sonnet', tools: 'Read, Write, Edit, Bash, Glob',
       description: t('Úsalo por tu cuenta, sin que te lo pidan, para trabajo de Blender por guiones (modelar, materiales, exportar a motor) que se pueda hacer sin la ventana: escribe o ajusta el guion, lo ejecuta en segundo plano y devuelve la vista previa.'),
       body: [
-        'Eres el especialista de arte 3D. Trabajas con guiones de Blender en segundo plano (`blender -b archivo.blend --python guion.py`).',
-        `- Antes de lanzar Blender: \`${PMC} recursos\`; si la gráfica está ocupada o el usuario juega, no lo lances y dilo.`,
-        blenderSkills.length ? `- Carga la skill que encaje: ${blenderSkills.join(', ')}.` : '- Si hay skills de Blender instaladas, carga la que encaje.',
-        '- Guarda las vistas previas en una carpeta de capturas del proyecto y devuelve sus rutas.',
-        '- No sobrescribas un .blend ni una imagen con nota del usuario: guarda con otro nombre.'
+        t('Eres el especialista de arte 3D. Trabajas con guiones de Blender en segundo plano (`blender -b archivo.blend --python guion.py`).'),
+        t('- Antes de lanzar Blender: `pmc recursos`; si la gráfica está ocupada o el usuario juega, no lo lances y dilo.'),
+        blenderSkills.length ? t('- Carga la skill que encaje: {skills}.', { skills: blenderSkills.join(', ') }) : t('- Si hay skills de Blender instaladas, carga la que encaje.'),
+        t('- Guarda las vistas previas en una carpeta de capturas del proyecto y devuelve sus rutas.'),
+        t('- No sobrescribas un .blend ni una imagen con nota del usuario: guarda con otro nombre.')
       ].join('\n')
     })
   }
@@ -476,19 +477,23 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
 
 /** The last line of a subagent the app wrote: while it is there, the app may rewrite the file with a newer version. */
 export const AGENT_MARK = '<!-- Creado por Mission Control (pmc preparar). Si lo cambias a mano, borra esta línea y no se volverá a escribir. -->'
+/** The same line in English: readers recognise either, whichever language wrote it. */
+export const AGENT_MARK_EN = '<!-- Created by Mission Control (pmc preparar). If you edit it by hand, delete this line and it will not be rewritten. -->'
+const agentMark = (): string => (getLang() === 'en' ? AGENT_MARK_EN : AGENT_MARK)
+const isMarked = (text: string): boolean => text.includes(AGENT_MARK) || text.includes(AGENT_MARK_EN)
 
 /** A subagent starts without the session's context: it is told what `pmc` stands for, with no path of this machine. */
 /** Where pmc.mjs is when `pmc` is not on the PATH, as a shell of this system writes it. */
-const PMC_FALLBACK = process.platform === 'win32'
-  ? '`node "$LOCALAPPDATA/PakitronMC/bin/pmc.mjs"` (en PowerShell, `node "$env:LOCALAPPDATA/PakitronMC/bin/pmc.mjs"`)'
+const pmcFallback = (): string => process.platform === 'win32'
+  ? t('`node "$LOCALAPPDATA/PakitronMC/bin/pmc.mjs"` (en PowerShell, `node "$env:LOCALAPPDATA/PakitronMC/bin/pmc.mjs"`)')
   : process.platform === 'darwin' ? '`node "$HOME/Library/Application Support/PakitronMC/bin/pmc.mjs"`' : '`node "$HOME/.local/share/PakitronMC/bin/pmc.mjs"`'
-const PMC_NOTE = `Ejecuta \`pmc\` desde la carpeta del proyecto. Si esa ventana no la encuentra, es ${PMC_FALLBACK}.`
+const pmcNote = (): string => t('Ejecuta `pmc` desde la carpeta del proyecto. Si esa ventana no la encuentra, es {fallback}.', { fallback: pmcFallback() })
 
 export function agentFile(a: AgentSpec): string {
-  const body = /\bpmc\b/.test(a.body) ? `${a.body}\n\n${PMC_NOTE}` : a.body
+  const body = /\bpmc\b/.test(a.body) ? `${a.body}\n\n${pmcNote()}` : a.body
   // EV139: none of them edits code alongside the session, so none takes `isolation: worktree` (relevo must write the real docs).
   const extra = `maxTurns: ${a.maxTurns ?? 20}\n${a.memory ? `memory: ${a.memory}\n` : ''}`
-  return `---\nname: ${a.name}\ndescription: ${a.description}\ntools: ${a.tools}\nmodel: ${a.model}\n${extra}---\n\n${body}\n\n${AGENT_MARK}\n`
+  return `---\nname: ${a.name}\ndescription: ${a.description}\ntools: ${a.tools}\nmodel: ${a.model}\n${extra}---\n\n${body}\n\n${agentMark()}\n`
 }
 
 // ---- preparing a project ---------------------------------------------------------------------------------------------
@@ -496,51 +501,51 @@ export function agentFile(a: AgentSpec): string {
 const today = () => new Date().toISOString().slice(0, 10)
 
 /** The project skill (`.claude/skills/mission-control/SKILL.md`): how to work with Mission Control, every order with an example. */
-export const PMC_SKILL = [
+export const pmcSkill = (): string => [
   '---',
   'name: mission-control',
-  'description: Cómo trabajar en un proyecto coordinado por Mission Control con la orden pmc. Úsala al empezar a trabajar, al cerrar un bloque, antes de preguntar algo al usuario, antes de lanzar Unity, Blender o la gráfica, al entregar algo que se ve o se oye, o cuando el usuario diga que te ha contestado.',
+  t('description: Cómo trabajar en un proyecto coordinado por Mission Control con la orden pmc. Úsala al empezar a trabajar, al cerrar un bloque, antes de preguntar algo al usuario, antes de lanzar Unity, Blender o la gráfica, al entregar algo que se ve o se oye, o cuando el usuario diga que te ha contestado.'),
   '---',
   '',
-  '# Mission Control: cómo se trabaja aquí',
+  t('# Mission Control: cómo se trabaja aquí'),
   '',
-  `Mission Control coordina a varios Claude (cuentas distintas) en este proyecto. Todo se hace con la orden \`pmc\`, desde la carpeta del proyecto. Si esa ventana no la encuentra, es ${PMC_FALLBACK}.`,
+  t('Mission Control coordina a varios Claude (cuentas distintas) en este proyecto. Todo se hace con la orden `pmc`, desde la carpeta del proyecto. Si esa ventana no la encuentra, es {fallback}.', { fallback: pmcFallback() }),
   '',
-  '## Empezar',
-  '- `pmc parte`: lo que está en curso, el último latido, tu cola y lo que tienen las demás cuentas, en poco texto. No leas enteros `docs/RELEVO.md`, `docs/TASKS.md` ni `docs/STATE.md`: son archivo.',
-  '- `pmc tarea EV12`: el texto entero de una tarea. `pmc next`: tus siguientes tareas libres, con el modelo que basta.',
-  '- `pmc claim EV12` antes de tocar una tarea (nadie más la cogerá); `pmc release EV12` al acabarla. `pmc claims`: quién tiene qué.',
-  '- `pmc relevo claude1`: si una cuenta sin uso dejó trabajo a medias aquí, te lo pasa con su latido, sus reservas y sus cambios sin guardar.',
-  '- `pmc respuestas`: lo que el usuario te contestó en Decidir o te escribió y aún no has recibido (de cualquier proyecto).',
-  '- `pmc corregido 12 "Mano recolocada sobre el mango" --foto "ruta::qué se ve"`: una nota que el usuario dejó sobre una imagen (te llega con su n.º) ya está arreglada; vuelve a él en Revisar para que la apruebe.',
+  t('## Empezar'),
+  t('- `pmc parte`: lo que está en curso, el último latido, tu cola y lo que tienen las demás cuentas, en poco texto. No leas enteros `docs/RELEVO.md`, `docs/TASKS.md` ni `docs/STATE.md`: son archivo.'),
+  t('- `pmc tarea EV12`: el texto entero de una tarea. `pmc next`: tus siguientes tareas libres, con el modelo que basta.'),
+  t('- `pmc claim EV12` antes de tocar una tarea (nadie más la cogerá); `pmc release EV12` al acabarla. `pmc claims`: quién tiene qué.'),
+  t('- `pmc relevo claude1`: si una cuenta sin uso dejó trabajo a medias aquí, te lo pasa con su latido, sus reservas y sus cambios sin guardar.'),
+  t('- `pmc respuestas`: lo que el usuario te contestó en Decidir o te escribió y aún no has recibido (de cualquier proyecto).'),
+  t('- `pmc corregido 12 "Mano recolocada sobre el mango" --foto "ruta::qué se ve"`: una nota que el usuario dejó sobre una imagen (te llega con su n.º) ya está arreglada; vuelve a él en Revisar para que la apruebe.'),
   '',
-  '## Mientras trabajas',
-  '- `pmc ahora "Preparando las capturas del menú"`: una frase clara de en qué estás, al empezar y cada vez que cambies de faena. Es lo que el usuario ve en la app.',
-  '- Antes de algo pesado: `pmc recursos` y `pmc recurso unity "compilar para probar los bots"` (o `gpu`, `build`); al acabar, `pmc recurso unity --soltar`. Si dice que el usuario juega o edita vídeo, no lo lances.',
-  '- Algo de más de 5 minutos (un render, una grabación): `pmc trabajo "Render del tráiler" --log ruta.log --salida ruta.mp4 [--pid N]`.',
-  '- Para que el usuario decida, no te pares: `pmc decide "título" --pregunta "…" --opcion "A: …" --opcion "B: …" --foto "ruta::qué se ve" [--audio "ruta::qué es::para qué"] [--tarea EV12]`, y sigue con otra cosa; su respuesta te llega sola (o con `pmc respuestas`). Enséñale siempre lo concreto.',
+  t('## Mientras trabajas'),
+  t('- `pmc ahora "Preparando las capturas del menú"`: una frase clara de en qué estás, al empezar y cada vez que cambies de faena. Es lo que el usuario ve en la app.'),
+  t('- Antes de algo pesado: `pmc recursos` y `pmc recurso unity "compilar para probar los bots"` (o `gpu`, `build`); al acabar, `pmc recurso unity --soltar`. Si dice que el usuario juega o edita vídeo, no lo lances.'),
+  t('- Algo de más de 5 minutos (un render, una grabación): `pmc trabajo "Render del tráiler" --log ruta.log --salida ruta.mp4 [--pid N]`.'),
+  t('- Para que el usuario decida, no te pares: `pmc decide "título" --pregunta "…" --opcion "A: …" --opcion "B: …" --foto "ruta::qué se ve" [--audio "ruta::qué es::para qué"] [--tarea EV12]`, y sigue con otra cosa; su respuesta te llega sola (o con `pmc respuestas`). Enséñale siempre lo concreto.'),
   '',
-  '## Cerrar',
-  '- `pmc verifica EV12`: pasa las comprobaciones del proyecto (`pmc.json`) y deja el resultado en la tarea. Si fallan, arréglalo antes de darla por hecha. Lo que no tenga prueba, dilo en la entrega.',
-  '- Lo que se ve o se oye: `pmc entrega EV12 --que "qué es, sin tecnicismos" --mirar "qué tiene que mirar para aprobarla" --foto "ruta::qué se ve"` (recorta y amplía la pieza).',
-  '- Al cerrar cada bloque: `pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está"`. Escribe el «Último latido» con la hora real, hace el commit de lo tuyo (solo lo tuyo si otra cuenta trabaja en la misma copia) y guarda tus reservas para quien te releve. Si te dice que algo quedó sin guardar, míralo.',
-  '- Mientras te quede uso y trabajo, no termines el turno ni escribas un resumen: el usuario lo ve todo en Mission Control. Que el límite te corte a mitad de una tarea es lo que quiere; quien te releve sigue desde tu latido.',
+  t('## Cerrar'),
+  t('- `pmc verifica EV12`: pasa las comprobaciones del proyecto (`pmc.json`) y deja el resultado en la tarea. Si fallan, arréglalo antes de darla por hecha. Lo que no tenga prueba, dilo en la entrega.'),
+  t('- Lo que se ve o se oye: `pmc entrega EV12 --que "qué es, sin tecnicismos" --mirar "qué tiene que mirar para aprobarla" --foto "ruta::qué se ve"` (recorta y amplía la pieza).'),
+  t('- Al cerrar cada bloque: `pmc guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está"`. Escribe el «Último latido» con la hora real, hace el commit de lo tuyo (solo lo tuyo si otra cuenta trabaja en la misma copia) y guarda tus reservas para quien te releve. Si te dice que algo quedó sin guardar, míralo.'),
+  t('- Mientras te quede uso y trabajo, no termines el turno ni escribas un resumen: el usuario lo ve todo en Mission Control. Que el límite te corte a mitad de una tarea es lo que quiere; quien te releve sigue desde tu latido.'),
   '',
-  '## Tareas nuevas en docs/TASKS.md',
-  '`- [ ] ID · título`, y cuando lo sepas: `(tras: EV4)` si espera a otra, `[sonnet]`, `[opus]` o `[fable]` con el modelo que basta, y `{unity}` o `{gpu}` si necesita algo que no se comparte. Las tareas a medias se firman al principio de su nota: `*Primera parte (12-11, claude3): …*`.',
+  t('## Tareas nuevas en docs/TASKS.md'),
+  t('`- [ ] ID · título`, y cuando lo sepas: `(tras: EV4)` si espera a otra, `[sonnet]`, `[opus]` o `[fable]` con el modelo que basta, y `{unity}` o `{gpu}` si necesita algo que no se comparte. Las tareas a medias se firman al principio de su nota: `*Primera parte (12-11, claude3): …*`.'),
   '',
-  'Subagentes del proyecto (`.claude/agents`): explorador (buscar sin gastar tu contexto), verificador (comprobar), relevo (dejar el relevo y guardar), revisor-visual (juzgar capturas)… Úsalos por tu cuenta.',
+  t('Subagentes del proyecto (`.claude/agents`): explorador (buscar sin gastar tu contexto), verificador (comprobar), relevo (dejar el relevo y guardar), revisor-visual (juzgar capturas)… Úsalos por tu cuenta.'),
   '',
-  AGENT_MARK,
+  agentMark(),
   ''
 ].join('\n')
 
-export const CADA_SESION = [
-  '## Cada sesión',
+export const cadaSesion = (): string => [
+  t('## Cada sesión'),
   '',
-  '1. Ejecuta `pmc parte` (Mission Control te da la orden completa al empezar): lo que está en curso, el último latido, tu cola y lo que tienen otras cuentas. El texto de una tarea: `pmc tarea <ID>`. No leas enteros los documentos largos de `docs/`: busca en ellos.',
-  '2. Reserva la tarea con `pmc claim <ID>` antes de tocarla. Para buscar en el proyecto usa el subagente `explorador`; para comprobar, `verificador` (`pmc verifica <ID>`); para juzgar imágenes, `revisor-visual` si existe.',
-  '3. Al cerrar cada bloque, o cuando Mission Control avise de que se acaba el uso: `pmc guarda "qué has hecho y qué queda" --probado "…" --siguiente "…" --no-rehacer "…"` (latido, commit de lo tuyo y reservas para quien te releve), o el subagente `relevo`, que además marca la tarea.',
+  t('1. Ejecuta `pmc parte` (Mission Control te da la orden completa al empezar): lo que está en curso, el último latido, tu cola y lo que tienen otras cuentas. El texto de una tarea: `pmc tarea <ID>`. No leas enteros los documentos largos de `docs/`: busca en ellos.'),
+  t('2. Reserva la tarea con `pmc claim <ID>` antes de tocarla. Para buscar en el proyecto usa el subagente `explorador`; para comprobar, `verificador` (`pmc verifica <ID>`); para juzgar imágenes, `revisor-visual` si existe.'),
+  t('3. Al cerrar cada bloque, o cuando Mission Control avise de que se acaba el uso: `pmc guarda "qué has hecho y qué queda" --probado "…" --siguiente "…" --no-rehacer "…"` (latido, commit de lo tuyo y reservas para quien te releve), o el subagente `relevo`, que además marca la tarea.'),
   ''
 ].join('\n')
 
@@ -554,37 +559,40 @@ export const TO_FILL = '(por completar)'
  * one line pointing at it. Short on purpose (a page): it is read by whoever does not know the project yet.
  */
 export function projectCard(p: ProjectProfile): string {
+  // The «Cómo trabajarlo mejor» heading and the gap mark are read back (brief.ts, pmc.ts), in either language (docwords.ts).
+  const card = cardWords()
+  const details = Object.entries(p.details).map(([k, v]) => `${t(k)}: ${v}`).join('; ')
   const L: string[] = [
-    `# ${p.name}: ficha del proyecto`,
+    t('# {name}: ficha del proyecto', { name: p.name }),
     '',
-    `Escrita por Mission Control al preparar el proyecto (${today()}). Lo marcado ${TO_FILL} lo completa el primer Claude que trabaje aquí, leyendo el proyecto (10 minutos como mucho); quien cambie mucho el proyecto la pone al día. Una página: lo que necesita saber quien no lo conoce.`,
+    t('Escrita por Mission Control al preparar el proyecto ({date}). Lo marcado {mark} lo completa el primer Claude que trabaje aquí, leyendo el proyecto (10 minutos como mucho); quien cambie mucho el proyecto la pone al día. Una página: lo que necesita saber quien no lo conoce.', { date: today(), mark: card.toFill }),
     '',
-    '## Qué es',
+    t('## Qué es'),
     '',
-    `${p.summary}.${Object.keys(p.details).length ? ' ' + Object.entries(p.details).map(([k, v]) => `${k}: ${v}`).join('; ') + '.' : ''}`,
-    `Para qué lo quiere el usuario y hacia dónde va: ${TO_FILL}`,
+    `${p.summary}.${details ? ' ' + details + '.' : ''}`,
+    t('Para qué lo quiere el usuario y hacia dónde va: {mark}', { mark: card.toFill }),
     '',
-    '## Dónde está cada cosa',
+    t('## Dónde está cada cosa'),
     '',
-    `Las carpetas principales y qué hay en cada una: ${TO_FILL}`,
-    ...(p.mediaDirs.length ? [`Imágenes, vídeos y modelos (los ve la Galería): ${p.mediaDirs.map((m) => m.slice(p.root.length + 1) || 'la raíz').join(', ')}.`] : []),
+    t('Las carpetas principales y qué hay en cada una: {mark}', { mark: card.toFill }),
+    ...(p.mediaDirs.length ? [t('Imágenes, vídeos y modelos (los ve la Galería): {list}.', { list: p.mediaDirs.map((m) => m.slice(p.root.length + 1) || t('la raíz')).join(', ') })] : []),
     '',
-    '## Cómo se comprueba',
+    t('## Cómo se comprueba'),
     '',
-    ...(p.checks.length ? p.checks.map((c) => `- ${c.nombre}: \`${c.orden}\`${c.recurso ? ` (necesita ${c.recurso})` : ''}`) : [`- ${TO_FILL}: la orden que dice si algo se ha roto (y apúntala en \`pmc.json\`).`]),
+    ...(p.checks.length ? p.checks.map((c) => `- ${c.nombre}: \`${c.orden}\`${c.recurso ? t(' (necesita {resource})', { resource: c.recurso }) : ''}`) : [t('- {mark}: la orden que dice si algo se ha roto (y apúntala en `pmc.json`).', { mark: card.toFill })]),
     '',
-    '## Cómo trabajarlo mejor',
+    `## ${card.how}`,
     '',
     p.heavy.length
-      ? `Usa ${p.heavy.join(' y ')}: un trabajo pesado cada vez (\`pmc recurso <nombre>\` antes de lanzarlo). Con varias cuentas, una en lo pesado y las demás en lo que no lo necesite (documentos, scripts, pruebas).`
-      : 'No usa nada que no se pueda compartir: varias cuentas pueden trabajar a la vez si cogen partes distintas (cada una reserva su tarea con `pmc claim`).',
+      ? t('Usa {list}: un trabajo pesado cada vez (`pmc recurso <nombre>` antes de lanzarlo). Con varias cuentas, una en lo pesado y las demás en lo que no lo necesite (documentos, scripts, pruebas).', { list: p.heavy.join(t(' y ')) })
+      : t('No usa nada que no se pueda compartir: varias cuentas pueden trabajar a la vez si cogen partes distintas (cada una reserva su tarea con `pmc claim`).'),
     // EV127: what each of its kinds asks for (KIND_LABEL says which is which when there are several).
     ...p.kinds.map((k) => (p.kinds.length > 1 ? `${KIND_LABEL[k][0].toUpperCase()}${KIND_LABEL[k].slice(1)}: ${WORK_TIPS[k]}` : WORK_TIPS[k])),
-    `Qué partes se pueden trabajar a la vez, qué es delicado y qué no se toca sin preguntar: ${TO_FILL}`,
+    t('Qué partes se pueden trabajar a la vez, qué es delicado y qué no se toca sin preguntar: {mark}', { mark: card.toFill }),
     '',
-    '## Ayudas instaladas',
+    t('## Ayudas instaladas'),
     '',
-    `Subagentes: ${p.agents.map((a) => a.name).join(', ') || 'ninguno'}.${p.skills.length ? ` Skills que le sirven: ${p.skills.slice(0, 12).join(', ')}.` : ''}`,
+    `${t('Subagentes: {list}.', { list: p.agents.map((a) => a.name).join(', ') || t('ninguno') })}${p.skills.length ? t(' Skills que le sirven: {list}.', { list: p.skills.slice(0, 12).join(', ') }) : ''}`,
     ''
   ]
   return L.join('\n')
@@ -602,7 +610,7 @@ export function refreshMarkedAgents(root: string, agents: AgentSpec[]): string[]
     if (!existsSync(f)) continue
     const cur = readFileSync(f, 'utf8')
     const next = agentFile(a)
-    if (cur.includes(AGENT_MARK) && cur.replace(/\r\n/g, '\n') !== next) { writeFileSync(f, next); out.push(rel) }
+    if (isMarked(cur) && cur.replace(/\r\n/g, '\n') !== next) { writeFileSync(f, next); out.push(rel) }
   }
   return out
 }
@@ -610,6 +618,7 @@ export function refreshMarkedAgents(root: string, agents: AgentSpec[]): string[]
 /** Creates what the project lacks to be worked on by several accounts. Never overwrites: returns what it created. */
 export function prepareProject(p: ProjectProfile, opts: { agents?: boolean; refreshAgents?: boolean } = {}): string[] {
   const made: string[] = []
+  const w = docWords()
   const write = (rel: string, text: string) => {
     const f = join(p.root, rel)
     if (existsSync(f)) return
@@ -617,16 +626,16 @@ export function prepareProject(p: ProjectProfile, opts: { agents?: boolean; refr
     writeFileSync(f, text)
     made.push(rel)
   }
-  write('docs/TASKS.md', `# Tareas de ${p.name}\n\nUna línea por tarea: \`- [ ] ID · título\` (\`[~]\` a medias, \`[x]\` hecha). Si una tarea espera a otra: \`(tras: ID)\`. El modelo que basta: \`[sonnet]\`, \`[opus]\` o \`[fable]\`. Si necesita algo que no se comparte: \`{unity}\`, \`{gpu}\`.\n\n## Por hacer\n\n`)
-  write('docs/RELEVO.md', `# Relevo de ${p.name}\n\nQuien trabaje aquí pone al día estas dos líneas al cerrar cada bloque.\n\n**En curso:** nadie.\n\n**Último latido:** ${today()} · Mission Control · Proyecto preparado: ${p.summary}.\n`)
-  if (!p.docs.state) write('docs/STATE.md', `# Estado de ${p.name}\n\n${p.summary}.\n`)
-  write('docs/DECISIONS.md', `# Decisiones de ${p.name}\n\nUna línea por decisión, con su fecha y su motivo.\n`)
+  write('docs/TASKS.md', `${t('# Tareas de {name}', { name: p.name })}\n\n${tasksIntro()}\n\n## ${t('Por hacer')}\n\n`)
+  write('docs/RELEVO.md', `${t('# Relevo de {name}', { name: p.name })}\n\n${t('Quien trabaje aquí pone al día estas dos líneas al cerrar cada bloque.')}\n\n**${w.inProgress}:** ${t('nadie')}.\n\n**${w.heartbeat}:** ${today()} · Mission Control · ${t('Proyecto preparado: {summary}.', { summary: p.summary })}\n`)
+  if (!p.docs.state) write('docs/STATE.md', `${t('# Estado de {name}', { name: p.name })}\n\n${p.summary}.\n`)
+  write('docs/DECISIONS.md', `${t('# Decisiones de {name}', { name: p.name })}\n\n${t('Una línea por decisión, con su fecha y su motivo.')}\n`)
   write('docs/PROYECTO.md', projectCard(p))
   if (p.checks.length) write('pmc.json', JSON.stringify({ verifica: p.checks }, null, 2) + '\n')
   if (!p.docs.cadaSesion) {
     const f = join(p.root, 'CLAUDE.md')
     const cur = existsSync(f) ? readFileSync(f, 'utf8') : `# ${p.name}\n\n${p.summary}.\n`
-    writeFileSync(f, cur.trimEnd() + '\n\n' + CADA_SESION)
+    writeFileSync(f, cur.trimEnd() + '\n\n' + cadaSesion())
     made.push(p.docs.claudeMd ? 'CLAUDE.md (sección «Cada sesión»)' : 'CLAUDE.md')
   }
   if (opts.agents !== false) for (const a of p.agents) {
@@ -637,7 +646,7 @@ export function prepareProject(p: ProjectProfile, opts: { agents?: boolean; refr
       const cur = readFileSync(f, 'utf8')
       const next = agentFile(a)
       // Git may turn its line ends into CRLF on a checkout: that is not a change worth rewriting it for.
-      if (cur.includes(AGENT_MARK) && cur.replace(/\r\n/g, '\n') !== next) { writeFileSync(f, next); made.push(`${rel} (actualizado)`) }
+      if (isMarked(cur) && cur.replace(/\r\n/g, '\n') !== next) { writeFileSync(f, next); made.push(`${rel} (actualizado)`) }
       continue
     }
     write(rel, agentFile(a))
@@ -645,11 +654,12 @@ export function prepareProject(p: ProjectProfile, opts: { agents?: boolean; refr
   // The project skill with every pmc order (12-11): only its description is in every session; the rest, when needed.
   if (opts.agents !== false) {
     const rel = '.claude/skills/mission-control/SKILL.md'
+    const skill = pmcSkill()
     const f = join(p.root, rel)
     if (opts.refreshAgents && existsSync(f)) {
       const cur = readFileSync(f, 'utf8')
-      if (cur.includes(AGENT_MARK) && cur.replace(/\r\n/g, '\n') !== PMC_SKILL) { writeFileSync(f, PMC_SKILL); made.push(`${rel} (actualizado)`) }
-    } else write(rel, PMC_SKILL)
+      if (isMarked(cur) && cur.replace(/\r\n/g, '\n') !== skill) { writeFileSync(f, skill); made.push(`${rel} (actualizado)`) }
+    } else write(rel, skill)
   }
   return made
 }

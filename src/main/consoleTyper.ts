@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { paths } from '../core/paths'
 import { macBringToFront, macReadScreen, macTypeKey, macTypeText } from './terminal'
+import { frontEmbedded, isEmbeddedPid, keyEmbedded, screenEmbedded, typeEmbedded } from './embedded'
 
 const posix = process.platform !== 'win32'
 
@@ -78,6 +79,8 @@ function run(args: string[]): Promise<void> {
 }
 
 export function typeText(pid: number, text: string): Promise<void> {
+  // EV156: a Claude living inside the app is written to directly, without a console window.
+  if (isEmbeddedPid(pid)) return typeEmbedded(pid, text)
   if (posix) return macTypeText(pid, text)
   const flat = text.replace(/\s*\r?\n\s*/g, ' ').trim()
   return run(['-TargetPid', String(pid), '-TextBase64', Buffer.from(flat, 'utf8').toString('base64')])
@@ -85,6 +88,7 @@ export function typeText(pid: number, text: string): Promise<void> {
 
 /** One key: 'esc' stops what it is doing, a number picks a choice in a question, 'up'/'down' move in a menu, 'enter' confirms. */
 export function typeKey(pid: number, key: string): Promise<void> {
+  if (isEmbeddedPid(pid)) return keyEmbedded(pid, key)
   if (posix) return macTypeKey(pid, key)
   return run(['-TargetPid', String(pid), '-Key', key])
 }
@@ -133,6 +137,7 @@ let readerWritten = false
 
 /** The last lines a console window shows, as text. */
 export function readScreen(pid: number, lines = 40): Promise<string> {
+  if (isEmbeddedPid(pid)) return screenEmbedded(pid, lines)
   if (posix) return macReadScreen(pid, lines)
   const file = join(paths.root(), 'read-console.ps1')
   if (!readerWritten || !existsSync(file)) writeFileSync(file, READER)
@@ -181,6 +186,7 @@ let frontWritten = false
 
 /** Puts the console window of a running Claude in front of the others. */
 export function bringToFront(pid: number): Promise<void> {
+  if (isEmbeddedPid(pid)) { try { frontEmbedded(pid); return Promise.resolve() } catch (e) { return Promise.reject(e) } }
   if (posix) return macBringToFront(pid)
   const file = join(paths.root(), 'console-front.ps1')
   if (!frontWritten || !existsSync(file)) writeFileSync(file, FRONT)

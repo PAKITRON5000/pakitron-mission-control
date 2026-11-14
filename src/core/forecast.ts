@@ -1,5 +1,6 @@
 // The wheel's forecast (EV67): at each account's own pace, how many hours of work are left in the wheel this week, when
 // everything would stop, and whether that is enough for the agenda. An estimate, and always said as one. No node imports.
+import { t as tr, getLang } from './i18n'
 
 export interface UsagePoint { at: number; week?: number; weekResets?: number }
 
@@ -73,11 +74,12 @@ export function forecastText(f: Forecast, now: number): string {
   const when = (ms: number) => {
     const d = new Date(ms)
     const same = d.toDateString() === new Date(now).toDateString()
-    return `${same ? 'hoy' : 'el ' + ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()] + ' ' + d.getDate()} hacia las ${String(d.getHours()).padStart(2, '0')}:00`
+    const day = same ? tr('hoy') : tr('el {day} {n}', { day: tr(['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()]), n: d.getDate() })
+    return tr('{day} hacia las {hh}:00', { day, hh: String(d.getHours()).padStart(2, '0') })
   }
-  const h = f.hours >= 10 ? Math.round(f.hours) : f.hours.toString().replace('.', ',')
-  let t = `Quedan unas ${h} h de trabajo en la rueda esta semana`
-  t += f.stopAt ? `; a este ritmo se pararía todo ${when(f.stopAt)}${f.renewAt ? ` y volvería a haber cuando se renueve una semana (${when(f.renewAt)})` : ''}` : f.renewAt ? `; no se para antes de que vuelva una semana (${when(f.renewAt)})` : ''
-  if (f.agendaHours != null) t += `. La agenda pide unas ${f.agendaHours >= 10 ? Math.round(f.agendaHours) : f.agendaHours.toString().replace('.', ',')} h${f.short ? ': la semana no llega' : ''}`
-  return t + ' (estimación).'
+  const dec = (n: number) => (n >= 10 ? String(Math.round(n)) : getLang() === 'en' ? n.toString() : n.toString().replace('.', ','))
+  let t = tr('Quedan unas {h} h de trabajo en la rueda esta semana', { h: dec(f.hours) })
+  t += f.stopAt ? tr('; a este ritmo se pararía todo {when}{renew}', { when: when(f.stopAt), renew: f.renewAt ? tr(' y volvería a haber cuando se renueve una semana ({when})', { when: when(f.renewAt) }) : '' }) : f.renewAt ? tr('; no se para antes de que vuelva una semana ({when})', { when: when(f.renewAt) }) : ''
+  if (f.agendaHours != null) t += tr('. La agenda pide unas {h} h{short}', { h: dec(f.agendaHours), short: f.short ? tr(': la semana no llega') : '' })
+  return t + tr(' (estimación).')
 }

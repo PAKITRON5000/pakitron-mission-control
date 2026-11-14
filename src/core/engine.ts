@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, t as tr } from './i18n'
 // Puts the readers together: tasks imported from TASKS.md, the four agent cards, the project summary and the timeline.
 // Every number here comes from a file, a command or the database; nothing is estimated.
 import { taskChanges } from './changes'
@@ -64,17 +64,17 @@ export function syncTasks(db: DB, project: ProjectConfig, now = Date.now()): Tas
         ins.run(project.id, t.key, t.extId ?? null, t.title, t.detail, t.status, t.section, 2, t.owner ?? null, src.file, t.line, t.mark, done ?? null, now, now)
         added++
         if (!firstImport) {
-          addEvent(db, { projectId: project.id, at: now, account: t.owner, kind: 'tarea-nueva', title: `Tarea nueva: ${t.extId ? t.extId + ' · ' : ''}${t.title}`, source: 'TASKS.md', ref: t.key, dedupe: `tn:${project.id}:${t.key}` })
+          addEvent(db, { projectId: project.id, at: now, account: t.owner, kind: 'tarea-nueva', title: tr('Tarea nueva: {task}', { task: `${t.extId ? t.extId + ' · ' : ''}${t.title}` }), source: 'TASKS.md', ref: t.key, dedupe: `tn:${project.id}:${t.key}` })
         }
       } else {
         const statusChanged = p.mark !== t.mark
         upd.run(t.extId ?? null, t.title, t.detail, t.status, t.section, t.owner ?? null, src.file, t.line, t.mark, t.mark === 'x' && statusChanged ? (done ?? now) : null, statusChanged ? 1 : 0, statusChanged ? now : (db.prepare('SELECT updated_at u FROM tasks WHERE id=?').get(p.id) as any).u, p.id)
         if (statusChanged) {
           changed++
-          const verb = t.mark === 'x' ? 'marcada como hecha' : t.mark === '~' ? 'empezada (a medias)' : 'reabierta'
+          const verb = t.mark === 'x' ? tr('marcada como hecha') : t.mark === '~' ? tr('empezada (a medias)') : tr('reabierta')
           addEvent(db, {
             projectId: project.id, at: now, account: t.owner, kind: t.mark === 'x' ? 'tarea-hecha' : 'tarea-cambio',
-            title: `${t.extId ? t.extId + ' · ' : ''}${t.title}: ${verb}`, detail: 'Según TASKS.md (lo dice el agente; no está verificado por ti).',
+            title: `${t.extId ? t.extId + ' · ' : ''}${t.title}: ${verb}`, detail: tr('Según TASKS.md (lo dice el agente; no está verificado por ti).'),
             source: 'TASKS.md', ref: t.key, dedupe: `tc:${project.id}:${t.key}:${t.mark}:${Math.floor(now / 60000)}`
           })
         }
@@ -143,11 +143,11 @@ export function listTasks(db: DB, projectId: string): Task[] {
 export function setTaskStatus(db: DB, projectId: string, id: number, status: TaskStatus, verified?: boolean): void {
   const now = Date.now()
   const t = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?').get(id, projectId) as any
-  if (!t) throw new Error('La tarea no existe')
+  if (!t) throw new Error(tr('La tarea no existe'))
   db.prepare("UPDATE tasks SET override = CASE WHEN source = 'app' THEN NULL ELSE ? END, status = CASE WHEN source = 'app' THEN ? ELSE status END, verified = COALESCE(?, verified), updated_at = ? WHERE id = ?").run(status, status, verified == null ? null : verified ? 1 : 0, now, id)
   addEvent(db, {
     projectId, at: now, kind: verified ? 'tarea-verificada' : 'tarea-movida',
-    title: verified ? `Has verificado ${t.ext_id ? t.ext_id + ' · ' : ''}${t.title}` : `Has movido ${t.ext_id ? t.ext_id + ' · ' : ''}${t.title} a «${STATUS_LABEL[status]}»`,
+    title: verified ? tr('Has verificado {task}', { task: `${t.ext_id ? t.ext_id + ' · ' : ''}${t.title}` }) : tr('Has movido {task} a «{status}»', { task: `${t.ext_id ? t.ext_id + ' · ' : ''}${t.title}`, status: tr(STATUS_LABEL[status]) }),
     source: 'Mission Control', ref: t.key
   })
 }
@@ -158,7 +158,7 @@ export function addAppTask(db: DB, projectId: string, t: { title: string; detail
   const key = 'app:' + now.toString(36) + Math.random().toString(36).slice(2, 6)
   db.prepare("INSERT INTO tasks(project_id, key, title, detail, status, section, priority, owner, source, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,'app',?,?)")
     .run(projectId, key, t.title, t.detail ?? '', t.status ?? 'idea', 'Desde Mission Control', 2, t.owner ?? null, now, now)
-  addEvent(db, { projectId, at: now, account: t.owner, kind: t.status === 'idea' || !t.status ? 'idea' : 'tarea-nueva', title: `${t.status === 'idea' || !t.status ? 'Idea nueva' : 'Tarea nueva'}: ${t.title}`, source: 'Mission Control', ref: key })
+  addEvent(db, { projectId, at: now, account: t.owner, kind: t.status === 'idea' || !t.status ? 'idea' : 'tarea-nueva', title: `${t.status === 'idea' || !t.status ? tr('Idea nueva') : tr('Tarea nueva')}: ${t.title}`, source: 'Mission Control', ref: key })
   return rowToTask(db.prepare('SELECT * FROM tasks WHERE key = ?').get(key))
 }
 
@@ -335,36 +335,36 @@ export function buildAgents(input: AgentsInput): AgentCard[] {
     const waiting = sessions.filter((s) => s.status === 'waiting')
     if (usage.activeLimit) {
       state = 'sin-uso'
-      reason = `Límite ${usage.activeLimit.kind === '5 horas' ? 'de 5 horas' : usage.activeLimit.kind === 'semanal' ? 'semanal' : ''} agotado`
+      reason = usage.activeLimit.kind === '5 horas' ? tr('Límite de 5 horas agotado') : usage.activeLimit.kind === 'semanal' ? tr('Límite semanal agotado') : tr('Límite  agotado')
     } else if (exhausted) {
       state = 'sin-uso'
-      reason = 'Uso al 100 % según la línea de estado'
+      reason = tr('Uso al 100 % según la línea de estado')
     } else if (busy.length) {
       state = 'trabajando'
-      reason = busy.length > 1 ? `${busy.length} sesiones trabajando` : 'Trabajando'
+      reason = busy.length > 1 ? tr('{n} sesiones trabajando', { n: busy.length }) : tr('Trabajando')
     } else if (waiting.length) {
       state = 'esperando'
       const w = waiting[0].waitingFor ?? ''
-      reason = /permission/i.test(w) ? 'Espera tu permiso' : /question|input/i.test(w) ? 'Espera tu respuesta' : 'Esperando'
+      reason = /permission/i.test(w) ? tr('Espera tu permiso') : /question|input/i.test(w) ? tr('Espera tu respuesta') : tr('Esperando')
     } else if (sessions.some((s) => s.rateLimited && !freshUsage(s))) {
       state = 'sin-uso'
       // EV146: a key or Console account out of credit has no reset: it is back when it is recharged.
-      reason = sessions.some((s) => s.noCredit && s.rateLimited) ? 'Sin crédito: vuelve cuando lo recargues' : 'Parado por límite de uso'
+      reason = sessions.some((s) => s.noCredit && s.rateLimited) ? tr('Sin crédito: vuelve cuando lo recargues') : tr('Parado por límite de uso')
     } else if (sessions.some((s) => s.kind === 'background' && s.state === 'blocked')) {
       // "blocked" in `claude agents` means a background session that finished its turn and waits for a message.
       state = 'disponible'
-      reason = 'Terminó y espera instrucciones'
+      reason = tr('Terminó y espera instrucciones')
     } else if (sessions.length) {
       state = 'disponible'
-      reason = sessions.length > 1 ? `${sessions.length} sesiones abiertas, en reposo` : 'Sesión abierta, en reposo'
+      reason = sessions.length > 1 ? tr('{n} sesiones abiertas, en reposo', { n: sessions.length }) : tr('Sesión abierta, en reposo')
     } else if (l?.error) {
       state = 'desconectado'
-      reason = 'No se pudo consultar'
+      reason = tr('No se pudo consultar')
     } else {
       state = 'desconectado'
-      reason = 'Ninguna sesión abierta'
+      reason = tr('Ninguna sesión abierta')
     }
-    if (identity.emailMismatch) reason += ' · ¡otra cuenta iniciada en su carpeta!'
+    if (identity.emailMismatch) reason += tr(' · ¡otra cuenta iniciada en su carpeta!')
 
     const lastActivityAt = Math.max(sessions[0]?.lastActivityAt ?? 0, lastPromptAt ?? 0, hb?.at ?? 0) || undefined
     cards.push({
@@ -483,7 +483,7 @@ export function timeline(input: TimelineInput): TimelineEvent[] {
   const noun: Record<string, [string, string]> = { image: ['imagen', 'imágenes'], video: ['vídeo', 'vídeos'], model: ['modelo 3D', 'modelos 3D'], audio: ['audio', 'audios'] }
   for (const g of groups) {
     const [one, many] = noun[g.kind] ?? ['archivo', 'archivos']
-    out.push({ id: n--, at: g.at, kind: 'media', title: `${g.n === 1 ? 'Nueva ' + one : g.n + ' ' + many + ' nuevas'} en ${g.folder.replace(/\/$/, '') || 'la raíz'}`, detail: g.category, source: 'Archivos', ref: String(g.ids) })
+    out.push({ id: n--, at: g.at, kind: 'media', title: tr('{what} en {folder}', { what: g.n === 1 ? tr('Nueva {noun}', { noun: tr(one) }) : tr('{n} {noun} nuevas', { n: g.n, noun: tr(many) }), folder: g.folder.replace(/\/$/, '') || tr('la raíz') }), detail: g.category, source: 'Archivos', ref: String(g.ids) })
   }
   // Tasks the agents marked as done with a date written next to it.
   for (const r of db.prepare("SELECT ext_id, title, done_at, owner FROM tasks WHERE project_id = ? AND mark = 'x' AND done_at BETWEEN ? AND ? AND key NOT IN (SELECT ref FROM events WHERE kind = 'tarea-hecha' AND ref IS NOT NULL)").all(project.id, from, to) as any[]) {

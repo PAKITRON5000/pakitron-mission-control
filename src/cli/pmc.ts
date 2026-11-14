@@ -3,17 +3,36 @@
 //   pmc hook <account>         hook command (any event): appends the event to the spool the app reads.
 //   pmc version
 // It must never break a session: every failure is swallowed and the status line still prints.
+import { TO_FILL_RE } from '../core/docwords'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import { pathKey, paths } from '../core/paths'
 import { accountFromConfigDir, configuredAccounts, readLogins } from '../core/accounts'
 import { noLimitsText, planOf } from '../core/logins'
-import { appendActivity, describeHook, guardProtected, guardRules, setFocus } from '../core/live'
+import { appendActivity, describeHook, guardProtected, guardRules, setFocus, toolCallsIn } from '../core/live'
 import { guardUnverified } from '../core/verify'
 import type { AccountId } from '../core/types'
 import { installStatusLine, uninstallStatusLine, statusLineState } from '../core/integrations'
 import { turnFor, waitTurnText, wheelProjectOf, type TurnAnswer, type TurnFile } from '../core/chain'
+import { t, tn, locale, pickLang, setLang } from '../core/i18n'
+
+/** EV164: the app's language for a command that never opens the database (the hooks before a tool, the help, the turn…). */
+async function loadLang(): Promise<void> {
+  // The app leaves the language in lang.txt each time it is set: read in no time, where opening the database for every
+  // tool call (PreToolUse) would slow every Claude down. The database only when the app has not written it yet.
+  try {
+    const l = readFileSync(join(paths.root(), 'lang.txt'), 'utf8').trim()
+    if (l === 'es' || l === 'en') { setLang(l); return }
+  } catch { /* not written yet */ }
+  try {
+    process.removeAllListeners('warning')
+    process.on('warning', () => {})
+    const { openDb, getSetting } = await import('../core/db')
+    const db = openDb()
+    try { setLang(pickLang(getSetting<{ lang?: string }>(db, 'ui', {}).lang, Intl.DateTimeFormat().resolvedOptions().locale)) } finally { db.close() }
+  } catch { /* Spanish, as before */ }
+}
 
 /** The relay wheels' turn, as the app wrote it (turns.json). Old when the app has been closed a while: then nobody is held. */
 function readTurn(account: string, cwd?: string): TurnAnswer {
@@ -25,7 +44,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.33.1'
+const VERSION = '0.34.0'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -154,6 +173,7 @@ async function hook(accountArg?: string): Promise<void> {
     } catch { /* never block */ }
     // Before (PreToolUse) or right after (PostToolUse) a tool: if another account took over this one's work, say it first.
     if (data.hook_event_name === 'PreToolUse' || data.hook_event_name === 'PostToolUse') {
+      await loadLang() // before anything that may be said (the notice, the turn, the guards)
       const { takeNotice } = await import('../core/coord')
       const notice = data.cwd ? takeNotice(account as AccountId, data.cwd) : undefined
       if (notice) {
@@ -249,7 +269,7 @@ async function costCmd(args: string[]): Promise<void> {
   const { db, projectOf } = await openShared()
   try {
     const project = projectOf(process.cwd())
-    if (!project) { say('Esta carpeta no pertenece a ningún proyecto de Mission Control.'); return }
+    if (!project) { say(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.')); return }
     const { taskCosts, costByModel } = await import('../core/taskcost')
     const { readUsageHistory } = await import('../core/accounts')
     const { taskTags } = await import('../core/coord')
@@ -260,10 +280,10 @@ async function costCmd(args: string[]): Promise<void> {
     const models: Record<string, string | undefined> = {}
     for (const t of db.prepare("SELECT ext_id, title, COALESCE(detail, '') AS d FROM tasks WHERE project_id = ? AND ext_id IS NOT NULL").all(project.id) as { ext_id: string; title: string; d: string }[]) models[t.ext_id] = taskTags(`${t.title} ${t.d}`).model
     const costs = taskCosts(claims, dones, history, models)
-    if (!costs.length) { say(`En ${project.name}, ningún caso en ${days} días (hace falta reservar con pmc claim y marcarla hecha).`); return }
-    say(`Lo que costó cada tarea en ${project.name} (${days} días; puntos de la semana de la cuenta que la reservó, estimado):`)
-    for (const c of [...costs].sort((a, b) => b.points - a.points).slice(0, 15)) say(`- ${c.task} · ${c.account} · ${c.points} puntos en ${c.minutes} min${c.model ? ` · [${c.model}]` : ''}`)
-    say(`Media por modelo: ${costByModel(costs).map((m) => `${m.model} ${m.avgPoints} (${m.tasks})`).join(' · ')}`)
+    if (!costs.length) { say(t('En {project}, ningún caso en {days} días (hace falta reservar con pmc claim y marcarla hecha).', { project: project.name, days })); return }
+    say(t('Lo que costó cada tarea en {project} ({days} días; puntos de la semana de la cuenta que la reservó, estimado):', { project: project.name, days }))
+    for (const c of [...costs].sort((a, b) => b.points - a.points).slice(0, 15)) say(t('- {task} · {account} · {points} puntos en {minutes} min', { task: c.task, account: c.account, points: c.points, minutes: c.minutes }) + (c.model ? ` · [${c.model}]` : ''))
+    say(t('Media por modelo: {list}', { list: costByModel(costs).map((m) => `${m.model} ${m.avgPoints} (${m.tasks})`).join(' · ') }))
   } finally { db.close() }
 }
 
@@ -271,6 +291,7 @@ async function costCmd(args: string[]): Promise<void> {
 async function trustCmd(args: string[]): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
   const { projectFolders, trustEverywhere } = await import('../core/trust')
+  await loadLang()
   let folders = args.filter((a) => !a.startsWith('--'))
   if (!folders.length) {
     const { db } = await openShared()
@@ -278,7 +299,7 @@ async function trustCmd(args: string[]): Promise<void> {
     folders = projectFolders(loadProjects(db))
     db.close()
   }
-  for (const r of trustEverywhere(configuredAccounts(), folders)) say(`${r.account}: ${r.added.length ? 'ahora confía en ' + r.added.join(', ') : r.skipped ?? 'ya confiaba en todas'}`)
+  for (const r of trustEverywhere(configuredAccounts(), folders)) say(`${r.account}: ${r.added.length ? t('ahora confía en {list}', { list: r.added.join(', ') }) : r.skipped ?? t('ya confiaba en todas')}`)
 }
 
 /** pmc perfil [carpeta]: what Mission Control understands of a project. pmc preparar [carpeta] [--sin-agentes]: creates what it lacks. */
@@ -292,20 +313,20 @@ async function profileCmd(cmd: string, args: string[]): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
   if (cmd === 'preparar') {
     const made = prepareProject(p, { agents: !noAgents, refreshAgents: true })
-    say(made.length ? `Creado en ${p.name}: ${made.join(', ')}.` : `${p.name} ya tenía todo: no se ha creado nada.`)
+    say(made.length ? t('Creado en {project}: {list}.', { project: p.name, list: made.join(', ') }) : t('{project} ya tenía todo: no se ha creado nada.', { project: p.name }))
     return
   }
   say(`${p.name}: ${p.summary}.`)
-  say(`Galería (${p.mediaDirs.length} carpetas): ${p.mediaDirs.map((d) => d.slice(p.root.length + 1) || '(raíz)').join(', ') || 'ninguna'}`)
-  say(`Comprobaciones: ${p.checks.map((c) => `${c.nombre} (${c.orden})`).join('; ') || 'ninguna detectada'}${p.docs.pmcJson ? ' · ya tiene pmc.json' : ''}`)
-  say(`Recursos que no se comparten: ${p.heavy.join(', ') || 'ninguno'}`)
+  say(t('Galería ({n} carpetas): {list}', { n: p.mediaDirs.length, list: p.mediaDirs.map((d) => d.slice(p.root.length + 1) || t('(raíz)')).join(', ') || t('ninguna') }))
+  say(t('Comprobaciones: {list}', { list: p.checks.map((c) => `${c.nombre} (${c.orden})`).join('; ') || t('ninguna detectada') }) + (p.docs.pmcJson ? t(' · ya tiene pmc.json') : ''))
+  say(t('Recursos que no se comparten: {list}', { list: p.heavy.join(', ') || t('ninguno') }))
   const d = p.docs
-  const missing = [!d.tasks && 'docs/TASKS.md', !d.relevo && 'docs/RELEVO.md', !d.state && 'docs/STATE.md', !d.decisions && 'docs/DECISIONS.md', !d.cadaSesion && '«Cada sesión» en CLAUDE.md', !d.pmcJson && p.checks.length && 'pmc.json', !d.skill && 'la skill .claude/skills/mission-control'].filter(Boolean)
-  say(`Coordinación: ${missing.length ? 'falta ' + missing.join(', ') : 'completa'}`)
+  const missing = [!d.tasks && 'docs/TASKS.md', !d.relevo && 'docs/RELEVO.md', !d.state && 'docs/STATE.md', !d.decisions && 'docs/DECISIONS.md', !d.cadaSesion && t('«Cada sesión» en CLAUDE.md'), !d.pmcJson && p.checks.length && 'pmc.json', !d.skill && t('la skill .claude/skills/mission-control')].filter(Boolean)
+  say(t('Coordinación: {state}', { state: missing.length ? t('falta {list}', { list: missing.join(', ') }) : t('completa') }))
   const lacking = p.agents.filter((a) => !d.agents.includes(a.name)).map((a) => `${a.name} (${a.model})`)
-  say(`Subagentes: ${d.agents.length ? 'tiene ' + d.agents.join(', ') : 'ninguno'}${lacking.length ? '; le convienen ' + lacking.join(', ') : ''}`)
-  say(`Skills instaladas que le sirven: ${p.skills.join(', ') || 'ninguna'}`)
-  if (missing.length || lacking.length) say('Para crear lo que falta (sin tocar lo que ya hay): pmc preparar')
+  say(t('Subagentes: {state}', { state: d.agents.length ? t('tiene {list}', { list: d.agents.join(', ') }) : t('ninguno') }) + (lacking.length ? t('; le convienen {list}', { list: lacking.join(', ') }) : ''))
+  say(t('Skills instaladas que le sirven: {list}', { list: p.skills.join(', ') || t('ninguna') }))
+  if (missing.length || lacking.length) say(t('Para crear lo que falta (sin tocar lo que ya hay): pmc preparar'))
 }
 
 /**
@@ -314,8 +335,9 @@ async function profileCmd(cmd: string, args: string[]): Promise<void> {
  */
 async function canStart(account?: string, projectId?: string): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
+  await loadLang()
   try {
-    if (!account || !projectId) { say('Uso: pmc puede-arrancar <cuenta> <proyecto>'); process.exit(2) }
+    if (!account || !projectId) { say(t('Uso: pmc puede-arrancar <cuenta> <proyecto>')); process.exit(2) }
     const { decideLaunch, workingMap } = await import('../core/dispatch')
     const { listAgents, toLiveSession } = await import('../core/sessions')
     const { isSessionWorking } = await import('../core/working')
@@ -324,7 +346,7 @@ async function canStart(account?: string, projectId?: string): Promise<void> {
     let max = 1
     try { const ui = JSON.parse((db.prepare("SELECT value FROM settings WHERE key = 'ui'").get() as any)?.value ?? '{}'); status = ui.accountStatus ?? {}; max = Math.max(1, Number(ui.maxFronts) || 1) } catch { /* defaults */ }
     const acc = configuredAccounts().find((a) => a.id === account)
-    if (!acc) { say(`No conozco la cuenta ${account}.`); process.exit(1) }
+    if (!acc) { say(t('No conozco la cuenta {account}.', { account })); process.exit(1) }
     const rows = await listAgents(acc)
     const windows = rows.map(toLiveSession).filter((x) => x.pid || isSessionWorking(x)).map((x) => ({
       account: account as AccountId, sessionId: x.sessionId, pid: x.kind === 'background' ? undefined : x.pid, projectId: projectOf(x.cwd)?.id, working: isSessionWorking(x)
@@ -339,17 +361,17 @@ async function canStart(account?: string, projectId?: string): Promise<void> {
     try {
       const tf = JSON.parse(readFileSync(join(paths.root(), 'turns.json'), 'utf8')) as TurnFile
       const p = tf.projects.find((x) => x.id === projectId)
-      const t = p ? readTurn(account, p.roots[0]) : undefined
-      if (t?.inWheel && !t.mine && t.holder) { say(`Mission Control: este arranque no abre nada: en la rueda de relevos de ${t.project} tiene el turno Claude ${t.holder.slice(6)}.`); process.exit(1) }
+      const wt = p ? readTurn(account, p.roots[0]) : undefined
+      if (wt?.inWheel && !wt.mine && wt.holder) { say(t('Mission Control: este arranque no abre nada: en la rueda de relevos de {project} tiene el turno Claude {n}.', { project: wt.project, n: wt.holder.slice(6) })); process.exit(1) }
     } catch { /* no wheel known */ }
     const d = decideLaunch({ account: account as AccountId, projectId, reason: 'arranque' }, { windows, status, workingOn: workingMap(windows), maxPerProject: max, lastOpened: {}, now: Date.now() })
     if (d.action === 'abrir') process.exit(0)
-    say(`Mission Control: este arranque programado no abre nada. ${d.why}.`)
-    appendActivity(account, { at: Date.now(), event: 'arranque', text: `Arranque programado sin abrir: ${d.why}` })
+    say(t('Mission Control: este arranque programado no abre nada. {why}.', { why: d.why }))
+    appendActivity(account, { at: Date.now(), event: 'arranque', text: t('Arranque programado sin abrir: {why}', { why: d.why }) })
     process.exit(1)
   } catch (e) {
     // If the check itself fails, the start goes ahead as before rather than losing the work.
-    say(`Mission Control: no se pudo comprobar (${(e as Error).message}); arranca igualmente.`)
+    say(t('Mission Control: no se pudo comprobar ({error}); arranca igualmente.', { error: (e as Error).message }))
     process.exit(0)
   }
 }
@@ -358,15 +380,16 @@ async function canStart(account?: string, projectId?: string): Promise<void> {
  * pmc turno [cuenta] [--cwd carpeta]: whose turn it is in the relay wheel of the project of that folder. Exit 0 when this
  * account may work there (its turn, or no wheel), 1 when it must wait. The wake hook of a project asks before waking.
  */
-function turnCmd(args: string[]): void {
+async function turnCmd(args: string[]): Promise<void> {
+  await loadLang()
   const i = args.indexOf('--cwd')
   const cwd = i >= 0 ? args.splice(i, 2)[1] : process.cwd()
   const account = args.find((a) => /^claude\d{1,2}$/.test(a)) ?? accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR)
-  const t = readTurn(account, cwd)
-  if (!t.inWheel) { process.stdout.write(`${account}: esta carpeta no tiene una rueda de relevos encendida con esta cuenta; puede trabajar.\n`); process.exit(0) }
-  const order = t.members.map((m) => 'Claude ' + m.slice(6)).join(' → ')
-  if (t.mine) { process.stdout.write(`${account}: tiene el turno en ${t.project} (${order}).\n`); process.exit(0) }
-  process.stdout.write(`${account}: espera su turno en ${t.project}; lo tiene Claude ${t.holder?.slice(6)} (${order}).\n`)
+  const wt = readTurn(account, cwd)
+  if (!wt.inWheel) { process.stdout.write(t('{account}: esta carpeta no tiene una rueda de relevos encendida con esta cuenta; puede trabajar.', { account }) + '\n'); process.exit(0) }
+  const order = wt.members.map((m) => 'Claude ' + m.slice(6)).join(' → ')
+  if (wt.mine) { process.stdout.write(t('{account}: tiene el turno en {project} ({order}).', { account, project: wt.project, order }) + '\n'); process.exit(0) }
+  process.stdout.write(t('{account}: espera su turno en {project}; lo tiene Claude {n} ({order}).', { account, project: wt.project, n: wt.holder?.slice(6), order }) + '\n')
   process.exit(1)
 }
 
@@ -386,7 +409,9 @@ async function skillsWithoutEs(projects: { id: string; root: string; copies: { p
   try { cache = JSON.parse(readFileSync(join(paths.root(), 'skills-search.json'), 'utf8')) } catch { /* no search yet */ }
   const todo = new Map<string, string>()
   for (const s of installed) { const n = s.name.replace(/^.*:/, ''); if (s.description && !known[n]) todo.set(n, s.description) }
-  for (const c of Object.values(cache)) for (const f of c.found ?? []) if (f.description && !known[f.skill]) todo.set(f.skill, f.description)
+  // Saved without its source («stitch::react-native» as «react-native», as the Skills screen reads it): looked up the same,
+  // or the suggested ones from a collection stayed on the list for good (14-11 17:12).
+  for (const c of Object.values(cache)) for (const f of c.found ?? []) if (f.description && !known[f.skill.replace(/^.*:/, '')]) todo.set(f.skill, f.description)
   return todo
 }
 
@@ -398,7 +423,8 @@ async function skillsEsCmd(args: string[]): Promise<void> {
   if (args.length >= 2) {
     es[args[0].replace(/^.*:/, '')] = args.slice(1).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300)
     atomicWrite(file, JSON.stringify(es, null, 1))
-    say(`Guardada la descripción de ${args[0]}.`)
+    await loadLang()
+    say(t('Guardada la descripción de {skill}.', { skill: args[0] }))
     return
   }
   const { db } = await openShared()
@@ -406,10 +432,10 @@ async function skillsEsCmd(args: string[]): Promise<void> {
   const projects = loadProjects(db)
   db.close()
   const todo = await skillsWithoutEs(projects, es)
-  if (!todo.size) { say('Todas las skills tienen ya su descripción en español.'); return }
-  say(`Skills sin descripción en español (${todo.size}):`)
+  if (!todo.size) { say(t('Todas las skills tienen ya su descripción en español.')); return }
+  say(t('Skills sin descripción en español ({n}):', { n: todo.size }))
   for (const [n, d] of [...todo].slice(0, 80)) say(`- ${n}: ${d.slice(0, 220)}`)
-  say('Para cada una, una frase en español sencilla, para alguien que no programa (qué hace y cuándo sirve, 160 caracteres como mucho): pmc skills-es <nombre> "texto".')
+  say(t('Para cada una, una frase en español sencilla, para alguien que no programa (qué hace y cuándo sirve, 160 caracteres como mucho): pmc skills-es <nombre> "texto".'))
 }
 
 /**
@@ -420,18 +446,19 @@ async function moveSkillsCmd(cmd: string, args: string[]): Promise<void> {
   const say = (...l: string[]) => process.stdout.write(l.join('\n') + '\n')
   const { takeSkillToProject, returnSkill, gitExcludeOf } = await import('../core/skillmove')
   const { homedir } = await import('node:os')
+  await loadLang()
   if (cmd === 'devolver-skills') {
-    if (!args.length) { say('Uso: pmc devolver-skills <skill> [<skill>…]'); process.exitCode = 2; return }
-    for (const name of args) { try { const m = returnSkill(name); say(`Devuelta a las cuentas: ${name} (quitada de ${m.placed.length} copias de ${m.projectId})`) } catch (e) { say(`${name}: ${(e as Error).message}`); process.exitCode = 1 } }
+    if (!args.length) { say(t('Uso: pmc devolver-skills <skill> [<skill>…]')); process.exitCode = 2; return }
+    for (const name of args) { try { const m = returnSkill(name); say(t('Devuelta a las cuentas: {name} (quitada de {n} copias de {project})', { name, n: m.placed.length, project: m.projectId })) } catch (e) { say(`${name}: ${(e as Error).message}`); process.exitCode = 1 } }
     return
   }
   const [which, ...names] = args
-  if (!which || !names.length) { say('Uso: pmc llevar-skills <proyecto> <skill> [<skill>…]'); process.exitCode = 2; return }
+  if (!which || !names.length) { say(t('Uso: pmc llevar-skills <proyecto> <skill> [<skill>…]')); process.exitCode = 2; return }
   const { db } = await openShared()
   const { loadProjects } = await import('../core/projects')
   const low = which.toLowerCase()
   const project = loadProjects(db).find((p) => p.id.toLowerCase() === low || p.name.toLowerCase() === low)
-  if (!project) { say(`No hay ningún proyecto «${which}» en Mission Control.`); process.exitCode = 2; return }
+  if (!project) { say(t('No hay ningún proyecto «{name}» en Mission Control.', { name: which })); process.exitCode = 2; return }
   let accounts: { configDir?: string }[] = []
   try { accounts = JSON.parse(readFileSync(join(paths.root(), 'accounts.json'), 'utf8')) } catch { /* only the default one */ }
   const skillDirs = [...new Set([...accounts.map((a) => a.configDir || join(homedir(), '.claude')), join(homedir(), '.claude')].map((d) => join(d, 'skills')))]
@@ -439,7 +466,7 @@ async function moveSkillsCmd(cmd: string, args: string[]): Promise<void> {
   for (const name of names) {
     try {
       const m = takeSkillToProject({ name, projectId: project.id, accountSkillDirs: skillDirs, copies, gitExclude: gitExcludeOf(project.root) })
-      say(`Llevada a ${project.name}: ${name} (en ${m.placed.length} copias; apartada en ${m.aside.length} carpeta${m.aside.length === 1 ? '' : 's'} de cuentas)`)
+      say(t('Llevada a {project}: {name} (en {n} copias; apartada en {folders})', { project: project.name, name, n: m.placed.length, folders: tn(m.aside.length, '{n} carpeta de cuentas', '{n} carpetas de cuentas') }))
     } catch (e) { say(`${name}: ${(e as Error).message}`); process.exitCode = 1 }
   }
 }
@@ -449,11 +476,11 @@ async function rememberCmd(args: string[]): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
   const kind = args.includes('--regla') ? 'regla' : args.includes('--preferencia') ? 'preferencia' : 'dato'
   const text = args.filter((a) => !a.startsWith('--')).join(' ').trim()
-  if (!text) { say('Uso: pmc recuerda "lo que no se debe olvidar" [--regla|--preferencia|--dato] [--todos]'); process.exitCode = 2; return }
+  if (!text) { await loadLang(); say(t('Uso: pmc recuerda "lo que no se debe olvidar" [--regla|--preferencia|--dato] [--todos]')); process.exitCode = 2; return }
   const { db, projectOf } = await openShared()
   try {
     const project = projectOf(process.cwd())
-    if (!project) { say('Esta carpeta no pertenece a ningún proyecto de Mission Control.'); process.exitCode = 2; return }
+    if (!project) { say(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.')); process.exitCode = 2; return }
     const { addMemory, listMemories } = await import('../core/memory')
     const { conflictsOf } = await import('../core/contradict')
     const clashes = conflictsOf(text, listMemories(db, project.id))
@@ -461,11 +488,11 @@ async function rememberCmd(args: string[]): Promise<void> {
     const all = args.includes('--todos')
     const { ALL_PROJECTS } = await import('../core/memory')
     const m = addMemory(db, { projectId: all ? ALL_PROJECTS : project.id, kind: kind as any, text, source: accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR) })
-    say(`Guardado en la memoria ${all ? 'de todos los proyectos' : 'de ' + project.name} (${m.kind}): lo leerán todas las sesiones al empezar y tras compactar.`)
+    say(t('Guardado en la memoria {where} ({kind}): lo leerán todas las sesiones al empezar y tras compactar.', { where: all ? t('de todos los proyectos') : t('de {project}', { project: project.name }), kind: m.kind }))
     // 14-11: a long one was kept cut without a word; now it is said, so it is written shorter.
-    if (text.replace(/\s+/g, ' ').trim().length > m.text.length) say(`Ojo: era demasiado largo y se ha guardado recortado («…${m.text.slice(-60)}»). Escríbelo en menos de 400 caracteres: lo leen todas las sesiones al empezar.`)
+    if (text.replace(/\s+/g, ' ').trim().length > m.text.length) say(t('Ojo: era demasiado largo y se ha guardado recortado («…{end}»). Escríbelo en menos de 400 caracteres: lo leen todas las sesiones al empezar.', { end: m.text.slice(-60) }))
     // EV92: a memory that says the opposite of another one: the newer goes in at the start; the user decides which holds.
-    if (clashes.length) say(`Ojo: parece decir lo contrario de ${clashes.map((c) => `«${c.text}»`).join(' y ')}. Al empezar las sesiones solo irá la nueva. Si no lo pidió así el usuario, pregúntale cuál vale con pmc decide.`)
+    if (clashes.length) say(t('Ojo: parece decir lo contrario de {list}. Al empezar las sesiones solo irá la nueva. Si no lo pidió así el usuario, pregúntale cuál vale con pmc decide.', { list: clashes.map((c) => `«${c.text}»`).join(t(' y ')) }))
   } finally { db.close() }
 }
 
@@ -474,15 +501,15 @@ async function courseCmd(): Promise<void> {
   const { db, projectOf } = await openShared()
   try {
     const project = projectOf(process.cwd())
-    if (!project) { process.stdout.write('Esta carpeta no pertenece a ningún proyecto de Mission Control.\n'); process.exitCode = 2; return }
+    if (!project) { process.stdout.write(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.') + '\n'); process.exitCode = 2; return }
     const { listDecisions } = await import('../core/decisions')
     const { listMemories } = await import('../core/memory')
     const { courseText } = await import('../core/course')
     const decisions = listDecisions(db, project.id).map((d) => ({ title: d.title, choice: d.options.find((o) => o.id === d.choice)?.label ?? d.choice, note: d.note, status: d.status, at: d.decidedAt ?? d.updatedAt }))
     const notes = (db.prepare("SELECT body, status, created_at AS at FROM comments WHERE project_id = ? ORDER BY created_at DESC LIMIT 15").all(project.id) as { body: string; status: string; at: number }[])
     const discarded = [
-      ...listDecisions(db, project.id).filter((d) => d.status === 'descartada').map((d) => `${d.title} (pregunta descartada)`),
-      ...(db.prepare("SELECT COALESCE(ext_id, '') AS id, title FROM tasks WHERE project_id = ? AND gone = 1 ORDER BY updated_at DESC LIMIT 10").all(project.id) as { id: string; title: string }[]).map((t) => `${t.id ? t.id + ' · ' : ''}${t.title} (tarea quitada de TASKS)`)
+      ...listDecisions(db, project.id).filter((d) => d.status === 'descartada').map((d) => `${d.title} ${t('(pregunta descartada)')}`),
+      ...(db.prepare("SELECT COALESCE(ext_id, '') AS id, title FROM tasks WHERE project_id = ? AND gone = 1 ORDER BY updated_at DESC LIMIT 10").all(project.id) as { id: string; title: string }[]).map((x) => `${x.id ? x.id + ' · ' : ''}${x.title} ${t('(tarea quitada de TASKS)')}`)
     ]
     process.stdout.write(courseText({ project: project.name, decisions, memories: listMemories(db, project.id), notes, discarded }) + '\n')
     try { writeFileSync(join(paths.root(), `rumbo-${project.id}.txt`), String(Date.now())) } catch { /* next time */ }
@@ -498,7 +525,6 @@ async function openShared() {
   const db = openDb()
   // EV164: what the Claudes are told goes in the app's language (Ajustes › Idioma; none chosen: the system's, as the app).
   const { getSetting } = await import('../core/db')
-  const { pickLang, setLang } = await import('../core/i18n')
   setLang(pickLang(getSetting<{ lang?: string }>(db, 'ui', {}).lang, Intl.DateTimeFormat().resolvedOptions().locale))
   return { db, coord, projectOf: (cwd: string) => projectForPath(loadProjects(db), cwd).project }
 }
@@ -598,47 +624,47 @@ async function coordinate(event: string, account: AccountId, cwd?: string, data?
     const project = cwd ? projectOf(cwd) : undefined
     if (!project) return
     let text = coord.sessionContext(db, project, account)
-    const t = readTurn(account, cwd)
-    if (t.inWheel && t.holder) {
-      const line = t.mine
-        ? `Mission Control · rueda de relevos de ${t.project} (${t.members.map((m) => 'Claude ' + m.slice(6)).join(' → ')}): tienes el turno. Trabaja hasta quedarte sin uso; entonces seguirá la siguiente de la rueda con lo que dejes en el relevo.`
-        : waitTurnText(account, t.holder, t.project)
+    const wt = readTurn(account, cwd)
+    if (wt.inWheel && wt.holder) {
+      const line = wt.mine
+        ? t('Mission Control · rueda de relevos de {project} ({order}): tienes el turno. Trabaja hasta quedarte sin uso; entonces seguirá la siguiente de la rueda con lo que dejes en el relevo.', { project: wt.project, order: wt.members.map((m) => 'Claude ' + m.slice(6)).join(' → ') })
+        : waitTurnText(account, wt.holder, wt.project)
       text = text ? `${line}\n${text}` : line
     }
     // EV81: skills still in English only, for the one who works here now (the user reads Skills in Spanish).
-    if (!t.inWheel || t.mine) {
+    if (!wt.inWheel || wt.mine) {
       try {
         const { loadProjects } = await import('../core/projects')
         const n = (await skillsWithoutEs(loadProjects(db))).size
-        if (n) text = `${text ? text + '\n' : ''}Hay ${n} skill${n === 1 ? '' : 's'} sin explicar en español: al cerrar un bloque, ${'pmc'} skills-es y escribe una frase sencilla por cada una (pmc skills-es <nombre> "texto").`
+        if (n) text = `${text ? text + '\n' : ''}${tn(n, 'Hay {n} skill sin explicar en español: al cerrar un bloque, pmc skills-es y escribe una frase sencilla por cada una (pmc skills-es <nombre> "texto").', 'Hay {n} skills sin explicar en español: al cerrar un bloque, pmc skills-es y escribe una frase sencilla por cada una (pmc skills-es <nombre> "texto").')}`
       } catch { /* the package goes without it */ }
     }
     // EV64: what the user asked and nobody wrote down, for whoever works here (the app writes requests.json every 10 min).
-    if (!t.inWheel || t.mine) {
+    if (!wt.inWheel || wt.mine) {
       try {
         const req = (JSON.parse(readFileSync(join(paths.root(), 'requests.json'), 'utf8')).projects?.[project.id] ?? []) as { text: string }[]
-        if (req.length) text = `${text ? text + '\n' : ''}El usuario pidió y nadie lo apuntó (Memoria › Lo que has pedido): ${req.slice(0, 3).map((r) => `«${r.text}»`).join('; ')}${req.length > 3 ? ` y ${req.length - 3} más` : ''}. Al cerrar un bloque, apunta en TASKS lo que siga pendiente; lo que ya esté hecho (aquí o en otra carpeta), ciérralo con pmc pedido-hecho "un trozo de su texto".`
+        if (req.length) text = `${text ? text + '\n' : ''}${t('El usuario pidió y nadie lo apuntó (Memoria › Lo que has pedido): {list}{more}. Al cerrar un bloque, apunta en TASKS lo que siga pendiente; lo que ya esté hecho (aquí o en otra carpeta), ciérralo con pmc pedido-hecho "un trozo de su texto".', { list: req.slice(0, 3).map((r) => `«${r.text}»`).join('; '), more: req.length > 3 ? t(' y {n} más', { n: req.length - 3 }) : '' })}`
       } catch { /* no list yet */ }
     }
     // EV102: once a week per project, the one who works here reviews the project's course (pmc rumbo writes the date).
-    if (!t.inWheel || t.mine) {
+    if (!wt.inWheel || wt.mine) {
       try {
         const mark = join(paths.root(), `rumbo-${project.id}.txt`)
         let last = 0
         try { last = Number(readFileSync(mark, 'utf8')) || 0 } catch { /* never */ }
-        if (Date.now() - last > 7 * 86400_000) text = `${text ? text + '\n' : ''}Hace más de una semana sin repasar el rumbo de ${project.name}: al cerrar un bloque, pmc rumbo y sigue sus pasos (quitar solo lo que el usuario dijo que ya no quiere; lo dudoso, pregúntalo).`
+        if (Date.now() - last > 7 * 86400_000) text = `${text ? text + '\n' : ''}${t('Hace más de una semana sin repasar el rumbo de {project}: al cerrar un bloque, pmc rumbo y sigue sus pasos (quitar solo lo que el usuario dijo que ya no quiere; lo dudoso, pregúntalo).', { project: project.name })}`
       } catch { /* the package goes without it */ }
     }
     // EV109: the project's card. Missing: the one who works here makes it; with gaps: fills them; whole: one pointer.
-    if (!t.inWheel || t.mine) {
+    if (!wt.inWheel || wt.mine) {
       try {
         const card = join(cwd!, 'docs', 'PROYECTO.md')
         const body = existsSync(card) ? readFileSync(card, 'utf8') : ''
         const line = !body
-          ? `${project.name} no tiene ficha (docs/PROYECTO.md: qué es, dónde está cada cosa, cómo se comprueba y cómo trabajarlo): créala con pmc preparar y complétala leyendo el proyecto al cerrar tu primer bloque.`
-          : body.includes('(por completar)')
-            ? `La ficha de ${project.name} (docs/PROYECTO.md) tiene huecos «(por completar)»: al cerrar tu primer bloque, rellénalos leyendo el proyecto (10 min como mucho).`
-            : `Si no conoces ${project.name}, su ficha es docs/PROYECTO.md (una página).`
+          ? t('{project} no tiene ficha (docs/PROYECTO.md: qué es, dónde está cada cosa, cómo se comprueba y cómo trabajarlo): créala con pmc preparar y complétala leyendo el proyecto al cerrar tu primer bloque.', { project: project.name })
+          : TO_FILL_RE.test(body)
+            ? t('La ficha de {project} (docs/PROYECTO.md) tiene huecos «(por completar)»: al cerrar tu primer bloque, rellénalos leyendo el proyecto (10 min como mucho).', { project: project.name })
+            : t('Si no conoces {project}, su ficha es docs/PROYECTO.md (una página).', { project: project.name })
         text = `${text ? text + '\n' : ''}${line}`
       } catch { /* the package goes without it */ }
     }
@@ -656,16 +682,17 @@ async function claims(cmd: string, args: string[]): Promise<void> {
   const { db, coord, projectOf } = await openShared()
   try {
     const project = projectOf(process.cwd())
-    if (!project) { say('Esta carpeta no pertenece a ningún proyecto de Mission Control.'); process.exitCode = 2; return }
+    if (!project) { say(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.')); process.exitCode = 2; return }
+    const hm = (ms: number) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
     if (cmd === 'claims') {
       const list = coord.listClaims(db, project.id)
-      if (!list.length) say('Ninguna tarea reservada.')
-      for (const c of list) say(`${c.taskKey}\t${c.account}\t${c.abandoned ? 'CADUCADA (abandonada)' : 'hasta ' + new Date(c.expiresAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}${c.note ? '\t' + c.note : ''}`)
+      if (!list.length) say(t('Ninguna tarea reservada.'))
+      for (const c of list) say(`${c.taskKey}\t${c.account}\t${c.abandoned ? t('CADUCADA (abandonada)') : t('hasta {time}', { time: hm(c.expiresAt) })}${c.note ? '\t' + c.note : ''}`)
       return
     }
     if (cmd === 'relevo') {
       const from = args[0] as AccountId
-      if (!/^claude\d{1,2}$/.test(from ?? '') || from === account) { say('Uso: pmc relevo <claudeN> (la cuenta que no puede seguir)'); process.exitCode = 2; return }
+      if (!/^claude\d{1,2}$/.test(from ?? '') || from === account) { say(t('Uso: pmc relevo <claudeN> (la cuenta que no puede seguir)')); process.exitCode = 2; return }
       const { readText } = await import('../core/projects')
       const { parseRelevo } = await import('../core/parse/relevo')
       const { execFileSync } = await import('node:child_process')
@@ -686,9 +713,9 @@ async function claims(cmd: string, args: string[]): Promise<void> {
       })
       let fromState: string | undefined, backAt: number | undefined
       try {
-        const t = JSON.parse(readFileSync(join(paths.root(), 'team.json'), 'utf8')).team.find((x: any) => x.id === from)
-        fromState = t?.state === 'sin-uso' ? 'sin uso' : t?.state
-        backAt = t?.backAt
+        const tm = JSON.parse(readFileSync(join(paths.root(), 'team.json'), 'utf8')).team.find((x: any) => x.id === from)
+        fromState = tm?.state === 'sin-uso' ? t('sin uso') : tm?.state
+        backAt = tm?.backAt
       } catch { /* app not running */ }
       say(coord.takeOver(db, { project, from, to: account, enCurso: [...new Set(enCurso)], heartbeat, copies, fromState, backAt }))
       return
@@ -713,8 +740,8 @@ async function claims(cmd: string, args: string[]): Promise<void> {
       const b = res.detectBusy()
       const busy = [...res.heldResources(db).map((h) => h.name), ...(b.playing || (b.userApps.length && !res.fullPowerOn(db)) ? ['unity', 'gpu', 'build'] : [])]
       const plan = planFronts({ tasks: free, accounts, freeCopies: project.copies.map((c) => c.label), busy, max: Number(ui.maxFronts) || 3 })
-      for (const f of plan.fronts) say(`${f.account}\t${f.task}\ten ${f.copy}${f.model ? `\t[${f.model}]` : ''}${f.needs.length ? `\tnecesita ${f.needs.join(', ')}` : ''}`)
-      say(`${plan.fronts.length ? 'Reparto propuesto' : 'Sin reparto'}: ${plan.why}.${plan.queue.length ? ` En cola de relevo: ${plan.queue.join(', ')}.` : ''}`)
+      for (const f of plan.fronts) say(`${f.account}\t${f.task}\t${t('en {copy}', { copy: f.copy })}${f.model ? `\t[${f.model}]` : ''}${f.needs.length ? `\t${t('necesita {list}', { list: f.needs.join(', ') })}` : ''}`)
+      say(`${plan.fronts.length ? t('Reparto propuesto') : t('Sin reparto')}: ${plan.why}.${plan.queue.length ? ' ' + t('En cola de relevo: {list}.', { list: plan.queue.join(', ') }) : ''}`)
       return
     }
     if (cmd === 'verifica') {
@@ -726,15 +753,15 @@ async function claims(cmd: string, args: string[]): Promise<void> {
       const light = li >= 0 ? Boolean(args.splice(li, 1)) : false
       const root = v.copyRootFor(project, process.cwd())
       let checks: import('../core/verify').Check[] | undefined
-      try { checks = v.readChecks(root) } catch (e) { say(`pmc.json no se puede leer: ${(e as Error).message}`); process.exitCode = 2; return }
+      try { checks = v.readChecks(root) } catch (e) { say(t('pmc.json no se puede leer: {error}', { error: (e as Error).message })); process.exitCode = 2; return }
       if (light && checks) checks = checks.filter((c) => !c.recurso && !c.pesada)
-      if (!checks?.length) { say(`Este proyecto no ha declarado comprobaciones (falta "verifica" en ${join(root, 'pmc.json')}). Ejemplo: { "verifica": [ { "nombre": "pruebas", "orden": "npm test" } ] }. Sin ellas, di en la entrega qué has comprobado tú y cómo.`); process.exitCode = 2; return }
+      if (!checks?.length) { say(t('Este proyecto no ha declarado comprobaciones (falta "verifica" en {file}). Ejemplo: { "verifica": [ { "nombre": "pruebas", "orden": "npm test" } ] }. Sin ellas, di en la entrega qué has comprobado tú y cómo.', { file: join(root, 'pmc.json') })); process.exitCode = 2; return }
       const key = args[0] ? coord.taskKeyFor(db, project.id, args[0]).key : undefined
       if (args[0]) {
         const { acceptanceOf } = await import('../core/acceptance')
         const { taskText } = await import('../core/brief')
         const c = acceptanceOf(taskText(db, project, args[0], Date.now(), { all: true }) ?? undefined)
-        if (c) say(`Criterio de la tarea (compruébalo además de estas pruebas): ${c}.`)
+        if (c) say(t('Criterio de la tarea (compruébalo además de estas pruebas): {criterion}.', { criterion: c }))
       }
       const res = v.runVerification(db, project, root, account, key, checks, { only })
       say(v.verificationReport(res, key ? v.failStreak(db, project.id, key) : res.outcome === 'falla' ? 1 : 0))
@@ -746,20 +773,20 @@ async function claims(cmd: string, args: string[]): Promise<void> {
       const free = args.indexOf('--soltar')
       if (free >= 0) args.splice(free, 1)
       const name = cmd === 'recurso' ? args[0] : undefined
-      if (cmd === 'recurso' && !name) { say('Uso: pmc recurso <unity|gpu|build|…> ["para qué"] · pmc recurso <nombre> --soltar · pmc recursos'); process.exitCode = 2; return }
-      if (name && free >= 0) { say(res.freeResource(db, name, account) ? `Suelto: ${name}.` : `No tenías cogido ${name}.`); return }
+      if (cmd === 'recurso' && !name) { say(t('Uso: pmc recurso <unity|gpu|build|…> ["para qué"] · pmc recurso <nombre> --soltar · pmc recursos')); process.exitCode = 2; return }
+      if (name && free >= 0) { say(res.freeResource(db, name, account) ? t('Suelto: {name}.', { name }) : t('No tenías cogido {name}.', { name })); return }
       const busy = res.detectBusy()
       if (name) {
         const r = res.holdResource(db, name, account, args.slice(1).join(' ') || undefined)
-        if (!r.ok) { say(`${name} lo tiene ${r.holder.account}${r.holder.note ? ` (${r.holder.note})` : ''} hasta las ${new Date(r.holder.expiresAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}. Sigue con algo que no lo necesite.`); process.exitCode = 1 }
-        else say(`Tuyo: ${name}. Suéltalo al acabar con pmc recurso ${name} --soltar (si no, caduca solo).`)
+        if (!r.ok) { say(t('{name} lo tiene {holder}{note} hasta las {time}. Sigue con algo que no lo necesite.', { name, holder: r.holder.account, note: r.holder.note ? ` (${r.holder.note})` : '', time: hm(r.holder.expiresAt) })); process.exitCode = 1 }
+        else say(t('Tuyo: {name}. Suéltalo al acabar con pmc recurso {name} --soltar (si no, caduca solo).', { name }))
       }
-      say(res.resourcesText(db, account, busy) || 'Nada ocupado: ni programas del usuario, ni Unity, ni la gráfica.')
+      say(res.resourcesText(db, account, busy) || t('Nada ocupado: ni programas del usuario, ni Unity, ni la gráfica.'))
       // EV112: who loads the machine now, with the Claude behind each process; before a heavy job, a warning if it is full.
       const load = res.machineLoad()
       if (load) {
         say(res.loadText(load))
-        if (name && free < 0 && (load.cpuPct >= 75 || load.freeMb / load.totalMb < 0.15)) say('El PC ya va cargado: si lo tuyo es pesado, espera a que acabe lo de arriba o haz antes algo ligero (y dilo en el relevo).')
+        if (name && free < 0 && (load.cpuPct >= 75 || load.freeMb / load.totalMb < 0.15)) say(t('El PC ya va cargado: si lo tuyo es pesado, espera a que acabe lo de arriba o haz antes algo ligero (y dilo en el relevo).'))
       }
       return
     }
@@ -772,27 +799,25 @@ async function claims(cmd: string, args: string[]): Promise<void> {
         const { hooksState } = await import('../core/integrations')
         const acc = configuredAccounts().find((a) => a.id === account)
         const stale = acc && hooksState(acc).outdated
-        say(briefText(db, project, account) + (busy ? `
-RECURSOS: ${busy}` : '') + (stale ? `
-AVISO: tu coordinación con Mission Control está desactualizada (el modo autónomo no te frena al acabar una respuesta). Díselo al usuario una vez: en Inicio › Para ti, «Actualiza la coordinación». Mientras, no termines el turno por tu cuenta: guarda y sigue.` : ''))
+        say(briefText(db, project, account) + (busy ? '\n' + t('RECURSOS: {list}', { list: busy }) : '') + (stale ? '\n' + t('AVISO: tu coordinación con Mission Control está desactualizada (el modo autónomo no te frena al acabar una respuesta). Díselo al usuario una vez: en Inicio › Para ti, «Actualiza la coordinación». Mientras, no termines el turno por tu cuenta: guarda y sigue.') : ''))
         return
       }
       // --todo: with every note of every account (by default only the newest, to spare context).
       const all = args.includes('--todo')
       const tid = args.find((a) => !a.startsWith('--'))
-      if (!tid) { say('Uso: pmc tarea <ID> [--todo]'); process.exitCode = 2; return }
+      if (!tid) { say(t('Uso: pmc tarea <ID> [--todo]')); process.exitCode = 2; return }
       const text = taskText(db, project, tid, Date.now(), { all })
-      say(text ?? `No hay ninguna tarea «${tid}» en ${project.name}.`)
+      say(text ?? t('No hay ninguna tarea «{id}» en {project}.', { id: tid, project: project.name }))
       // EV78: what «done» means for this task, said apart so it is checked before closing it.
       if (text) { const { acceptanceLine } = await import('../core/acceptance'); say(acceptanceLine(text)) }
       return
     }
     if (cmd === 'next') {
       const list = coord.nextTasks(db, project.id, account)
-      if (!list.length) { const { IDLE_IDEA } = await import('../core/brief'); say(`No queda ninguna tarea libre en docs/TASKS.md (las que esperan al usuario o un hecho real no cuentan). ${IDLE_IDEA}`); return }
-      const P = ['URGENTE', 'alta', '', 'baja']
-      for (const t of list) say(`${t.extId ?? t.key}\t${t.title}${P[t.priority] ? `\t[${P[t.priority]}]` : ''}${t.change ? `\t(el usuario pide este cambio al revisarla: ${t.change})` : ''}${t.assignedFrom ? `\t(encargo del usuario: era de ${t.assignedFrom})` : ''}${t.status === 'en-desarrollo' ? '\t(a medias)' : ''}${t.mine ? '\t(reservada por ti)' : ''}${t.model ? `\t[basta con ${t.model}]` : ''}`)
-      say('Reserva la primera que puedas hacer con pmc claim <ID>.')
+      if (!list.length) { const { idleIdea } = await import('../core/brief'); const IDLE_IDEA = idleIdea(); say(t('No queda ninguna tarea libre en docs/TASKS.md (las que esperan al usuario o un hecho real no cuentan). {idea}', { idea: IDLE_IDEA })); return }
+      const P = [t('URGENTE'), t('alta'), '', t('baja')]
+      for (const k of list) say(`${k.extId ?? k.key}\t${k.title}${P[k.priority] ? `\t[${P[k.priority]}]` : ''}${k.change ? '\t' + t('(el usuario pide este cambio al revisarla: {change})', { change: k.change }) : ''}${k.assignedFrom ? '\t' + t('(encargo del usuario: era de {from})', { from: k.assignedFrom }) : ''}${k.status === 'en-desarrollo' ? '\t' + t('(a medias)') : ''}${k.mine ? '\t' + t('(reservada por ti)') : ''}${k.model ? '\t' + t('[basta con {model}]', { model: k.model }) : ''}`)
+      say(t('Reserva la primera que puedas hacer con pmc claim <ID>.'))
       return
     }
     if (cmd === 'decide') {
@@ -812,12 +837,12 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
         else free.push(args[i])
       }
       const title = (flags.titulo?.[0] ?? free.join(' ')).trim()
-      if (!title) { say('Uso: pmc decide "título" --pregunta "…" --opcion "A: detalle" --foto "ruta::qué se ve" --audio "ruta::qué es::para qué momento" --video "ruta::…" [--contexto "…"] [--tarea ID] [--prioridad urgente|alta|normal|baja] [--clave <id>] [--otra]'); process.exitCode = 2; return }
+      if (!title) { say(t('Uso: pmc decide "título" --pregunta "…" --opcion "A: detalle" --foto "ruta::qué se ve" --audio "ruta::qué es::para qué momento" --video "ruta::…" [--contexto "…"] [--tarea ID] [--prioridad urgente|alta|normal|baja] [--clave <id>] [--otra]')); process.exitCode = 2; return }
       const prio = { urgente: 0, alta: 1, normal: 2, baja: 3 }[(flags.prioridad?.[0] ?? 'normal').toLowerCase() as 'normal'] ?? 2
       // 13-11, #140: «no entiendo bien la pregunta». A question with words he does not know is sent back to be rewritten.
       const jargon = clearAt >= 0 || flags.clara ? [] : jargonIn(title, flags.pregunta?.join(' '), flags.contexto?.join(' '), ...(flags.opcion ?? []))
       if (jargon.length) {
-        say(`No guardada: la pregunta lleva palabras que el usuario no conoce (${jargon.join(', ')}). El 13-11 contestó a una así «no entiendo muy bien esto… quiero que todo sea lo más automático e intuitivo posible». Escríbela con lo que él verá o notará (qué cambia para él, en español sencillo, sin nombres de archivos ni de código) y vuelve a lanzarla. Antes piensa si hace falta preguntar: si una opción es claramente mejor y se puede deshacer, hazla y cuéntaselo. Si la palabra es de verdad imprescindible, añade --clara.`)
+        say(t('No guardada: la pregunta lleva palabras que el usuario no conoce ({words}). El 13-11 contestó a una así «no entiendo muy bien esto… quiero que todo sea lo más automático e intuitivo posible». Escríbela con lo que él verá o notará (qué cambia para él, en español sencillo, sin nombres de archivos ni de código) y vuelve a lanzarla. Antes piensa si hace falta preguntar: si una opción es claramente mejor y se puede deshacer, hazla y cuéntaselo. Si la palabra es de verdad imprescindible, añade --clara.', { words: jargon.join(', ') }))
         process.exitCode = 2
         return
       }
@@ -831,13 +856,17 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
         askedBy: account, taskExtId: flags.tarea?.[0], priority: prio, dedupe: flags.clave?.[0],
         defaultChoice: flags.defecto?.[0], waitHours: flags.espera?.[0] ? Number(String(flags.espera[0]).replace(',', '.')) : undefined
       })
-      if (d.defaultChoice && d.waitUntil) say(`Si el usuario no contesta antes de las ${new Date(d.waitUntil).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}, se tomará «${d.options.find((o) => o.id === d.defaultChoice)?.label}» y te llegará como respuesta.`)
-      else if (d.options.length) say('Sin opción por defecto: si el usuario no está, la pregunta esperará. La próxima vez añade --defecto "A" [--espera 12] (horas).')
+      if (d.defaultChoice && d.waitUntil) say(t('Si el usuario no contesta antes de las {time}, se tomará «{choice}» y te llegará como respuesta.', { time: new Date(d.waitUntil).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }), choice: d.options.find((o) => o.id === d.defaultChoice)?.label }))
+      else if (d.options.length) say(t('Sin opción por defecto: si el usuario no está, la pregunta esperará. La próxima vez añade --defecto "A" [--espera 12] (horas).'))
       const asked = (flags.foto?.length ?? 0) + (flags.video?.length ?? 0) + (flags.audio?.length ?? 0) + (flags.archivo?.length ?? 0)
       const lost = asked - d.images.length
       const n = (k: string) => d.images.filter((m) => m.kind === k).length
-      const what = [n('image') && `${n('image')} foto${n('image') > 1 ? 's' : ''}`, n('audio') && `${n('audio')} sonido${n('audio') > 1 ? 's' : ''}`, n('video') && `${n('video')} vídeo${n('video') > 1 ? 's' : ''}`].filter(Boolean).join(', ')
-      say(`Pregunta guardada (#${d.id}) en Mission Control › Decidir${what ? ` con ${what}` : ' SIN NADA QUE VER NI OÍR: si preguntas por algo concreto, añade fotos (--foto) o sonidos (--audio)'}${lost > 0 ? ` (${lost} no se encontraron)` : ''}. No esperes: sigue con otra tarea; la respuesta del usuario te llegará sola.`)
+      const what = [n('image') && tn(n('image'), '{n} foto', '{n} fotos'), n('audio') && tn(n('audio'), '{n} sonido', '{n} sonidos'), n('video') && tn(n('video'), '{n} vídeo', '{n} vídeos')].filter(Boolean).join(', ')
+      say(t('Pregunta guardada (#{id}) en Mission Control › Decidir{what}{lost}. No esperes: sigue con otra tarea; la respuesta del usuario te llegará sola.', {
+        id: d.id,
+        what: what ? t(' con {list}', { list: what }) : t(' SIN NADA QUE VER NI OÍR: si preguntas por algo concreto, añade fotos (--foto) o sonidos (--audio)'),
+        lost: lost > 0 ? t(' ({n} no se encontraron)', { n: lost }) : ''
+      }))
       return
     }
     if (cmd === 'entrega' || cmd === 'trabajo') {
@@ -857,21 +886,21 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       if (cmd === 'trabajo') {
         const { addJob } = await import('../core/jobs')
         const title = free.join(' ').trim()
-        if (!title) { say('Uso: pmc trabajo "título" --log ruta --salida ruta [--pid N]'); process.exitCode = 2; return }
+        if (!title) { say(t('Uso: pmc trabajo "título" --log ruta --salida ruta [--pid N]')); process.exitCode = 2; return }
         const full = (x?: string) => (x ? resolve(process.cwd(), x) : undefined)
         addJob({ title, projectId: project.id, account, log: full(flags.log?.[0]), output: full(flags.salida?.[0]), pid: flags.pid?.[0] ? Number(flags.pid[0]) : undefined })
-        say(`Mission Control enseña «${title}» en Inicio: cuánto queda, y si se corta.`)
+        say(t('Mission Control enseña «{title}» en Inicio: cuánto queda, y si se corta.', { title }))
         return
       }
       const { setTaskCard } = await import('../core/cards')
       const id = free[0]
-      if (!id) { say('Uso: pmc entrega <ID> --que "qué es, en una frase sin tecnicismos" --mirar "qué tiene que mirar" --foto "ruta::qué se ve" --audio "ruta::qué es" --video "ruta::qué se ve" [--clara]'); process.exitCode = 2; return }
+      if (!id) { say(t('Uso: pmc entrega <ID> --que "qué es, en una frase sin tecnicismos" --mirar "qué tiene que mirar" --foto "ruta::qué se ve" --audio "ruta::qué es" --video "ruta::qué se ve" [--clara]')); process.exitCode = 2; return }
       // EV122: what the user reads in Revisar, in his words, checked before it is saved (14-11: saved with «API», then redone).
       if (!clear) {
         try {
           const { jargonIn } = await import('../core/decisions')
           const jargon = jargonIn(flags.que?.join(' '), flags.mirar?.join(' '))
-          if (jargon.length) { say(`No guardada: lo que el usuario leerá en Revisar lleva palabras que no conoce (${jargon.join(', ')}). Escribe --que y --mirar en español sencillo (qué ha cambiado para él y qué tiene que mirar o probar) y vuelve a lanzarla; si la palabra es imprescindible, añade --clara.`); process.exitCode = 2; return }
+          if (jargon.length) { say(t('No guardada: lo que el usuario leerá en Revisar lleva palabras que no conoce ({words}). Escribe --que y --mirar en español sencillo (qué ha cambiado para él y qué tiene que mirar o probar) y vuelve a lanzarla; si la palabra es imprescindible, añade --clara.', { words: jargon.join(', ') })); process.exitCode = 2; return }
         } catch { /* a reminder only */ }
       }
       const files = [...(flags.foto ?? []), ...(flags.video ?? []), ...(flags.audio ?? [])].map((f) => { const m = parseMediaArg(f); return { ...m, path: resolve(process.cwd(), m.path) } })
@@ -880,7 +909,7 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       // EV117: a delivery leaves a line in the history (Cronología) and can be counted, with or without something to see.
       try {
         const { addEvent } = await import('../core/db')
-        addEvent(db, { projectId: project.id, at: Date.now(), account, kind: 'entrega', title: `Entrega de ${id}${flags.que?.length ? `: ${flags.que.join(' ').slice(0, 140)}` : ''}`, detail: c.media.length ? `${c.media.length} archivo${c.media.length === 1 ? '' : 's'} para ver u oír` : 'sin nada que ver ni oír', source: 'pmc entrega', ref: id })
+        addEvent(db, { projectId: project.id, at: Date.now(), account, kind: 'entrega', title: t('Entrega de {id}', { id }) + (flags.que?.length ? `: ${flags.que.join(' ').slice(0, 140)}` : ''), detail: c.media.length ? tn(c.media.length, '{n} archivo para ver u oír', '{n} archivos para ver u oír') : t('sin nada que ver ni oír'), source: 'pmc entrega', ref: id })
       } catch { /* the card is saved anyway */ }
       const { finishChange } = await import('../core/changes')
       const closed = finishChange(db, project.id, id)
@@ -890,9 +919,9 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
         let declared = false
         try { declared = Boolean(v.readChecks(root)?.length) } catch { /* said by pmc verifica */ }
         const last = v.lastVerification(db, project.id, coord.taskKeyFor(db, project.id, id).key)
-        if (declared && (!last || last.outcome !== 'bien')) say(last ? `AVISO: ${v.verificationLine(last)} El usuario lo verá así en la tarea.` : `AVISO: ${id} se entrega sin verificar. Pasa antes pmc verifica ${id}; si ahora no se puede, dilo en el relevo.`)
+        if (declared && (!last || last.outcome !== 'bien')) say(last ? t('AVISO: {line} El usuario lo verá así en la tarea.', { line: v.verificationLine(last) }) : t('AVISO: {id} se entrega sin verificar. Pasa antes pmc verifica {id}; si ahora no se puede, dilo en el relevo.', { id }))
       }
-      say(`Ficha de ${id} guardada: ${c.media.length} archivo${c.media.length === 1 ? '' : 's'}${files.length && lost > 0 ? ` (${lost} no se encontraron)` : ''}.${c.media.length ? '' : ' SIN NADA QUE VER NI OÍR: si se ve o se oye, añade --foto o --audio.'}${closed ? ' Los cambios que pidió el usuario quedan hechos: vuelve a «Para revisar».' : ''}`)
+      say(t('Ficha de {id} guardada: {files}{lost}.', { id, files: tn(c.media.length, '{n} archivo', '{n} archivos'), lost: files.length && lost > 0 ? t(' ({n} no se encontraron)', { n: lost }) : '' }) + (c.media.length ? '' : t(' SIN NADA QUE VER NI OÍR: si se ve o se oye, añade --foto o --audio.')) + (closed ? t(' Los cambios que pidió el usuario quedan hechos: vuelve a «Para revisar».') : ''))
       return
     }
     if (cmd === 'corregido') {
@@ -901,14 +930,14 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       const flags: Record<string, string[]> = {}
       const free: string[] = []
       for (let i = 1; i < args.length; i++) { const m = args[i].match(/^--(\w+)$/); if (m && i + 1 < args.length) (flags[m[1]] ??= []).push(args[++i]); else free.push(args[i]) }
-      if (!Number.isInteger(n) || n <= 0) { say('Uso: pmc corregido <n.º de la nota> "qué has cambiado" [--foto "ruta::qué se ve"]'); process.exitCode = 2; return }
+      if (!Number.isInteger(n) || n <= 0) { say(t('Uso: pmc corregido <n.º de la nota> "qué has cambiado" [--foto "ruta::qué se ve"]')); process.exitCode = 2; return }
       const c = db.prepare('SELECT id, body, status FROM comments WHERE id = ?').get(n) as { id: number; body: string; status: string } | undefined
-      if (!c) { say(`No hay ninguna nota n.º ${n}.`); process.exitCode = 2; return }
+      if (!c) { say(t('No hay ninguna nota n.º {n}.', { n })); process.exitCode = 2; return }
       const { setCommentStatus } = await import('../core/review')
-      const what = free.join(' ').trim() || 'Corregido'
+      const what = free.join(' ').trim() || t('Corregido')
       const fotos = (flags.foto ?? []).map((f) => f.split('::')[0]).join(', ')
-      setCommentStatus(db, n, 'esperando-revision', `${account}: ${what}${fotos ? ` (mira ${fotos})` : ''}`)
-      say(`Nota n.º ${n} («${c.body.slice(0, 80)}») vuelve al usuario en Revisar para que la apruebe.`)
+      setCommentStatus(db, n, 'esperando-revision', `${account}: ${what}${fotos ? ' ' + t('(mira {files})', { files: fotos }) : ''}`)
+      say(t('Nota n.º {n} («{body}») vuelve al usuario en Revisar para que la apruebe.', { n, body: c.body.slice(0, 80) }))
       return
     }
     if (cmd === 'respuestas') {
@@ -920,9 +949,9 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       const out: string[] = []
       for (const p of ordered) {
         const text = coord.deliverPending(db, p, account)
-        if (text) out.push(p.id === project.id ? text : `En ${p.name} (otro proyecto; trabájalo desde su carpeta, ${p.root}):\n${text}`)
+        if (text) out.push(p.id === project.id ? text : t('En {project} (otro proyecto; trabájalo desde su carpeta, {root}):', { project: p.name, root: p.root }) + `\n${text}`)
       }
-      say(out.length ? out.join('\n\n') : 'No tienes nada pendiente del usuario.')
+      say(out.length ? out.join('\n\n') : t('No tienes nada pendiente del usuario.'))
       return
     }
     if (cmd === 'guarda') {
@@ -930,7 +959,7 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       const { heartbeatLine, withHeartbeat, porcelainPaths, pickFiles, archiveRelevo, parseGuarda, futureHours } = await import('../core/checkpoint')
       const g = parseGuarda(args)
       const text = g.text
-      if (!text) { say('Uso: pmc guarda "qué has hecho y qué queda" [--probado "qué y cómo"] [--siguiente "el paso concreto"] [--no-rehacer "lo que ya está y no hay que repetir"] [--sin-commit]'); process.exitCode = 2; return }
+      if (!text) { say(t('Uso: pmc guarda "qué has hecho y qué queda" [--probado "qué y cómo"] [--siguiente "el paso concreto"] [--no-rehacer "lo que ya está y no hay que repetir"] [--sin-commit]')); process.exitCode = 2; return }
       const { copyRootFor } = await import('../core/verify')
       const { execFileSync } = await import('node:child_process')
       const root = copyRootFor(project, process.cwd())
@@ -947,7 +976,7 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
       } catch { /* not a git copy */ }
       if (existsSync(relevo)) {
         let md = withHeartbeat(readFileSync(relevo, 'utf8'), heartbeatLine(d, account, text, { branch, commit, tested: g.tested, next: g.next, dontRedo: g.dontRedo }))
-        done.push('latido escrito en docs/RELEVO.md')
+        done.push(t('latido escrito en docs/RELEVO.md'))
         // EV40: past 16 KB, the history goes to docs/archivo/ (appended when that day's file already exists).
         const arch = archiveRelevo(md, d.getTime(), archiveName)
         if (arch) {
@@ -957,7 +986,7 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
           const before = Buffer.byteLength(md)
           appendFileSync(file, `${existsSync(file) ? '\n\n' : `# RELEVO.md: lo sacado de la nota viva (${archiveName.slice(13, -3)})\n\n`}${arch.archived}`)
           md = arch.keep
-          done.push(`relevo aligerado de ${Math.round(before / 1024)} a ${Math.round(Buffer.byteLength(md) / 1024)} KB (lo antiguo, en docs/archivo/${archiveName})`)
+          done.push(t('relevo aligerado de {from} a {to} KB (lo antiguo, en docs/archivo/{file})', { from: Math.round(before / 1024), to: Math.round(Buffer.byteLength(md) / 1024), file: archiveName }))
         }
         writeFileSync(relevo, md)
         // 14-11: «En curso» stale for an hour while the heartbeat moved on: said here.
@@ -968,11 +997,11 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
           try { prev = JSON.parse(readFileSync(markFile, 'utf8')) } catch { /* first save */ }
           const r = staleEnCurso(enCursoLine(md), account, prev, d.getTime())
           if (r.mark) { mkdirSync(join(paths.root(), 'encurso'), { recursive: true }); writeFileSync(markFile, JSON.stringify(r.mark)) }
-          if (r.reminder) done.push(`OJO: ${r.reminder}`)
+          if (r.reminder) done.push(t('OJO: {reminder}', { reminder: r.reminder }))
         } catch { /* a reminder only */ }
-      } else done.push('SIN docs/RELEVO.md: créalo con «En curso» y «Último latido»')
+      } else done.push(t('SIN docs/RELEVO.md: créalo con «En curso» y «Último latido»'))
       const kept = coord.renewClaims(db, account)
-      if (kept) done.push(`${kept} reserva${kept === 1 ? '' : 's'} renovada${kept === 1 ? '' : 's'} para quien te releve`)
+      if (kept) done.push(tn(kept, '{n} reserva renovada para quien te releve', '{n} reservas renovadas para quien te releve'))
       let left: string[] = []
       if (!g.noCommit && existsSync(join(root, '.git'))) {
         const git = (...a: string[]) => execFileSync('git', a, { cwd: root, encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024 })
@@ -984,7 +1013,7 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
             const fresh = git('ls-files', '--others', '--exclude-standard', '--', 'docs').split(/\r?\n/).filter((p) => /\.md$/i.test(p))
             const added = fresh.map((p) => { try { return readFileSync(join(root, p), 'utf8').split(/\r?\n/).map((l) => '+' + l).join('\n') } catch { return '' } }).join('\n')
             const ahead = futureHours(git('diff', '-U0', '--', 'docs') + '\n' + added)
-            if (ahead.length) done.push(`OJO: en docs/ hay horas de hoy que aún no han llegado (${ahead.slice(0, 4).join(', ')}; son las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}): pon la hora real (la de date o la del commit)`)
+            if (ahead.length) done.push(t('OJO: en docs/ hay horas de hoy que aún no han llegado ({hours}; son las {now}): pon la hora real (la de date o la del commit)', { hours: ahead.slice(0, 4).join(', '), now: hm(Date.now()) }))
           } catch { /* a reminder only */ }
           // Files written through Claude in this copy: this account's in the last 12 hours; the others' only in the last two,
           // the ones working here at the same time (12-11: claude6's writes from 05:00 made a lone session look shared at 11:47).
@@ -1004,13 +1033,15 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
           // EV42: leaving in a wheel's overlap? Then the files the new holder also touched are hers to save.
           let leaving = false
           try { leaving = (JSON.parse(readFileSync(join(paths.root(), 'turns.json'), 'utf8')) as TurnFile).projects.some((x) => x.outgoing === account && x.id === project.id) } catch { /* no wheels */ }
-          const pick = pickFiles({ changed, mine: [...mine, 'docs/RELEVO.md', `docs/archivo/${archiveName}`, 'docs/archivo/'], others, leaving, othersLast, mtime })
+          // 14-11 17:23: the others' scripts here leave no «archivo» event; when they ran something tells whose a file is.
+          const othersBusy = toolCallsIn(root, now - 2 * 3600_000, account)
+          const pick = pickFiles({ changed, mine: [...mine, 'docs/RELEVO.md', `docs/archivo/${archiveName}`, 'docs/archivo/'], others, leaving, othersLast, mtime, othersBusy })
           left = pick.left
           if (pick.commit.length) {
             git('add', '-A', '--', ...pick.commit)
             git('commit', '-q', '-m', `Punto de control (${account}): ${text.slice(0, 200)}`)
-            done.push(`commit de ${pick.commit.length} cambio${pick.commit.length === 1 ? '' : 's'} (${git('log', '-1', '--format=%h').trim()})`)
-          } else done.push('nada que guardar en git')
+            done.push(tn(pick.commit.length, 'commit de {n} cambio ({hash})', 'commit de {n} cambios ({hash})', { hash: git('log', '-1', '--format=%h').trim() }))
+          } else done.push(t('nada que guardar en git'))
           // What the session had already added itself went into the commit too: only what is still changed is «left»
           // (13-11: a package.json it had added was said to be «sin guardar» right after being saved).
           try {
@@ -1018,22 +1049,22 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
             left = left.filter((f) => still.has(f))
           } catch { /* keep what pickFiles said */ }
         } catch (e) {
-          done.push(`EL COMMIT NO SE HIZO: ${String((e as any)?.stderr || (e as Error).message).trim().slice(0, 300)}`)
+          done.push(t('EL COMMIT NO SE HIZO: {error}', { error: String((e as any)?.stderr || (e as Error).message).trim().slice(0, 300) }))
         }
       }
-      say(`Guardado: ${done.join('; ')}.`)
-      const missing = [!g.tested && '--probado "qué probaste y cómo"', !g.next && '--siguiente "el paso concreto"', !g.dontRedo && '--no-rehacer "lo que ya está"'].filter(Boolean)
-      if (missing.length) say(`Para que quien te releve no adivine, la próxima vez añade: ${missing.join(' ')}.`)
-      if (left.length) say(`Sin guardar porque los escribió otra cuenta o un programa mientras otra trabajaba aquí (míralos; si son tuyos, git add y commit): ${left.slice(0, 15).join(', ')}${left.length > 15 ? ` y ${left.length - 15} más` : ''}.`)
+      say(t('Guardado: {list}.', { list: done.join('; ') }))
+      const missing = [!g.tested && t('--probado "qué probaste y cómo"'), !g.next && t('--siguiente "el paso concreto"'), !g.dontRedo && t('--no-rehacer "lo que ya está"')].filter(Boolean)
+      if (missing.length) say(t('Para que quien te releve no adivine, la próxima vez añade: {list}.', { list: missing.join(' ') }))
+      if (left.length) say(t('Sin guardar porque los escribió otra cuenta o un programa mientras otra trabajaba aquí (míralos; si son tuyos, git add y commit): {list}{more}.', { list: left.slice(0, 15).join(', '), more: left.length > 15 ? t(' y {n} más', { n: left.length - 15 }) : '' }))
       return
     }
     const id = args[0]
-    if (!id) { say(`Uso: pmc ${cmd} <ID de TASKS.md>`); process.exitCode = 2; return }
+    if (!id) { say(t('Uso: pmc {cmd} <ID de TASKS.md>', { cmd })); process.exitCode = 2; return }
     const { key, title } = coord.taskKeyFor(db, project.id, id)
     if (cmd === 'claim') {
       const r = coord.claimTask(db, project.id, key, account, { note: args.slice(1).join(' ') || undefined })
       if (r.ok) {
-        say(`${r.renewed ? 'Renovada' : 'Reservada'}: ${id}${title ? ' · ' + title : ''} para ${account} hasta las ${new Date(r.claim.expiresAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`)
+        say(t('{state}: {id}{title} para {account} hasta las {time}.', { state: r.renewed ? t('Renovada') : t('Reservada'), id, title: title ? ' · ' + title : '', account, time: hm(r.claim.expiresAt) }))
         // EV101: the model the task says is enough. A session cannot change its own model, but it can hand the work to a
         // subagent with that model (Agent tool, model: "sonnet"), which spends less of the account's usage.
         if (!r.renewed) {
@@ -1041,19 +1072,19 @@ AVISO: tu coordinación con Mission Control está desactualizada (el modo autón
             const { listTasks } = await import('../core/engine')
             const m = (listTasks(db, project.id).find((x) => x.key === key)?.model ?? '').toLowerCase()
             const tag = /\b(fable|opus)\b/.test(m) ? undefined : m.match(/\b(sonnet|haiku)\b/)?.[1]
-            if (tag) say(`Esta tarea basta con ${tag === 'haiku' ? 'Haiku' : 'Sonnet'}: si es de hacer más que de pensar, encárgasela a un subagente con model: "${tag}" (gasta menos de tu uso) y revisa tú lo que entregue.`)
+            if (tag) say(t('Esta tarea basta con {model}: si es de hacer más que de pensar, encárgasela a un subagente con model: "{tag}" (gasta menos de tu uso) y revisa tú lo que entregue.', { model: tag === 'haiku' ? 'Haiku' : 'Sonnet', tag }))
           } catch { /* advice only */ }
         }
       }
-      else { say(`NO: ${id} la tiene ${r.holder.account} desde las ${new Date(r.holder.claimedAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} (hasta las ${new Date(r.holder.expiresAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}). Elige otra o habla con esa cuenta.`); process.exitCode = 1 }
+      else { say(t('NO: {id} la tiene {holder} desde las {from} (hasta las {to}). Elige otra o habla con esa cuenta.', { id, holder: r.holder.account, from: hm(r.holder.claimedAt), to: hm(r.holder.expiresAt) })); process.exitCode = 1 }
     } else {
-      say(coord.releaseTask(db, project.id, key, account) ? `Liberada: ${id}.` : `${id} no estaba reservada por ${account}.`)
+      say(coord.releaseTask(db, project.id, key, account) ? t('Liberada: {id}.', { id }) : t('{id} no estaba reservada por {account}.', { id, account }))
       // EV113 («da por hecho sin probar»: 77 de 104 tareas cerradas sin pmc verifica el 13-11): closing one with no
       // passing check gets a reminder; it still closes (some have nothing to run, and that is said, not hidden).
       try {
         const { listTasks } = await import('../core/engine')
-        const t = listTasks(db, project.id).find((x) => x.key === key || x.extId === id)
-        if (t && t.status === 'terminada' && t.checks?.outcome !== 'bien') say(`Ojo: ${id} está marcada como hecha y no tiene un pmc verifica que haya pasado. Pásalo (pmc verifica ${id}); si no hay nada que comprobar, dilo en su línea de TASKS.`)
+        const tk = listTasks(db, project.id).find((x) => x.key === key || x.extId === id)
+        if (tk && tk.status === 'terminada' && tk.checks?.outcome !== 'bien') say(t('Ojo: {id} está marcada como hecha y no tiene un pmc verifica que haya pasado. Pásalo (pmc verifica {id}); si no hay nada que comprobar, dilo en su línea de TASKS.', { id }))
       } catch { /* a reminder only */ }
     }
   } finally {
@@ -1080,23 +1111,23 @@ function manage(cmd: string, arg?: string): void {
 const [cmd, arg] = process.argv.slice(2)
 // 13-11: `pmc decide --help` saved a question titled «--help» in Decidir (#146), and `pmc ahora --help` would have shown
 // «--help» as the account's work. Asking for help never writes anything: it says what the command takes.
-const USAGE: Record<string, string> = {
-  decide: 'pmc decide "título" --pregunta "…" --opcion "A: detalle" --opcion "B: detalle" [--foto "ruta::qué se ve"] [--audio "ruta::qué es::para qué momento"] [--video "ruta::…"] [--contexto "…"] [--defecto "A"] [--espera horas] [--tarea ID] [--prioridad urgente|alta|normal|baja] [--clave <id>] [--otra] [--clara]',
-  entrega: 'pmc entrega <ID> --que "qué es, en una frase sin tecnicismos" --mirar "qué tiene que mirar" --foto "ruta::qué se ve" [--audio "ruta::qué es"] [--video "ruta::qué se ve"] [--clara]',
-  trabajo: 'pmc trabajo "título" --log ruta --salida ruta [--pid N]',
-  guarda: 'pmc guarda "qué has hecho y qué queda" [--probado "qué y cómo"] [--siguiente "el paso concreto"] [--no-rehacer "lo que ya está"] [--sin-commit]',
-  ahora: 'pmc ahora "en qué estás trabajando, en una frase para el usuario"',
-  recuerda: 'pmc recuerda "lo que no se debe olvidar" [--regla|--preferencia|--dato] [--todos]',
-  relevo: 'pmc relevo <claudeN> (la cuenta que no puede seguir)',
-  recurso: 'pmc recurso <unity|gpu|build|…> ["para qué"] · pmc recurso <nombre> --soltar · pmc recursos',
-  tarea: 'pmc tarea <ID> [--todo]', claim: 'pmc claim <ID de TASKS.md>', release: 'pmc release <ID de TASKS.md>',
-  verifica: 'pmc verifica [ID] [--solo nombre]', corregido: 'pmc corregido <n.º de la nota> "qué has cambiado" [--foto "ruta::qué se ve"]',
-  desechable: 'pmc desechable <ruta> "por qué"', conservar: 'pmc conservar <ruta> "por qué"',
-  'llevar-skills': 'pmc llevar-skills <proyecto> <skill> [<skill>…] (solo si el usuario lo pidió)', 'devolver-skills': 'pmc devolver-skills <skill> [<skill>…]',
-  'pedido-hecho': 'pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"'
-}
-const GENERAL_USAGE = 'pmc ' + VERSION + ': parte | tarea <ID> [--todo] | recurso <nombre> ["para qué"|--soltar] | recursos | plan | perfil | preparar | confianza [carpeta] | gasto [días] | verifica [ID] [--solo nombre] | claim <ID> | release <ID> | claims | next | relevo <cuenta> | decide "título" --pregunta … --opcion … --foto … | entrega <ID> --que … --mirar … --foto … | trabajo "título" --log … --salida … | guarda "qué queda" | respuestas | corregido <n.º> "qué" | ahora "en qué estás" | statusline | hook | version\n'
-if (process.argv.slice(3).some((a) => /^(--help|-h|--ayuda|\/\?)$/i.test(a))) process.stdout.write(USAGE[cmd] ? `Uso: ${USAGE[cmd]}\n` : GENERAL_USAGE)
+const usage = (): Record<string, string> => ({
+  decide: t('pmc decide "título" --pregunta "…" --opcion "A: detalle" --opcion "B: detalle" [--foto "ruta::qué se ve"] [--audio "ruta::qué es::para qué momento"] [--video "ruta::…"] [--contexto "…"] [--defecto "A"] [--espera horas] [--tarea ID] [--prioridad urgente|alta|normal|baja] [--clave <id>] [--otra] [--clara]'),
+  entrega: t('pmc entrega <ID> --que "qué es, en una frase sin tecnicismos" --mirar "qué tiene que mirar" --foto "ruta::qué se ve" [--audio "ruta::qué es"] [--video "ruta::qué se ve"] [--clara]'),
+  trabajo: t('pmc trabajo "título" --log ruta --salida ruta [--pid N]'),
+  guarda: t('pmc guarda "qué has hecho y qué queda" [--probado "qué y cómo"] [--siguiente "el paso concreto"] [--no-rehacer "lo que ya está"] [--sin-commit]'),
+  ahora: t('pmc ahora "en qué estás trabajando, en una frase para el usuario"'),
+  recuerda: t('pmc recuerda "lo que no se debe olvidar" [--regla|--preferencia|--dato] [--todos]'),
+  relevo: t('pmc relevo <claudeN> (la cuenta que no puede seguir)'),
+  recurso: t('pmc recurso <unity|gpu|build|…> ["para qué"] · pmc recurso <nombre> --soltar · pmc recursos'),
+  tarea: t('pmc tarea <ID> [--todo]'), claim: t('pmc claim <ID de TASKS.md>'), release: t('pmc release <ID de TASKS.md>'),
+  verifica: t('pmc verifica [ID] [--solo nombre]'), corregido: t('pmc corregido <n.º de la nota> "qué has cambiado" [--foto "ruta::qué se ve"]'),
+  desechable: t('pmc desechable <ruta> "por qué"'), conservar: t('pmc conservar <ruta> "por qué"'),
+  'llevar-skills': t('pmc llevar-skills <proyecto> <skill> [<skill>…] (solo si el usuario lo pidió)'), 'devolver-skills': t('pmc devolver-skills <skill> [<skill>…]'),
+  'pedido-hecho': t('pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"')
+})
+const generalUsage = () => t('pmc {version}: parte | tarea <ID> [--todo] | recurso <nombre> ["para qué"|--soltar] | recursos | plan | perfil | preparar | confianza [carpeta] | gasto [días] | verifica [ID] [--solo nombre] | claim <ID> | release <ID> | claims | next | relevo <cuenta> | decide "título" --pregunta … --opcion … --foto … | entrega <ID> --que … --mirar … --foto … | trabajo "título" --log … --salida … | guarda "qué queda" | respuestas | corregido <n.º> "qué" | ahora "en qué estás" | statusline | hook | version', { version: VERSION }) + '\n'
+if (process.argv.slice(3).some((a) => /^(--help|-h|--ayuda|\/\?)$/i.test(a))) void loadLang().then(() => process.stdout.write(usage()[cmd] ? t('Uso: {usage}', { usage: usage()[cmd] }) + '\n' : generalUsage()))
 else if (cmd === 'statusline') statusline(arg)
 else if (cmd === 'install-statusline' || cmd === 'uninstall-statusline' || cmd === 'statusline-state') manage(cmd, arg)
 else if (cmd === 'hook') void hook(arg)
@@ -1107,13 +1138,13 @@ else if (cmd === 'ahora') {
   const i = args.indexOf('--cuenta')
   const acc = i >= 0 ? args.splice(i, 2)[1] : accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR)
   const text = setFocus(acc, args.join(' '), process.env.CLAUDE_CODE_SESSION_ID)
-  process.stdout.write(text ? `Mission Control enseña: «${text}».\n` : 'Uso: pmc ahora "en qué estás trabajando, en una frase para el usuario"\n')
+  void loadLang().then(() => process.stdout.write(text ? t('Mission Control enseña: «{text}».', { text }) + '\n' : t('Uso: pmc ahora "en qué estás trabajando, en una frase para el usuario"') + '\n'))
 }
 else if (cmd === 'perfil' || cmd === 'preparar') void profileCmd(cmd, process.argv.slice(3))
 else if (cmd === 'confianza') void trustCmd(process.argv.slice(3))
 else if (cmd === 'gasto') void costCmd(process.argv.slice(3))
 else if (cmd === 'puede-arrancar') void canStart(process.argv[3], process.argv[4])
-else if (cmd === 'turno') turnCmd(process.argv.slice(3))
+else if (cmd === 'turno') void turnCmd(process.argv.slice(3))
 else if (cmd === 'skills-es') void skillsEsCmd(process.argv.slice(3))
 else if (cmd === 'llevar-skills' || cmd === 'devolver-skills') void moveSkillsCmd(cmd, process.argv.slice(3))
 else if (cmd === 'recuerda') void rememberCmd(process.argv.slice(3))
@@ -1121,15 +1152,15 @@ else if (cmd === 'rumbo') void courseCmd()
 else if (cmd === 'desechable' || cmd === 'conservar') {
   // EV100: a note for the cleaning, while working: «this render was a test» / «keep it, the final cut uses it».
   const args = process.argv.slice(3)
-  if (!args[0]) process.stdout.write(`Uso: pmc ${cmd} <ruta> "por qué"\n`)
-  else void import('../core/cleanmarks').then(({ addMark }) => { const full = addMark(args[0], cmd, args.slice(1).join(' '), accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR)); process.stdout.write(cmd === 'desechable' ? `Apuntado como desechable: ${full}. La limpieza lo apartará (no lo borra) y se vigilará.\n` : `Apuntado para conservar: ${full}. La limpieza no lo tocará.\n`) })
+  if (!args[0]) void loadLang().then(() => process.stdout.write(t('Uso: pmc {cmd} <ruta> "por qué"', { cmd }) + '\n'))
+  else void import('../core/cleanmarks').then(async ({ addMark }) => { const full = addMark(args[0], cmd, args.slice(1).join(' '), accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR)); await loadLang(); process.stdout.write((cmd === 'desechable' ? t('Apuntado como desechable: {path}. La limpieza lo apartará (no lo borra) y se vigilará.', { path: full }) : t('Apuntado para conservar: {path}. La limpieza no lo tocará.', { path: full })) + '\n') })
 }
 else if (cmd === 'pedido-hecho') {
   // A request the app shows as never written down but that was done somewhere it cannot read (another app's own docs,
   // like D:\Video App): closed by a piece of its text, as the «Ya está» of Memoria › Lo que has pedido does.
   const piece = process.argv.slice(3).join(' ').trim()
   void (async () => {
-    if (piece.length < 8) { process.stdout.write('Uso: pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"\n'); return }
+    if (piece.length < 8) { await loadLang(); process.stdout.write(t('Uso: pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"') + '\n'); return }
     const { db } = await openShared()
     const { getSetting, setSetting } = await import('../core/db')
     const { requestHash } = await import('../core/requests')
@@ -1137,12 +1168,12 @@ else if (cmd === 'pedido-hecho') {
     let file: { projects?: Record<string, { text: string; hash?: string }[]> } = {}
     try { file = JSON.parse(readFileSync(join(paths.root(), 'requests.json'), 'utf8')) } catch { /* not written yet */ }
     const hits = Object.values(file.projects ?? {}).flat().filter((r) => flat(r.text).includes(flat(piece)))
-    if (!hits.length) { process.stdout.write('No hay ninguna petición sin apuntar con ese texto (la lista se escribe cada 10 minutos).\n'); return }
+    if (!hits.length) { process.stdout.write(t('No hay ninguna petición sin apuntar con ese texto (la lista se escribe cada 10 minutos).') + '\n'); return }
     const ui = getSetting<Record<string, unknown>>(db, 'ui', {})
     const closed = new Set([...((ui.requestsClosed as string[] | undefined) ?? []), ...hits.map((r) => r.hash ?? requestHash(r.text))])
     setSetting(db, 'ui', { ...ui, requestsClosed: [...closed].slice(-500) })
-    process.stdout.write(`Cerrada${hits.length > 1 ? `s ${hits.length}` : ''}: ${hits.map((r) => `«${r.text.slice(0, 70)}…»`).join('; ')}\n`)
+    process.stdout.write(`${tn(hits.length, 'Cerrada', 'Cerradas {n}')}: ${hits.map((r) => `«${r.text.slice(0, 70)}…»`).join('; ')}\n`)
   })()
 }
 else if (cmd === 'version') process.stdout.write(VERSION + '\n')
-else process.stdout.write(GENERAL_USAGE)
+else void loadLang().then(() => process.stdout.write(generalUsage()))

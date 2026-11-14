@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, tn, locale } from './i18n'
 // Decisions: what a Claude needs the user to decide or approve, with pictures. A Claude asks with `pmc decide` and goes
 // on with something else; the user answers in Mission Control with one click (and a note if he wants); the answer goes
 // back to that Claude as an instruction, through the same hooks that deliver everything else. The pictures are copied
@@ -61,7 +61,7 @@ const JARGON: [RegExp, string][] = [
 /** The technical words in a question for the user (title, question, context and options together). */
 export function jargonIn(...texts: (string | undefined)[]): string[] {
   const all = texts.filter(Boolean).join('\n')
-  return [...new Set(JARGON.filter(([re]) => re.test(all)).map(([, w]) => w))]
+  return [...new Set(JARGON.filter(([re]) => re.test(all)).map(([, w]) => t(w)))]
 }
 
 export function resolveOption(options: DecisionOption[], said?: string): string | undefined {
@@ -137,7 +137,7 @@ export function addDecision(db: DB, d: NewDecision, now = Date.now()): Decision 
       .prepare('INSERT INTO decisions(project_id, title, question, context, options, asked_by, task_ext_id, priority, dedupe, created_at, updated_at, default_choice, wait_until) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(d.projectId, d.title, d.question ?? '', d.context ?? '', options, d.askedBy ?? null, d.taskExtId ?? null, prio, d.dedupe ?? null, now, now, def ?? null, until)
     id = Number(r.lastInsertRowid)
-    addEvent(db, { projectId: d.projectId, at: now, account: d.askedBy, kind: 'decision', title: `${d.askedBy ? `Claude ${d.askedBy.slice(6)} pregunta` : 'Decisión pendiente'}: ${d.title}`, detail: d.question, source: 'Mission Control', ref: `dec:${id}` })
+    addEvent(db, { projectId: d.projectId, at: now, account: d.askedBy, kind: 'decision', title: `${d.askedBy ? t('Claude {n} pregunta', { n: d.askedBy.slice(6) }) : t('Decisión pendiente')}: ${d.title}`, detail: d.question, source: 'Mission Control', ref: `dec:${id}` })
   }
   if (d.images?.length) db.prepare('UPDATE decisions SET images = ? WHERE id = ?').run(JSON.stringify(keepImages(id, d.images)), id)
   return getDecision(db, id)!
@@ -174,26 +174,26 @@ export function reactionsText(d: Decision, reactions?: Record<number, 'si' | 'no
   }
   const yes = Object.entries(reactions).filter(([, v]) => v === 'si').map(([k]) => name(Number(k))).filter(Boolean)
   const no = Object.entries(reactions).filter(([, v]) => v === 'no').map(([k]) => name(Number(k))).filter(Boolean)
-  return [yes.length ? ` Le gusta${yes.length > 1 ? 'n' : ''}: ${yes.join(', ')}.` : '', no.length ? ` No le gusta${no.length > 1 ? 'n' : ''}: ${no.join(', ')}.` : ''].join('')
+  return [yes.length ? tn(yes.length, ' Le gusta: {list}.', ' Le gustan: {list}.', { list: yes.join(', ') }) : '', no.length ? tn(no.length, ' No le gusta: {list}.', ' No le gustan: {list}.', { list: no.join(', ') }) : ''].join('')
 }
 
 /** The text the asking Claude receives. */
 export function answerText(d: Decision, choice?: string, note?: string, status: DecisionStatus = 'decidida', reactions?: Record<number, 'si' | 'no'>): string {
   const opt = d.options.find((o) => o.id === choice)
-  const what = status === 'descartada' ? 'la descarta (no hace falta hacerlo)'
-    : opt ? `elige «${opt.label}»${opt.detail ? ` (${opt.detail})` : ''}`
+  const what = status === 'descartada' ? t('la descarta (no hace falta hacerlo)')
+    : opt ? t('elige «{label}»{detail}', { label: opt.label, detail: opt.detail ? ` (${opt.detail})` : '' })
     // EV147: «responde» alone read as an order to the Claude (14-11); it is the user answering with a note and no option.
-    : choice === 'si' ? 'lo aprueba' : choice === 'no' ? 'no lo aprueba' : 'contesta con una nota, sin elegir opción'
-  return t('Decisión del usuario sobre «{title}» (#{id}{v0}): {what}.{v1}{v2} Apúntalo en docs/TASKS.md (y en docs/DECISIONS.md si cambia algo de lo acordado) y sigue con esa tarea cuando le toque por prioridad.', { title: d.title, id: d.id, v0: d.taskExtId ? `, ${d.taskExtId}` : '', what: what, v1: reactionsText(d, reactions), v2: note?.trim() ? ` Su nota: ${note.trim()}` : '' })
+    : choice === 'si' ? t('lo aprueba') : choice === 'no' ? t('no lo aprueba') : t('contesta con una nota, sin elegir opción')
+  return t('Decisión del usuario sobre «{title}» (#{id}{v0}): {what}.{v1}{v2} Apúntalo en docs/TASKS.md (y en docs/DECISIONS.md si cambia algo de lo acordado) y sigue con esa tarea cuando le toque por prioridad.', { title: d.title, id: d.id, v0: d.taskExtId ? `, ${d.taskExtId}` : '', what: what, v1: reactionsText(d, reactions), v2: note?.trim() ? t(' Su nota: {note}', { note: note.trim() }) : '' })
 }
 
 /** EV147: why `pmc decide` did not save a question already asked on the same task, with what the user answered. */
 export function alreadyAskedText(d: Decision): string {
-  const hh = new Date(d.decidedAt ?? d.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  const hh = new Date(d.decidedAt ?? d.createdAt).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
   const opt = d.options.find((o) => o.id === d.choice)
-  const answer = d.status === 'pendiente' ? `aún sin contestar (hecha a las ${hh}): su respuesta te llegará sola`
-    : `contestada a las ${hh}: ${opt ? `«${opt.label}»${opt.detail ? ` (${opt.detail})` : ''}` : 'sin elegir opción'}${d.note ? `; su nota: ${d.note}` : ''}`
-  return t('No guardada: {taskExtId} ya tiene la pregunta #{id} «{title}» (de {v0}), {answer}. No le preguntes lo mismo dos veces: sigue con esa respuesta. Si la tuya es otra pregunta, repite la orden con --otra.', { taskExtId: d.taskExtId, id: d.id, title: d.title, v0: d.askedBy ?? 'otra cuenta', answer: answer })
+  const answer = d.status === 'pendiente' ? t('aún sin contestar (hecha a las {hh}): su respuesta te llegará sola', { hh })
+    : t('contestada a las {hh}: {what}{note}', { hh, what: opt ? `«${opt.label}»${opt.detail ? ` (${opt.detail})` : ''}` : t('sin elegir opción'), note: d.note ? t('; su nota: {note}', { note: d.note }) : '' })
+  return t('No guardada: {taskExtId} ya tiene la pregunta #{id} «{title}» (de {v0}), {answer}. No le preguntes lo mismo dos veces: sigue con esa respuesta. Si la tuya es otra pregunta, repite la orden con --otra.', { taskExtId: d.taskExtId, id: d.id, title: d.title, v0: d.askedBy ?? t('otra cuenta'), answer: answer })
 }
 
 /** EV147: the account holding the decision's task now, when it is not the one that asked (it took over meanwhile). */
@@ -221,14 +221,14 @@ export function answerDecision(db: DB, project: ProjectConfig, id: number, a: { 
   // EV147: to whoever holds the task now if another account took it over; the one that asked is named.
   const holder = taskHolder(db, project.id, d.taskExtId, now)
   const to = holder && holder !== d.askedBy ? holder : d.askedBy
-  const body = answerText(d, a.choice, a.note, status, reactions) + (to !== d.askedBy && d.askedBy ? ` (La preguntó ${d.askedBy}; te llega a ti porque ahora llevas ${d.taskExtId}.)` : '')
+  const body = answerText(d, a.choice, a.note, status, reactions) + (to !== d.askedBy && d.askedBy ? t(' (La preguntó {asker}; te llega a ti porque ahora llevas {task}.)', { asker: d.askedBy, task: d.taskExtId }) : '')
   const ins = addInstruction(db, { projectId: project.id, kind: 'mensaje', body, target: to })
   db.prepare('UPDATE decisions SET status = ?, choice = ?, note = ?, reactions = ?, instruction_id = ?, decided_at = ?, updated_at = ? WHERE id = ?')
     .run(status, a.choice ?? null, a.note?.trim() || null, reactions ? JSON.stringify(reactions) : null, ins.id, now, now, id)
   const opt = d.options.find((o) => o.id === a.choice)
   addEvent(db, {
     projectId: project.id, at: now, account: d.askedBy, kind: 'decidida',
-    title: t('Has decidido «{title}»: {v0}', { title: d.title, v0: status === 'descartada' ? 'descartada' : opt?.label ?? (a.choice === 'si' ? 'aprobado' : a.choice === 'no' ? 'no aprobado' : reactions ? 'lo que te gusta y lo que no' : 'con nota') }),
+    title: t('Has decidido «{title}»: {v0}', { title: d.title, v0: status === 'descartada' ? t('descartada') : opt?.label ?? (a.choice === 'si' ? t('aprobado') : a.choice === 'no' ? t('no aprobado') : reactions ? t('lo que te gusta y lo que no') : t('con nota')) }),
     detail: a.note, source: 'Mission Control', ref: `dec:${id}`
   })
   return getDecision(db, id)!
@@ -246,7 +246,7 @@ export function expireDecisions(db: DB, projects: ProjectConfig[], now = Date.no
     const d = getDecision(db, r.id)
     if (!p || !d?.defaultChoice) continue
     const hours = Math.max(1, Math.round(((d.waitUntil ?? now) - d.createdAt) / 3600_000))
-    out.push(answerDecision(db, p, d.id, { choice: d.defaultChoice, note: `Sin respuesta en ${hours} h: se toma la opción por defecto. El usuario puede cambiarla en Decidir.` }, now))
+    out.push(answerDecision(db, p, d.id, { choice: d.defaultChoice, note: t('Sin respuesta en {hours} h: se toma la opción por defecto. El usuario puede cambiarla en Decidir.', { hours }) }, now))
   }
   return out
 }

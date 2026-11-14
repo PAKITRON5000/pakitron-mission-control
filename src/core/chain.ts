@@ -206,20 +206,21 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
     const busy = rotation(chain.order, chain.holder).map(get).find((m) => m && m.id !== chain.holder && m.workingHere && free(m))
     const next = busy ?? rotation(chain.order, chain.holder).map(get).find((m) => m && free(m))
     if (next) {
-      const why = !chain.holder ? 'empieza la rueda'
-        : next.id === chain.holder ? `${who(next.id)} ha recuperado su uso y sigue ella`
-        : `${who(chain.holder)} ${holder?.state === 'sin-uso' ? 'se ha quedado sin uso' : `no puede seguir (${cannotTake(holder, chain) ?? 'casi sin uso'})`}`
+      const why = !chain.holder ? t('empieza la rueda')
+        : next.id === chain.holder ? t('{v0} ha recuperado su uso y sigue ella', { v0: who(next.id) })
+        : holder?.state === 'sin-uso' ? t('{who} se ha quedado sin uso', { who: who(chain.holder) })
+        : t('{who} no puede seguir ({why})', { who: who(chain.holder), why: cannotTake(holder, chain) ?? t('casi sin uso') })
       actions.push({ kind: 'pasar', from: chain.holder, to: next.id, why, adopt: next.workingHere || undefined })
       current = next.id
     } else if (chain.phase !== 'espera') {
       const back = inWheel.filter((m) => !m.status && !chain.paused?.includes(m.id) && m.backAt && m.backAt > now)
         .sort((a, b) => a.backAt! - b.backAt! || chain.order.indexOf(a.id) - chain.order.indexOf(b.id))[0]
-      actions.push({ kind: 'esperar', from: chain.holder, firstBack: back?.id, backAt: back?.backAt, why: t('nadie de la rueda tiene uso ahora ({v0})', { v0: inWheel.map((m) => `${who(m.id)} ${cannotTake(m, chain) ?? 'lista'}`).join('; ') }) })
+      actions.push({ kind: 'esperar', from: chain.holder, firstBack: back?.id, backAt: back?.backAt, why: t('nadie de la rueda tiene uso ahora ({v0})', { v0: inWheel.map((m) => `${who(m.id)} ${cannotTake(m, chain) ?? t('lista')}`).join('; ') }) })
       current = undefined
-      call(`${chain.holder ? `${who(chain.holder)} se ha quedado sin uso` : 'la rueda empieza'} y nadie más de la rueda está libre aquí`)
+      call(chain.holder ? t('{who} se ha quedado sin uso y nadie más de la rueda está libre aquí', { who: who(chain.holder) }) : t('la rueda empieza y nadie más de la rueda está libre aquí'))
     } else {
       current = undefined
-      call('la rueda espera y nadie más de la rueda está libre aquí')
+      call(t('la rueda espera y nadie más de la rueda está libre aquí'))
     }
   } else if (chain.phase === 'espera') {
     // The holder itself got its usage back first: the turn is its own again.
@@ -227,7 +228,7 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
   } else if (chain.overlap !== false && !chain.outgoing && holder.workingHere && overlapDue(holder)) {
     const next = rotation(chain.order, chain.holder).map(get).find((m) => m && m.id !== holder.id && free(m))
     if (next) { actions.push({ kind: 'solapar', from: holder.id, to: next.id }); current = next.id }
-    else call(`${who(holder.id)} está a punto de quedarse sin uso`)
+    else call(t('{who} está a punto de quedarse sin uso', { who: who(holder.id) }))
   } else if (!holder.workingHere && holder.state !== 'esperando' && !holder.workingElsewhere && now - Math.max(chain.since ?? 0, holder.lastActiveAt ?? 0) > IDLE_HOLDER_MS) {
     // It has the turn and usage but does nothing: without this, nobody would work until the user noticed.
     actions.push({ kind: 'despertar', account: holder.id })
@@ -242,7 +243,7 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
   let partner = chain.partner
   if (partner) {
     const pm = get(partner)
-    const why = !chain.pair ? 'la rueda ya no trabaja de dos en dos' : partner === current ? `${who(partner)} tiene ahora el turno` : pm ? cannotTake(pm, chain) : 'ya no es una cuenta de Mission Control'
+    const why = !chain.pair ? t('la rueda ya no trabaja de dos en dos') : partner === current ? t('{who} tiene ahora el turno', { who: who(partner) }) : pm ? cannotTake(pm, chain) : t('ya no es una cuenta de Mission Control')
     if (why || !current) { actions.push({ kind: 'fin-pareja', account: partner, why: why ?? t('la rueda espera') }); partner = undefined }
   }
   if (chain.pair && current && !partner && !outgoing) {
@@ -335,13 +336,13 @@ export function callText(a: { account: AccountId; holder?: AccountId; project: s
 
 /** What the account given the turn reads. */
 export function takeTurnText(a: { from?: AccountId; to: AccountId; project: string; after?: AccountId; fableLost?: boolean }): string {
-  const tail = `Trabaja sin parar hasta que te quedes sin uso${a.after && a.after !== a.to ? `; entonces seguirá ${who(a.after)}` : ''}. Pon al día el relevo al cerrar cada bloque (pmc guarda).`
+  const tail = t('Trabaja sin parar hasta que te quedes sin uso{then}. Pon al día el relevo al cerrar cada bloque (pmc guarda).', { then: a.after && a.after !== a.to ? t('; entonces seguirá {who}', { who: who(a.after) }) : '' })
   if (!a.from) return t('Mission Control · rueda de relevos de {project}: te toca empezar. Ejecuta pmc parte y sigue con lo pendiente, primero lo que otras cuentas dejaron a medias (pmc relevo <cuenta>). {tail}', { project: a.project, tail: tail })
   if (a.from === a.to) return t('Mission Control · rueda de relevos de {project}: ya tienes uso otra vez y el turno vuelve a ser tuyo. Sigue tu trabajo donde lo dejaste, sin repetir lo hecho (pmc parte). {tail}', { project: a.project, tail: tail })
   return [
-    `Mission Control · rueda de relevos de ${a.project}: ${who(a.from)} se ha quedado sin uso y te toca a ti.`,
-    `Ejecuta pmc relevo ${a.from} y pmc parte, y sigue su trabajo exactamente donde lo dejó, sin repetir lo hecho, hasta cerrar sus tareas pendientes; luego las tuyas.`,
-    a.fableLost ? 'Su trabajo iba con Fable y tú no lo tienes: haz las tareas que tu modelo pueda y deja el resto apuntado en el relevo.' : '',
+    t('Mission Control · rueda de relevos de {project}: {who} se ha quedado sin uso y te toca a ti.', { project: a.project, who: who(a.from) }),
+    t('Ejecuta pmc relevo {from} y pmc parte, y sigue su trabajo exactamente donde lo dejó, sin repetir lo hecho, hasta cerrar sus tareas pendientes; luego las tuyas.', { from: a.from }),
+    a.fableLost ? t('Su trabajo iba con Fable y tú no lo tienes: haz las tareas que tu modelo pueda y deja el resto apuntado en el relevo.') : '',
     tail
   ].filter(Boolean).join(' ')
 }

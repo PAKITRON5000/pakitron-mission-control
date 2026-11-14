@@ -107,8 +107,11 @@ export function startHost(o: HostOptions): Promise<Host> {
   }
 
   const screenText = (s: Session, lines: number): string => {
+    // The last `lines` that have something, ending at the lowest written row: a screen that is half empty (what was just
+    // drawn sits at the top) gives its text, not its empty bottom.
     const buf = s.term.buffer.active
-    const bottom = buf.baseY + s.term.rows - 1
+    let bottom = buf.baseY + s.term.rows - 1
+    while (bottom > 0 && !(buf.getLine(bottom)?.translateToString(true) ?? '').trim()) bottom--
     const top = Math.max(0, bottom - Math.max(1, Math.min(500, lines)) + 1)
     const out: string[] = []
     for (let y = top; y <= bottom; y++) out.push(buf.getLine(y)?.translateToString(true) ?? '')

@@ -9,6 +9,7 @@ import { useStore } from '../lib/store'
 import { api, type AccountId } from '../lib/api'
 import { Avatar, Empty, accName } from '../components/ui'
 import { ago } from '../lib/format'
+import { EmbeddedGrid, hasTerminals, startInApp } from '../components/EmbeddedGrid'
 
 export interface Chat {
   sessionId: string
@@ -20,6 +21,8 @@ export interface Chat {
   live: boolean
   /** EV141: a background session (its short id, for «Ver»: claude attach). */
   background?: string
+  /** EV156: it lives inside the app (its terminal's id, in «Dentro de la app»). */
+  inApp?: string
   doing?: string
   waitingFor?: string
   last?: string
@@ -206,11 +209,13 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
           {credits && <div className="m-chatCredits truncate">{credits}</div>}
         </div>
         {info.live && info.status === 'working' && <button className="m-icon" onClick={() => void key('esc')} aria-label={t('Parar')}><Square size={18} /></button>}
+        {!info.live && chat.account && hasTerminals() && <button className="btn btn-sm flex-none" title={t('La retoma dentro de la app, en «Dentro de la app», donde la dejó')} onClick={() => void api<{ id: string }>('embedResume', chat.account, chat.cwd, chat.sessionId).then((r) => { onBack(); window.location.hash = `#/chats/${encodeURIComponent('pty:' + r.id)}` }, (e: Error) => toast(e.message))}><RotateCcw size={13} /> {t('Retomar aquí')}</button>}
         {!info.live && chat.account && <button className="btn btn-sm flex-none" title={t('Abre una ventana con esta conversación, donde la dejó')} onClick={() => void api('resumeSession', chat.account, chat.cwd, chat.sessionId).then(() => toast(t('Retomando en una ventana nueva')), (e: Error) => toast(e.message))}><RotateCcw size={13} /> {t('Retomar')}</button>}
         {/* EV141 (Decidir #148): a background session has no window; «Ver» opens one on it, to watch it and write to it. */}
         {chat.background && chat.account && <button className="btn btn-sm flex-none" title={t('Abre una ventana con esta sesión de fondo: la ves y le escribes como a cualquier Claude')} onClick={() => void api('attachBackground', chat.account, chat.background).then(() => toast(t('Abriendo la sesión en una ventana')), (e: Error) => toast(e.message))}>{t('Ver')}</button>}
         {/* EV151: an open session with a window: its window in front of the others. */}
-        {info.live && !chat.background && <button className="btn btn-sm flex-none" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => void api('frontSession', chat.sessionId).then(() => toast(t('Ventana delante')), (e: Error) => toast(e.message))}>{t('Ver ventana')}</button>}
+        {info.live && info.inApp && <button className="btn btn-sm flex-none" title={t('Su terminal, dentro de la app: lo ves como en su ventana y le escribes allí')} onClick={() => { onBack(); window.location.hash = `#/chats/${encodeURIComponent('pty:' + info.inApp)}` }}>{t('Ver terminal')}</button>}
+        {info.live && !chat.background && !info.inApp && <button className="btn btn-sm flex-none" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => void api('frontSession', chat.sessionId).then(() => toast(t('Ventana delante')), (e: Error) => toast(e.message))}>{t('Ver ventana')}</button>}
       </header>
       <div className="m-msgs" onScroll={(e) => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }}>
         {!tail && <div className="m-note">{t('Cargando…')}</div>}
@@ -254,14 +259,22 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
   )
 }
 
-function NewChat({ onClose }: { onClose: () => void }) {
+function NewChat({ onClose, inApp }: { onClose: () => void; inApp?: boolean }) {
   const { state, toast } = useStore()
   const [text, setText] = useState('')
   const [who, setWho] = useState<AccountId>('claude1')
+  // EV156: inside the app (its terminal in Chats) or in a window of its own; first, what the user chose in Chats.
+  const [here, setHere] = useState(hasTerminals() && (inApp || state?.settings.sessionsWhere === 'app'))
   const start = async () => {
     try {
-      await api('chatNew', who, state?.activeProjectId, text.trim())
-      toast(t('Abierto en el PC: aparecerá aquí en unos segundos'))
+      if (here && state?.activeProjectId) {
+        const r = await startInApp(who, state.activeProjectId, text.trim()) as { id: string }
+        window.location.hash = `#/chats/${encodeURIComponent('pty:' + r.id)}`
+        toast(t('Abierto dentro de la app'))
+      } else {
+        await api('chatNew', who, state?.activeProjectId, text.trim())
+        toast(t('Abierto en el PC: aparecerá aquí en unos segundos'))
+      }
       onClose()
     } catch (e) { toast((e as Error).message) }
   }
@@ -270,18 +283,29 @@ function NewChat({ onClose }: { onClose: () => void }) {
       <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="m-sheetTitle">{t('Nuevo chat')}</div>
         <div className="m-who">{state?.accounts.map((a) => <button key={a.id} className={who === a.id ? 'on' : ''} onClick={() => setWho(a.id as AccountId)}><Avatar id={a.id as AccountId} size={30} /></button>)}</div>
-        <textarea rows={4} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t('¿Qué quieres que haga?')} />
-        <button className="m-primary" disabled={!text.trim()} onClick={() => void start()}>{t('Empezar')}</button>
+        <textarea rows={4} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={here ? t('¿Qué quieres que haga? (o déjalo vacío y escríbele en su terminal)') : t('¿Qué quieres que haga?')} />
+        {hasTerminals() && (
+          <div className="flex items-center gap-2 t-small c2">
+            <span>{t('Dónde:')}</span>
+            <span className="emb-where">
+              <button className={here ? 'on' : ''} onClick={() => setHere(true)}>{t('Dentro de la app')}</button>
+              <button className={!here ? 'on' : ''} onClick={() => setHere(false)}>{t('En su ventana')}</button>
+            </span>
+          </div>
+        )}
+        <button className="m-primary" disabled={!here && !text.trim()} onClick={() => void start()}>{t('Empezar')}</button>
       </div>
     </div>
   )
 }
 
 export function Chats() {
-  const { route, state } = useStore()
+  const { route, state, param } = useStore()
   const [chats, setChats] = useState<Chat[]>()
   const [open, setOpen] = useState<Chat>()
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<false | 'any' | 'app'>(false)
+  // EV156: `#/chats/pty:<id>` brings a terminal of «Dentro de la app» in front (from a conversation or «Traer delante»).
+  const focusId = param?.startsWith('pty:') ? param.slice(4) : undefined
   const [all, setAll] = useState(false)
   useEffect(() => {
     let alive = true
@@ -318,6 +342,7 @@ export function Chats() {
             {project && <span className="pill" style={{ padding: '0 6px', fontSize: 11 }}>{project}</span>}
             <span style={{ color: STATUS[c.status].color, fontWeight: 600 }}>{STATUS[c.status].label}</span>
             {c.background && <span className="c3">{t('· de fondo, sin ventana')}</span>}
+            {c.inApp && <span className="c3">{t('· dentro de la app')}</span>}
           </span>
         </span>
         <ChevronRight size={18} className="c3 flex-none" />
@@ -328,9 +353,10 @@ export function Chats() {
     <div className="m-list">
       <div className="flex items-center gap-3 mb-1">
         <h1 className="t-display flex-1 flex items-center gap-3"><ScreenIcon route="chats" />{t('Chats')}</h1>
-        <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}><Plus size={14} /> {t('Nuevo chat')}</button>
+        <button className="btn btn-sm btn-primary" onClick={() => setAdding('any')}><Plus size={14} /> {t('Nuevo chat')}</button>
       </div>
       <div className="t-small c2 mb-4">{t('Las conversaciones de tus Claude, como en un móvil: ábrelas para ver qué hacen, contestarles o darles trabajo. Arriba, lo que te espera.')}</div>
+      <EmbeddedGrid focusId={focusId} onNew={() => setAdding('app')} />
       {chats && !chats.length && <Empty title={t('No hay chats')} text={t('Cuando un Claude trabaje, aparecerá aquí. Con «Nuevo chat» abres uno en el proyecto que elijas.')} />}
       {groups.filter((g) => g.items.length).map((g) => (
         <section key={g.key} className="mb-2">
@@ -341,7 +367,7 @@ export function Chats() {
       ))}
       {/* EV71: every saved conversation of the project is here (Cuentas only links here); each one opens and can be taken up again. */}
       {!all && list.filter((c) => !c.live).length >= 15 && <button className="btn btn-ghost mt-3" onClick={() => setAll(true)}><RotateCcw size={14} /> {t('Ver todas las guardadas de este proyecto')}</button>}
-      {adding && <NewChat onClose={() => setAdding(false)} />}
+      {adding && <NewChat inApp={adding === 'app'} onClose={() => setAdding(false)} />}
     </div>
   )
 }

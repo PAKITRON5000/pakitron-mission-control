@@ -443,6 +443,11 @@ export interface Settings {
   /** EV161: the language of the app and of what the Claudes are told («es», «en»); none: the system's. */
   lang?: 'es' | 'en'
   /**
+   * EV156: where the Claudes the app opens live: in their own console window ('ventana', the default) or inside the app,
+   * in Chats ('app'), where each one can be popped out to a window of its own and docked again.
+   */
+  sessionsWhere?: 'ventana' | 'app'
+  /**
    * EV96 (Decidir #130 «B»): Claude Code's gifted limit resets (`/limit-reset`): used by the app at the best moment
    * ('sola', the default), only told to the user ('avisar'), or left alone ('no').
    */

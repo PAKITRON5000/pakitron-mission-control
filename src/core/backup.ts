@@ -15,7 +15,12 @@ export interface BackupSettings {
   off?: string[]
 }
 
-export const BACKUP_DEFAULTS = { on: true, dir: 'G:\\Copias de proyectos', hora: '03:00' }
+// The user's PC has its other disk at G:. Anywhere else (a Mac, 14-11) nothing is copied until a folder is chosen in
+// Ajustes: a default on a disk that is not there would fail every night.
+const onWindows = typeof process === 'undefined' || process.platform === 'win32'
+export const BACKUP_DEFAULTS = onWindows
+  ? { on: true, dir: 'G:\\Copias de proyectos', hora: '03:00' }
+  : { on: false, dir: `${process.env.HOME ?? ''}/Copias de proyectos`, hora: '03:00' }
 
 export interface BackupMemory {
   /** Night (nightWindow › key) of the last good copy, by project. */
@@ -38,7 +43,9 @@ export function backupSettings(s?: BackupSettings): Required<BackupSettings> {
 
 /** Where a project's copy lives: one bare repository per project, named by its id. */
 export function backupTarget(dir: string, projectId: string): string {
-  return `${dir.replace(/[\\/]+$/, '')}\\${projectId.replace(/[^\w.-]/g, '_')}.git`
+  // A Windows folder (a drive letter or «\») keeps «\»; a Mac's keeps «/».
+  const sep = /^[a-z]:|\\/i.test(dir) ? '\\' : '/'
+  return `${dir.replace(/[\\/]+$/, '')}${sep}${projectId.replace(/[^\w.-]/g, '_')}.git`
 }
 
 /**

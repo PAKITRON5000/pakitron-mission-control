@@ -14,6 +14,13 @@ import { chats } from './en/chats'
 import { components } from './en/components'
 import { rest } from './en/rest'
 import { main } from './en/main'
+import { pmc } from './en/pmc'
+import { hooks } from './en/hooks'
+import { templates } from './en/templates'
+import { corecore } from './en/corecore'
+import { mainmsgs } from './en/mainmsgs'
+import { terminals } from './en/terminals'
+import { tidy } from './en/tidy'
 
 // Each screen or area can have its own file in ./en (EV162: one account per file, nobody steps on anyone); they all
 // add up here, after the shared texts below.
@@ -32,6 +39,13 @@ export const en: Record<string, string> = {
   ...components,
   ...rest,
   ...main,
+  ...pmc,
+  ...hooks,
+  ...templates,
+  ...corecore,
+  ...mainmsgs,
+  ...terminals,
+  ...tidy,
   // ---- times and dates (lib/format.ts) ----
   'Sin datos': 'No data',
   'ahora mismo': 'just now',
@@ -164,7 +178,7 @@ export const en: Record<string, string> = {
   'Comprobación': 'Checks',
   'Copias de seguridad': 'Backups',
   'Idioma': 'Language',
-  'El de la app, y el de lo que se les dice a los Claude a medida que se traduce. Sin elegir, el de Windows.': 'The app\'s, and the one the Claudes are told in as it gets translated. If you choose none, Windows\' own.',
+  'El de la app, y el de lo que se les dice a los Claude a medida que se traduce. Sin elegir, el del sistema.': 'The app\'s, and the one the Claudes are told in as it gets translated. If you choose none, the system\'s.',
   'Idioma: {lang}': 'Language: {lang}',
   'Mission Control es de código abierto.': 'Mission Control is open source.',
   'Su página en GitHub': 'Its page on GitHub',

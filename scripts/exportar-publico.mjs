@@ -49,6 +49,9 @@ try {
       const parts = String(p.name ?? '').toLowerCase().split(/\s+/).filter(Boolean)
       if (parts.length > 1) for (const sep of ['', '-', '_']) add(parts.join(sep))
     }
+    // The app's own folder is not the person's data, wherever the export runs from (from a clean copy elsewhere, its
+    // name came up 30 times on 14-11 at 17:33).
+    if (p.id === 'mission-control') continue
     try {
       const c = JSON.parse(p.config)
       for (const r of [c.root, ...(c.copies ?? []).map((x) => x.path)]) if (r && !String(r).startsWith(root)) add(r)

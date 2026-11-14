@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { paths } from './paths'
 import type { AccountId } from './types'
 import type { DB } from './db'
+import { t } from './i18n'
 
 export interface OnlyTask {
   projectId: string
@@ -48,11 +49,11 @@ export function setOnlyTask(account: AccountId, v: OnlyTask | undefined): void {
 /** The prompt it starts with: that task, nothing else, and how to finish (its Stop hook lets it stop afterwards). */
 export function onlyTaskPrompt(o: { label: string; title: string; projectName: string }): string {
   const clean = (s: string) => s.replace(/["%^&|<>\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
-  return clean(`Mission Control: el usuario te ha abierto en ${o.projectName} para UNA sola tarea: ${o.label} (${o.title.slice(0, 160)}). ` +
-    `Resérvala con pmc claim ${o.label}, lee su texto entero con pmc tarea ${o.label} y lo que el usuario te haya escrito sobre ella, y hazla. ` +
-    'Te la ha pedido el usuario ahora: no esperes a tiempos muertos ni a otro turno, aunque tu cuenta esté apartada para lo demás. ' +
-    'No cojas ninguna otra tarea aunque veas más en tu cola o te lo proponga el modo autónomo, y no borres nada que no se pueda recuperar sin preguntarlo antes con pmc decide (mejor muévelo a una carpeta aparte). ' +
-    `Al terminar: pmc entrega ${o.label} si hay algo que mirar, pmc release ${o.label}, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana) y luego para.`)
+  return clean(t('Mission Control: el usuario te ha abierto en {project} para UNA sola tarea: {label} ({title}). ', { project: o.projectName, label: o.label, title: o.title.slice(0, 160) }) +
+    t('Resérvala con pmc claim {label}, lee su texto entero con pmc tarea {label} y lo que el usuario te haya escrito sobre ella, y hazla. ', { label: o.label }) +
+    t('Te la ha pedido el usuario ahora: no esperes a tiempos muertos ni a otro turno, aunque tu cuenta esté apartada para lo demás. ') +
+    t('No cojas ninguna otra tarea aunque veas más en tu cola o te lo proponga el modo autónomo, y no borres nada que no se pueda recuperar sin preguntarlo antes con pmc decide (mejor muévelo a una carpeta aparte). ') +
+    t('Al terminar: pmc entrega {label} si hay algo que mirar, pmc release {label}, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana) y luego para.', { label: o.label }))
 }
 
 /**
@@ -104,9 +105,9 @@ export function reopenForAnswer(d: { askedBy?: string; projectId: string; create
 /** The prompt it is opened with to carry out the answer: that and nothing else, then stop. */
 export function answerPrompt(o: { projectName: string; label: string; title: string; decisionId: number }): string {
   const clean = (s: string) => s.replace(/["%^&|<>\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
-  return clean(`Mission Control: el usuario ha contestado tu pregunta «${o.title.slice(0, 120)}» (#${o.decisionId}) sobre ${o.label} en ${o.projectName}, y quiere que lo hagas ahora. ` +
-    'Lee su respuesta con pmc respuestas y haz exactamente lo que dice, solo eso: no cojas otras tareas aunque las veas en tu cola o te lo proponga el modo autónomo. ' +
-    `Al terminar, pmc entrega ${o.label} si hay algo que mirar, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana) y luego para.`)
+  return clean(t('Mission Control: el usuario ha contestado tu pregunta «{title}» (#{id}) sobre {label} en {project}, y quiere que lo hagas ahora. ', { title: o.title.slice(0, 120), id: o.decisionId, label: o.label, project: o.projectName }) +
+    t('Lee su respuesta con pmc respuestas y haz exactamente lo que dice, solo eso: no cojas otras tareas aunque las veas en tu cola o te lo proponga el modo autónomo. ') +
+    t('Al terminar, pmc entrega {label} si hay algo que mirar, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana) y luego para.', { label: o.label }))
 }
 
 /** For a reopening (decisionId): it ended a turn after being opened, so it has done what the answer asked. */

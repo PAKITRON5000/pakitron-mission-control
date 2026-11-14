@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, locale } from './i18n'
 // The verification gate (`pmc verifica [ID]`): "done" stops being the agent's word. A project declares its checks in
 // pmc.json at the root of each copy (compile, tests, whatever it has); running them leaves a result tied to the task, the
 // commit it ran on and a log. Three states the board can tell apart: says it is done / passes the checks / accepted by the
@@ -72,13 +72,13 @@ export function judge(c: Check, r: { code: number | null; output: string; timedO
   // Colour codes split the words a pattern looks for («Tests  200 passed» came as «Tests ESC[22m ESC[1m200 passed», 12-11).
   const text = r.output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
   const line = (re: string | undefined) => { try { return re ? text.match(new RegExp(re, 'm'))?.[0]?.replace(/\s+/g, ' ').trim().slice(0, 200) : undefined } catch { return undefined } }
-  if (r.timedOut) return { outcome: 'falla', summary: `cortada a los ${c.minutos ?? 30} min sin terminar` }
+  if (r.timedOut) return { outcome: 'falla', summary: t('cortada a los {n} min sin terminar', { n: c.minutos ?? 30 }) }
   const bad = line(c.fallaSi)
   if (bad) return { outcome: 'falla', summary: bad }
-  if (c.pasaSi && !line(c.pasaSi)) return { outcome: 'falla', summary: line(c.resumen) ?? `no apareció lo que debía (${c.pasaSi})` }
-  if (!c.pasaSi && !c.fallaSi && r.code !== 0) return { outcome: 'falla', summary: `terminó con código ${r.code}` }
-  if (r.code !== 0 && r.code !== null && !c.pasaSi) return { outcome: 'falla', summary: `terminó con código ${r.code}` }
-  return { outcome: 'bien', summary: line(c.resumen) ?? 'bien' }
+  if (c.pasaSi && !line(c.pasaSi)) return { outcome: 'falla', summary: line(c.resumen) ?? t('no apareció lo que debía ({pattern})', { pattern: c.pasaSi }) }
+  if (!c.pasaSi && !c.fallaSi && r.code !== 0) return { outcome: 'falla', summary: t('terminó con código {code}', { code: r.code ?? undefined }) }
+  if (r.code !== 0 && r.code !== null && !c.pasaSi) return { outcome: 'falla', summary: t('terminó con código {code}', { code: r.code ?? undefined }) }
+  return { outcome: 'bien', summary: line(c.resumen) ?? t('bien') }
 }
 
 export interface VerifyOptions { now?: number; run?: Runner; busy?: () => Busy; only?: string; git?: (cwd: string) => { commit?: string; dirty?: number } }
@@ -104,12 +104,12 @@ export function runVerification(db: DB, project: ProjectConfig, copyRoot: string
     const heavy = c.pesada ?? Boolean(c.recurso)
     if (heavy) {
       const b = (opts.busy ?? detectBusy)()
-      const why = b.playing ? `el usuario está jugando (${b.playing})` : b.userApps.length ? `el usuario tiene abierto ${b.userApps.join(' y ')}` : undefined
-      if (why) { results.push({ nombre: c.nombre, outcome: 'aplazada', summary: `no se lanza: ${why}`, seconds: 0 }); break }
+      const why = b.playing ? t('el usuario está jugando ({game})', { game: b.playing }) : b.userApps.length ? t('el usuario tiene abierto {apps}', { apps: b.userApps.join(t(' y ')) }) : undefined
+      if (why) { results.push({ nombre: c.nombre, outcome: 'aplazada', summary: t('no se lanza: {why}', { why }), seconds: 0 }); break }
     }
     if (c.recurso) {
-      const h = holdResource(db, c.recurso, account, `verificación: ${c.nombre}`, now)
-      if (!h.ok) { results.push({ nombre: c.nombre, outcome: 'aplazada', summary: `${c.recurso} lo tiene ${h.holder.account}${h.holder.note ? ` (${h.holder.note})` : ''}`, seconds: 0 }); break }
+      const h = holdResource(db, c.recurso, account, t('verificación: {name}', { name: c.nombre }), now)
+      if (!h.ok) { results.push({ nombre: c.nombre, outcome: 'aplazada', summary: t('{resource} lo tiene {holder}{note}', { resource: c.recurso, holder: h.holder.account, note: h.holder.note ? ` (${h.holder.note})` : '' }), seconds: 0 }); break }
     }
     const t0 = Date.now()
     let r: ReturnType<Runner>
@@ -154,23 +154,23 @@ export function failStreak(db: DB, projectId: string, taskKey: string): number {
   return n
 }
 
-const hhmm = (ms: number) => new Date(ms).toLocaleString('es-ES', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
+const hhmm = (ms: number) => new Date(ms).toLocaleString(locale(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function verificationLine(v: Verification | undefined): string {
   if (!v) return t('Sin verificar: nadie ha pasado las comprobaciones con esta tarea.')
-  const where = v.commit ? ` sobre ${v.commit}${v.dirty ? ` más ${v.dirty} archivos sin guardar` : ''}` : ''
-  return v.outcome === 'bien' ? `Verificada (${hhmm(v.at)}${where}): ${v.summary}` : t('LAS COMPROBACIONES FALLAN ({v0}{where}): {summary}', { v0: hhmm(v.at), where: where, summary: v.summary })
+  const where = v.commit ? t(' sobre {commit}', { commit: v.commit }) + (v.dirty ? t(' más {n} archivos sin guardar', { n: v.dirty }) : '') : ''
+  return v.outcome === 'bien' ? t('Verificada ({when}{where}): {summary}', { when: hhmm(v.at), where, summary: v.summary }) : t('LAS COMPROBACIONES FALLAN ({v0}{where}): {summary}', { v0: hhmm(v.at), where: where, summary: v.summary })
 }
 
 /** What the agent reads after a run: the result, and what to do with a failure so it does not loop. */
 export function verificationReport(v: Verification, streak: number): string {
   const out: string[] = []
-  for (const c of v.checks) out.push(`${c.outcome === 'bien' ? 'BIEN' : c.outcome === 'falla' ? 'FALLA' : 'APLAZADA'}  ${c.nombre}${c.seconds ? ` (${c.seconds} s)` : ''}: ${c.summary}${c.outcome === 'falla' && c.log ? `\n       registro: ${c.log}` : ''}`)
-  if (v.outcome === 'bien') out.push('Todo pasa. Ya puedes entregarla (pmc entrega) y liberarla.')
-  else if (v.outcome === 'aplazada') out.push('No es un fallo: no se ha podido lanzar ahora. Sigue con algo que no lo necesite, apunta en el relevo que queda por verificar y vuelve a intentarlo después.')
-  else if (streak <= 1) out.push('No la entregues como hecha. Lee el registro, corrige la causa y vuelve a pasar pmc verifica.')
-  else if (streak === 2) out.push('Segunda vez seguida que falla. Un intento más como mucho, y solo si sabes la causa: si no, deja en el relevo qué has probado y qué dice el registro, suelta la tarea (pmc release) para que la coja otra cuenta, y sigue con otra.')
-  else out.push(`Van ${streak} fallos seguidos: para. Deja en el relevo lo probado y el registro, suelta la tarea y pregunta al usuario con pmc decide cómo seguir. No sigas gastando en lo mismo.`)
+  for (const c of v.checks) out.push(`${c.outcome === 'bien' ? t('BIEN') : c.outcome === 'falla' ? t('FALLA') : t('APLAZADA')}  ${c.nombre}${c.seconds ? ` (${c.seconds} s)` : ''}: ${c.summary}${c.outcome === 'falla' && c.log ? '\n       ' + t('registro: {log}', { log: c.log }) : ''}`)
+  if (v.outcome === 'bien') out.push(t('Todo pasa. Ya puedes entregarla (pmc entrega) y liberarla.'))
+  else if (v.outcome === 'aplazada') out.push(t('No es un fallo: no se ha podido lanzar ahora. Sigue con algo que no lo necesite, apunta en el relevo que queda por verificar y vuelve a intentarlo después.'))
+  else if (streak <= 1) out.push(t('No la entregues como hecha. Lee el registro, corrige la causa y vuelve a pasar pmc verifica.'))
+  else if (streak === 2) out.push(t('Segunda vez seguida que falla. Un intento más como mucho, y solo si sabes la causa: si no, deja en el relevo qué has probado y qué dice el registro, suelta la tarea (pmc release) para que la coja otra cuenta, y sigue con otra.'))
+  else out.push(t('Van {streak} fallos seguidos: para. Deja en el relevo lo probado y el registro, suelta la tarea y pregunta al usuario con pmc decide cómo seguir. No sigas gastando en lo mismo.', { streak }))
   return out.join('\n')
 }
 
@@ -204,7 +204,7 @@ export function newlyDone(before: string, after: string): string[] {
   for (const m of before.matchAll(LINE)) was.set(m[2], m[1])
   const out: string[] = []
   for (const m of after.matchAll(LINE)) {
-    if (m[1] !== 'x' || /sin comprobaci[oó]n/i.test(m[3])) continue
+    if (m[1] !== 'x' || /sin comprobaci[oó]n|no checks?:/i.test(m[3])) continue
     const old = was.get(m[2])
     if (old === ' ' || old === '~') out.push(m[2])
   }

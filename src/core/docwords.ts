@@ -14,6 +14,16 @@ export const ANY_HEARTBEAT = '(?:Último latido|Latido|Last heartbeat|Previous h
 /** «(tras: EV12)» / «(after: EV12)»: a task that waits for others. */
 export const AFTER = '(?:tras|after)'
 
+/** «(por completar)» / «(to fill)»: a gap in the project's card (docs/PROYECTO.md) the first Claude there fills in. */
+export const TO_FILL_RE = /\((?:por completar|to fill)\)/i
+/** «## Cómo trabajarlo mejor» / «## How to work it best»: the card's section every session reads (brief.ts). */
+export const HOW_HEADING = '(?:Cómo trabajarlo mejor|How to work it best)'
+
+/** The card's gap mark and that heading, in the app's language. */
+export function cardWords(): { toFill: string; how: string } {
+  return getLang() === 'en' ? { toFill: '(to fill)', how: 'How to work it best' } : { toFill: '(por completar)', how: 'Cómo trabajarlo mejor' }
+}
+
 /** The words a writer uses, in the app's language. */
 export function docWords(): { inProgress: string; heartbeat: string; previous: string; after: string; doneWhen: string } {
   return getLang() === 'en'

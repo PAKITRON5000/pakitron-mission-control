@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccountConfig, AccountId, AccountIdentity, AccountUsage, LimitHit, UsageSnapshot } from './types'
-import { home, pathKey, paths } from './paths'
+import { home, nativePath, pathKey, paths } from './paths'
 import { limitDirs } from './thispc'
 import { parseCreditsFile, parseWakeLog } from './parse/limits'
 import { configDirOf } from './sessions'
@@ -110,7 +110,8 @@ export function detectAccounts(known: Pick<AccountConfig, 'id' | 'configDir'>[],
     try { text = readFileSync(join(dir, 'claude-accesos', file), 'utf8') } catch { continue }
     const m = /CLAUDE_CONFIG_DIR=([^"\r\n]+)/i.exec(text)
     if (!m) continue
-    const configDir = m[1].trim().replace(/%USERPROFILE%/gi, dir)
+    // A launcher writes its folder Windows' way; on another system it is read with that system's separator.
+    const configDir = nativePath(m[1].trim().replace(/%USERPROFILE%/gi, dir).split('\\').join('/'))
     const id = `claude${n[1]}` as AccountId
     found.set(key(configDir), { id: taken.has(id) ? undefined : id, alias: alias(configDir), configDir })
   }

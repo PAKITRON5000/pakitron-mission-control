@@ -3,7 +3,7 @@ import { t } from './i18n'
 // Git is only read, with --no-optional-locks so not even the index gets refreshed.
 import { execFile } from 'node:child_process'
 import { existsSync, statSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { CopyStatus, DocSource, ProjectConfig, Settings } from './types'
 import type { DB } from './db'
@@ -35,6 +35,17 @@ export async function listWorktrees(root: string): Promise<{ path: string; branc
   } catch {
     return [{ path: root }]
   }
+}
+
+/**
+ * A checkout made for a moment (14-11: `git worktree add …\Temp\claude\…\scratchpad\wt-head` to look at a commit, and
+ * `…\Temp\mc-limpia` to export the public copy): not a copy of the project. Taken as one, its RELEVO.md, the newest, made
+ * it the «work copy», and «Poner a trabajar» and the Claudes inside the app opened there. A project that itself lives in
+ * the temporary folder keeps its copies there.
+ */
+export function isScratchCopy(path: string, tmp = tmpdir(), root?: string): boolean {
+  if (/[\\/]scratchpad([\\/]|$)/i.test(path)) return true
+  return isInside(path, tmp) && !(root && isInside(root, tmp))
 }
 
 export function copyLabel(root: string, path: string): string {
@@ -157,7 +168,7 @@ function cachedMediaDirs(root: string): string[] {
 const PROJECT_COLORS = ['#FF6B8B', '#64D2FF', '#FFD60A', '#5E5CE6', '#FF9F0A', '#30D158']
 
 export async function detectProject(root: string, name?: string, id?: string, color?: string): Promise<ProjectConfig> {
-  const trees = await listWorktrees(root)
+  const trees = (await listWorktrees(root)).filter((x) => pathKey(x.path) === pathKey(root) || !isScratchCopy(x.path, tmpdir(), root))
   const copies = trees.map((t) => ({ path: t.path, label: copyLabel(root, t.path), branch: t.branch }))
   if (!copies.length) copies.push({ path: root, label: t('Copia principal'), branch: undefined })
   const docsDirs = copies.map((c) => join(c.path, 'docs')).filter((d) => existsSync(d))

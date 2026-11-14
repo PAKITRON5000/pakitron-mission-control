@@ -38,7 +38,7 @@ export function checkTools(i: HealthInput): Check[] {
   const exec = i.exec ?? run
   const exists = i.exists ?? existsSync
   const out: Check[] = []
-  const claude = i.claudePath !== 'claude' && exists(i.claudePath) ? version(exec, i.claudePath) ?? 'instalado' : version(exec, 'claude')
+  const claude = i.claudePath !== 'claude' && exists(i.claudePath) ? version(exec, i.claudePath) ?? t('instalado') : version(exec, 'claude')
   const mac = (i.platform ?? process.platform) === 'darwin'
   out.push({ name: 'Claude Code', ok: Boolean(claude), detail: claude ?? t('no se encuentra'), fix: t('Pulsa «Instalar»: abre el instalador oficial de Claude Code en una ventana'), needed: true, install: 'claude' })
   const git = version(exec, 'git')
@@ -49,15 +49,16 @@ export function checkTools(i: HealthInput): Check[] {
   else out.push({ name: 'Node', ok: Boolean(node), detail: node ?? t('no se encuentra'), fix: t('Pulsa «Instalar» (Node 22 o posterior): las órdenes pmc y los avisos a los Claude lo usan'), needed: true, install: 'node' })
   const unity = i.projectRoots.some((r) => exists(join(r, 'ProjectSettings', 'ProjectVersion.txt')))
   if (unity) {
-    const hub = ['C:\\Program Files\\Unity\\Hub\\Editor', 'C:\\Program Files\\Unity Hub'].find((p) => exists(p))
-    out.push({ name: 'Unity', ok: Boolean(hub), detail: hub ? t('editores en {hub}', { hub: hub }) : t('no se encuentra en su carpeta habitual'), fix: 'Un proyecto es de Unity: instala Unity Hub y la versión que pide su ProjectSettings/ProjectVersion.txt', needed: false })
+    const hub = (mac ? ['/Applications/Unity/Hub/Editor', '/Applications/Unity Hub.app'] : ['C:\\Program Files\\Unity\\Hub\\Editor', 'C:\\Program Files\\Unity Hub']).find((p) => exists(p))
+    out.push({ name: 'Unity', ok: Boolean(hub), detail: hub ? t('editores en {hub}', { hub: hub }) : t('no se encuentra en su carpeta habitual'), fix: t('Un proyecto es de Unity: instala Unity Hub y la versión que pide su ProjectSettings/ProjectVersion.txt'), needed: false })
   }
   const blenderUsed = i.projectRoots.some((r) => exists(join(r, 'ArtSource')))
   if (blenderUsed) {
     const base = 'C:\\Program Files\\Blender Foundation'
     let found: string | undefined
-    try { found = exists(base) ? readdirSync(base).filter((d) => /^Blender/i.test(d)).sort().pop() : undefined } catch { /* not there */ }
-    out.push({ name: 'Blender', ok: Boolean(found), detail: found ?? t('no se encuentra en su carpeta habitual'), fix: 'Un proyecto genera sus modelos con Blender: instálalo (blender.org)', needed: false })
+    if (mac) found = exists('/Applications/Blender.app') ? '/Applications/Blender.app' : undefined
+    else try { found = exists(base) ? readdirSync(base).filter((d) => /^Blender/i.test(d)).sort().pop() : undefined } catch { /* not there */ }
+    out.push({ name: 'Blender', ok: Boolean(found), detail: found ?? t('no se encuentra en su carpeta habitual'), fix: t('Un proyecto genera sus modelos con Blender: instálalo (blender.org)'), needed: false })
   }
   return out
 }
@@ -71,17 +72,17 @@ export function checkReadings(i: HealthInput): Check[] {
   const out: Check[] = []
   for (const a of i.accounts) {
     const n = `Claude ${a.id.slice(6)}`
-    if (!exists(a.configDir)) { out.push({ name: n, ok: false, detail: t('su carpeta no existe: {configDir}', { configDir: a.configDir }), fix: 'Quita la cuenta en Ajustes › Cuentas o vuelve a añadirla con su carpeta', needed: true }); continue }
+    if (!exists(a.configDir)) { out.push({ name: n, ok: false, detail: t('su carpeta no existe: {configDir}', { configDir: a.configDir }), fix: t('Quita la cuenta en Ajustes › Cuentas o vuelve a añadirla con su carpeta'), needed: true }); continue }
     const parts: string[] = []
     const bad: string[] = []
-    if (a.statusLine) parts.push('lee el uso'); else bad.push('no lee el uso (activa la lectura de consumo)')
-    if (a.hooks) parts.push('recibe avisos'); else bad.push('no recibe avisos ni cuenta en los relevos (activa la coordinación)')
+    if (a.statusLine) parts.push(t('lee el uso')); else bad.push(t('no lee el uso (activa la lectura de consumo)'))
+    if (a.hooks) parts.push(t('recibe avisos')); else bad.push(t('no recibe avisos ni cuenta en los relevos (activa la coordinación)'))
     // Plugged in but silent for days while the account has been used: the format may have changed.
     let lastTalk = 0
     try { const d = join(a.configDir, 'projects'); if (exists(d)) lastTalk = statSync(d).mtimeMs } catch { /* unreadable */ }
     if (a.statusLine && lastTalk && (!a.usageAt || lastTalk - a.usageAt > 2 * DAY) && now - lastTalk < 7 * DAY)
-      bad.push('se ha usado estos días pero no llega ninguna lectura de uso: puede haber cambiado el formato de Claude Code')
-    out.push({ name: n, ok: !bad.length, detail: [...bad, ...parts].join(' · '), fix: bad.length ? 'Ajustes › Lectura de consumo y Coordinación: un clic por cuenta' : undefined, needed: false })
+      bad.push(t('se ha usado estos días pero no llega ninguna lectura de uso: puede haber cambiado el formato de Claude Code'))
+    out.push({ name: n, ok: !bad.length, detail: [...bad, ...parts].join(' · '), fix: bad.length ? t('Ajustes › Lectura de consumo y Coordinación: un clic por cuenta') : undefined, needed: false })
   }
   return out
 }

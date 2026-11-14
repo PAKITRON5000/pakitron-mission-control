@@ -1,5 +1,5 @@
 import { PROCESS_LIST, asTasklist } from './platform'
-import { t } from './i18n'
+import { t, tn, locale, getLang } from './i18n'
 // Things only one job can use at a time, whatever the project: the Unity editor of a copy, the graphics card (16 GB,
 // shared by every project), a player build (11-11: one was killed for memory). Until now this was a hand-written line in
 // RELEVO.md («el usuario tiene Premiere abierto: nada pesado»). Two halves:
@@ -103,7 +103,7 @@ export function doingOf(p: { name: string; cmd: string }): string {
   const n = p.name.toLowerCase()
   if (n.startsWith('ffmpeg')) return t('convirtiendo o exportando vídeo')
   if (n.includes('media encoder')) return t('exportando vídeo (Media Encoder)')
-  if (n.startsWith('python')) { const s = p.cmd.match(/([\w-]+\.py)/)?.[1]; return s ? `ejecutando ${s}` : t('un programa de Python') }
+  if (n.startsWith('python')) { const s = p.cmd.match(/([\w-]+\.py)/)?.[1]; return s ? t('ejecutando {script}', { script: s }) : t('un programa de Python') }
   if (n.startsWith('node')) return t('un proceso de Node')
   if (n === 'unity.exe') return 'Unity'
   if (n === 'blender.exe') return 'Blender'
@@ -114,19 +114,22 @@ export function doingOf(p: { name: string; cmd: string }): string {
 /** One line: how loaded the machine is and who makes it so («Claude 5: ffmpeg, convirtiendo vídeo, 4 de 32 núcleos»). */
 export function loadText(l: Load): string {
   const usedGb = (l.totalMb - l.freeMb) / 1024
-  const head = `Procesador al ${l.cpuPct} %, memoria ${usedGb.toFixed(1).replace('.', ',')} de ${(l.totalMb / 1024).toFixed(0)} GB`
+  const head = t('Procesador al {cpu} %, memoria {used} de {total} GB', { cpu: l.cpuPct, used: dec(usedGb.toFixed(1)), total: (l.totalMb / 1024).toFixed(0) })
   const top = l.procs.slice(0, 5).map((p) => {
-    const who = p.account === 'claude' ? 'un Claude' : p.account ? `Claude ${p.account.slice(6)}` : 'el PC'
+    const who = p.account === 'claude' ? t('un Claude') : p.account ? `Claude ${p.account.slice(6)}` : t('el PC')
     const cores = (p.cpuPct / 100) * l.cores
     const c = cores >= 10 ? Math.round(cores) : Math.round(cores * 10) / 10
-    const cpu = cores >= 0.5 ? `${c % 1 === 0 ? c : String(c).replace('.', ',')} de ${l.cores} núcleos` : ''
-    const ram = p.ramMb >= 1024 ? `${(p.ramMb / 1024).toFixed(1).replace('.', ',')} GB` : ''
+    const cpu = cores >= 0.5 ? t('{c} de {n} núcleos', { c: c % 1 === 0 ? c : dec(String(c)), n: l.cores }) : ''
+    const ram = p.ramMb >= 1024 ? `${dec((p.ramMb / 1024).toFixed(1))} GB` : ''
     const name = p.name.replace(/\.exe$/i, ''), doing = doingOf(p)
     const parts = [doing === name ? '' : doing, cpu, ram].filter(Boolean)
     return `${who}: ${name}${parts.length ? ` (${parts.join(', ')})` : ''}`
   })
   return top.length ? t('{head}. Lo que más gasta: {v0}.', { head: head, v0: top.join('; ') }) : `${head}.`
 }
+
+/** A number's decimal sign in the app's language («1,5» / «1.5»). */
+const dec = (s: string) => (getLang() === 'en' ? s : s.replace('.', ','))
 
 const clean = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9ñ._-]+/g, '-').replace(/^-|-$/g, '')
 
@@ -143,8 +146,8 @@ export function heldResources(db: DB, now = Date.now()): { name: string; account
   return listClaims(db, SHARED, now).filter((c) => !c.abandoned && c.taskKey.startsWith(KEY)).map((c) => ({ name: c.taskKey.slice(KEY.length), account: c.account, until: c.expiresAt, note: c.note }))
 }
 
-const gb = (mb: number) => (mb / 1024).toFixed(1).replace('.', ',')
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+const gb = (mb: number) => dec((mb / 1024).toFixed(1))
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 
 /** Above this the card has no room for a second heavy job (a video model or a player build next to an open editor). */
 const GPU_BUSY = 0.6
@@ -161,18 +164,18 @@ export function fullPowerOn(db: DB): boolean {
 export function resourcesText(db: DB, account: AccountId, busy: Busy, now = Date.now()): string {
   const stop: string[] = []
   const full = fullPowerOn(db)
-  if (busy.playing) stop.push(`el usuario está jugando (${busy.playing})`)
-  if (busy.userApps.length && !full) stop.push(`el usuario tiene abierto ${busy.userApps.join(' y ')}`)
+  if (busy.playing) stop.push(t('el usuario está jugando ({game})', { game: busy.playing }))
+  if (busy.userApps.length && !full) stop.push(t('el usuario tiene abierto {apps}', { apps: busy.userApps.join(t(' y ')) }))
   const parts: string[] = []
-  if (busy.userApps.length && full) parts.push(`TODA LA POTENCIA: el usuario lo ha pedido; ${busy.userApps.join(' y ')} abierto no frena lo pesado (mira igualmente pmc recursos y reserva con pmc recurso).`)
-  if (stop.length) parts.push(`NADA PESADO AHORA (ni Unity, ni Blender, ni ejecutable, ni generación con la gráfica): ${stop.join('; ')}. Trabaja en lo que no lo necesite y apunta en el relevo lo que queda por lanzar.`)
+  if (busy.userApps.length && full) parts.push(t('TODA LA POTENCIA: el usuario lo ha pedido; {apps} abierto no frena lo pesado (mira igualmente pmc recursos y reserva con pmc recurso).', { apps: busy.userApps.join(t(' y ')) }))
+  if (stop.length) parts.push(t('NADA PESADO AHORA (ni Unity, ni Blender, ni ejecutable, ni generación con la gráfica): {why}. Trabaja en lo que no lo necesite y apunta en el relevo lo que queda por lanzar.', { why: stop.join('; ') }))
   const seen: string[] = []
-  if (busy.unityEditors) seen.push(`${busy.unityEditors === 1 ? 'un editor de Unity abierto' : `${busy.unityEditors} editores de Unity abiertos`} (las órdenes por línea de órdenes necesitan cerrado el de su copia)`)
-  if (busy.blender) seen.push(`Blender en marcha (${busy.blender})`)
-  if (busy.gpu) seen.push(`gráfica: ${gb(busy.gpu.usedMb)} de ${gb(busy.gpu.totalMb)} GB en uso${busy.gpu.usedMb / busy.gpu.totalMb >= GPU_BUSY ? ', sin sitio para otro trabajo pesado' : ''}`)
-  if (seen.length) parts.push(`Se ve ahora: ${seen.join('; ')}.`)
+  if (busy.unityEditors) seen.push(t('{editors} (las órdenes por línea de órdenes necesitan cerrado el de su copia)', { editors: tn(busy.unityEditors, 'un editor de Unity abierto', '{n} editores de Unity abiertos') }))
+  if (busy.blender) seen.push(t('Blender en marcha ({what})', { what: busy.blender }))
+  if (busy.gpu) seen.push(t('gráfica: {used} de {total} GB en uso{full}', { used: gb(busy.gpu.usedMb), total: gb(busy.gpu.totalMb), full: busy.gpu.usedMb / busy.gpu.totalMb >= GPU_BUSY ? t(', sin sitio para otro trabajo pesado') : '' }))
+  if (seen.length) parts.push(t('Se ve ahora: {list}.', { list: seen.join('; ') }))
   const held = heldResources(db, now)
-  if (held.length) parts.push(`Con turno cogido: ${held.map((h) => `${h.name} (${h.account === account ? 'tú' : h.account}${h.note ? `: ${h.note}` : ''}, hasta las ${hhmm(h.until)})`).join('; ')}.`)
+  if (held.length) parts.push(t('Con turno cogido: {list}.', { list: held.map((h) => t('{name} ({who}{note}, hasta las {time})', { name: h.name, who: h.account === account ? t('tú') : h.account, note: h.note ? `: ${h.note}` : '', time: hhmm(h.until) })).join('; ') }))
   if (!parts.length) return ''
   return parts.join(' ')
 }

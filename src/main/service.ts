@@ -427,7 +427,7 @@ export class Service extends EventEmitter {
         const s = status[a.id]
         if (!s || a.state === 'trabajando' || a.state === 'esperando') continue
         a.state = s === 'baja' ? 'baja' : 'apartada'
-        a.stateReason = s === 'baja' ? 'De baja: ya no se paga' : 'Apartada por ti: no se usa'
+        a.stateReason = s === 'baja' ? t('De baja: ya no se paga') : t('Apartada por ti: no se usa')
       }
       this.writeTeam()
     } catch (e) {
@@ -553,11 +553,11 @@ export class Service extends EventEmitter {
         const { project, copy } = projectForPath(this.projects, e.cwd ?? '')
         const who = `Claude ${String(e.account).slice(6)}`
         const base = { projectId: project?.id, at: e.at, account: e.account, source: `hook ${e.event}`, ref: e.sessionId }
-        if (e.event === 'SessionStart') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} {v0} una sesión{v1}', { who: who, v0: e.source === 'resume' ? 'retomó' : e.source === 'compact' ? 'siguió tras compactar' : 'abrió', v1: copy ? ' en ' + copy : '' }), dedupe: `ss:${e.sessionId}:${e.at}` }))
-        else if (e.event === 'StopFailure') { this.emit('stop-failure', e, project); added += Number(addEvent(this.db, { ...base, kind: 'limite', title: t('{who} se ha parado: {v0}', { who: who, v0: e.error ?? 'error' }), detail: e.message, dedupe: `sf:${e.sessionId}:${e.at}` })) }
+        if (e.event === 'SessionStart') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} {v0} una sesión{v1}', { who: who, v0: e.source === 'resume' ? t('retomó') : e.source === 'compact' ? t('siguió tras compactar') : t('abrió'), v1: copy ? t(' en {copy}', { copy: copy }) : '' }), dedupe: `ss:${e.sessionId}:${e.at}` }))
+        else if (e.event === 'StopFailure') { this.emit('stop-failure', e, project); added += Number(addEvent(this.db, { ...base, kind: 'limite', title: t('{who} se ha parado: {v0}', { who: who, v0: e.error ?? t('error') }), detail: e.message, dedupe: `sf:${e.sessionId}:${e.at}` })) }
         else if (e.event === 'Stop') this.emit('stop', e, project)
         else if (e.event === 'PreCompact') added += Number(addEvent(this.db, { ...base, kind: 'compacta', title: t('{who} compactó su conversación ({v0})', { who: who, v0: e.source ?? 'auto' }), dedupe: `pc:${e.sessionId}:${e.at}` }))
-        else if (e.event === 'SessionEnd') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} cerró una sesión{v0}', { who: who, v0: copy ? ' en ' + copy : '' }), dedupe: `se:${e.sessionId}:${e.at}` }))
+        else if (e.event === 'SessionEnd') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} cerró una sesión{v0}', { who: who, v0: copy ? t(' en {copy}', { copy: copy }) : '' }), dedupe: `se:${e.sessionId}:${e.at}` }))
         else if (e.event === 'PostToolUse' && e.file) {
           const winPath = nativePath(String(e.file))
           const rel = project && isInside(winPath, project.root) && pathKey(winPath) !== pathKey(project.root) ? winPath.slice(project.root.replace(/[\\/]+$/, '').length + 1) : winPath

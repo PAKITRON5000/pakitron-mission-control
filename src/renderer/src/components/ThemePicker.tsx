@@ -58,7 +58,7 @@ export function ThemePicker() {
       </div>
       <div className="flex items-center gap-4 flex-wrap">
         <span className="w-44 c2">{t('Claro u oscuro')}</span>
-        <Segmented value={s.theme} onChange={(v) => void set({ theme: v })} options={[{ value: 'system', label: t('Como Windows') }, { value: 'light', label: t('Claro') }, { value: 'dark', label: t('Oscuro') }]} />
+        <Segmented value={s.theme} onChange={(v) => void set({ theme: v })} options={[{ value: 'system', label: t('Como el sistema') }, { value: 'light', label: t('Claro') }, { value: 'dark', label: t('Oscuro') }]} />
         <button className="btn btn-sm ml-auto" onClick={surprise}><Shuffle size={14} /> {t('Sorpréndeme')}</button>
       </div>
       <div>

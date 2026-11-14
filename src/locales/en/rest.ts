@@ -718,6 +718,8 @@ export const rest: Record<string, string> = {
   'Pulsa para descargarla. Se instala encima y no pierdes nada.': 'Click to download it. It installs over this one and you lose nothing.',
   'Descarga el instalador. Se instala encima de esta versión y no pierdes nada.': 'Downloads the installer. It installs over this version and you lose nothing.',
   'Versión {v0} disponible': 'Version {v0} available',
+  'Descargando la versión {v0}…': 'Downloading version {v0}…',
+  'No se pudo descargar la versión nueva ({v0})': 'The new version could not be downloaded ({v0})',
   // 0.33.1: installing what is missing with one click, and the small ring saying «left».
   'Instalar Node': 'Install Node',
   'Instalar': 'Install',

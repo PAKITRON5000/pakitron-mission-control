@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, t as tr, tn, locale } from './i18n'
 // Coordination between the four accounts: task reservations with expiry (so two Claudes never do the same task by not
 // knowing), hand-offs when an account runs out, and the instructions waiting for an account when it starts a session.
 // Everything is in the shared SQLite database; the CLI (`pmc claim`, hooks) and the app use the same functions.
@@ -66,8 +66,8 @@ export function claimTask(db: DB, projectId: string, taskKey: string, account: A
     db.prepare('INSERT INTO claim_history(project_id, task_key, account, action, at, note) VALUES(?,?,?,?,?,?)').run(projectId, taskKey, account, action, now, opts.note ?? null)
     db.exec('COMMIT')
     if (!renewed) {
-      const t = taskKeyFor(db, projectId, taskKey)
-      addEvent(db, { projectId, at: now, account, kind: 'reserva', title: `Claude ${account.slice(6)} se encarga de ${taskKey.startsWith('h:') ? '' : taskKey + ' · '}${t.title ?? ''}`.trim(), detail: action, source: 'pmc claim', ref: taskKey })
+      const tk = taskKeyFor(db, projectId, taskKey)
+      addEvent(db, { projectId, at: now, account, kind: 'reserva', title: tr('Claude {account} se encarga de {task}', { account: account.slice(6), task: `${taskKey.startsWith('h:') ? '' : taskKey + ' · '}${tk.title ?? ''}` }).trim(), detail: action, source: 'pmc claim', ref: taskKey })
     }
     return { ok: true, claim: row(db.prepare('SELECT * FROM claims WHERE project_id = ? AND task_key = ?').get(projectId, taskKey), now), renewed }
   } catch (e) {
@@ -114,15 +114,15 @@ export interface HandoffInput {
 /** The text the receiving Claude gets: what was being done, where, what is left, and how to start without repeating work. */
 export function handoffText(h: HandoffInput): string {
   const lines: string[] = []
-  lines.push(`Relevo en ${h.project.name}: sigues el trabajo de ${h.from}, que ${h.reason}.`)
-  if (h.heartbeat) lines.push(`Su último relevo (${new Date(h.heartbeat.at).toLocaleString('es-ES')}): ${h.heartbeat.text.slice(0, 900)}`)
+  lines.push(tr('Relevo en {project}: sigues el trabajo de {from}, que {reason}.', { project: h.project.name, from: h.from, reason: h.reason }))
+  if (h.heartbeat) lines.push(tr('Su último relevo ({date}): {text}', { date: new Date(h.heartbeat.at).toLocaleString(locale()), text: h.heartbeat.text.slice(0, 900) }))
   if (h.tasks.length) {
-    lines.push('Tareas suyas que quedan (según TASKS.md):')
-    for (const t of h.tasks.slice(0, 25)) lines.push(`- ${t.extId ?? t.key} · ${t.title}${t.status === 'en-desarrollo' ? ' (a medias)' : ''}`)
+    lines.push(tr('Tareas suyas que quedan (según TASKS.md):'))
+    for (const x of h.tasks.slice(0, 25)) lines.push(`- ${x.extId ?? x.key} · ${x.title}${x.status === 'en-desarrollo' ? tr(' (a medias)') : ''}`)
   }
   const dirty = h.copies.filter((c) => c.dirty > 0)
-  if (dirty.length) lines.push(`Cambios sin guardar: ${dirty.map((c) => `${c.label} (${c.branch ?? '—'}, ${c.dirty} archivos, ${c.path})`).join('; ')}. No los borres: revísalos con git status y git diff antes de seguir.`)
-  lines.push('Antes de empezar: lee docs/RELEVO.md (la línea En curso y el último latido), mira git status de la copia y no repitas lo que ya está hecho. Reserva cada tarea con `pmc claim <ID>` antes de tocarla.')
+  if (dirty.length) lines.push(tr('Cambios sin guardar: {list}. No los borres: revísalos con git status y git diff antes de seguir.', { list: dirty.map((c) => tr('{label} ({branch}, {n} archivos, {path})', { label: c.label, branch: c.branch ?? '—', n: c.dirty, path: c.path })).join('; ') }))
+  lines.push(tr('Antes de empezar: lee docs/RELEVO.md (la línea En curso y el último latido), mira git status de la copia y no repitas lo que ya está hecho. Reserva cada tarea con `pmc claim <ID>` antes de tocarla.'))
   return lines.join('\n')
 }
 
@@ -263,7 +263,7 @@ export function seedAssignments(db: DB, now = Date.now()): number {
   return n
 }
 
-const shortTask = (t: AssignedTask) => `${t.extId ?? t.key} · ${t.title.replace(/\*+/g, '').slice(0, 60)}${t.status === 'en-desarrollo' ? ' (a medias)' : ''}`
+const shortTask = (k: AssignedTask) => `${k.extId ?? k.key} · ${k.title.replace(/\*+/g, '').slice(0, 60)}${k.status === 'en-desarrollo' ? tr(' (a medias)') : ''}`
 
 /** What a session of this account is told first: what the user wants it to do before its own work, and what is not its own any more. */
 export function assignmentsText(db: DB, projectId: string, account: AccountId): string[] {
@@ -272,16 +272,16 @@ export function assignmentsText(db: DB, projectId: string, account: AccountId): 
   const mine = all.filter((a) => a.to === account)
   const items = mine.map((a) => ({ a, tasks: assignedTasks(db, projectId, a) })).filter((x) => x.tasks.length)
   if (items.length) {
-    const who = items.map((x) => x.a.from).join(', luego las de ')
-    out.push(`ENCARGO DEL USUARIO (Mission Control › Próximo): antes que tus propias tareas, haz las de ${who}. Si en este mensaje te pide otra cosa, haz lo que te pida; si te dice solo «sigue», empieza por esto:`)
-    for (const x of items) out.push(`- De ${x.a.from}: ${x.tasks.slice(0, 25).map(shortTask).join('; ')}.${x.a.order.length ? ' El usuario ha fijado este orden: respétalo.' : ''}`)
-    if (items.every((x) => !x.a.order.length)) out.push('El orden dentro de cada lista lo eliges tú: primero lo que esté a medias y lo que desbloquee otras tareas.')
-    out.push('Reserva cada una con pmc claim antes de tocarla. Cuando acabes todas, sigue con las tuyas.')
+    const who = items.map((x) => x.a.from).join(tr(', luego las de '))
+    out.push(tr('ENCARGO DEL USUARIO (Mission Control › Próximo): antes que tus propias tareas, haz las de {who}. Si en este mensaje te pide otra cosa, haz lo que te pida; si te dice solo «sigue», empieza por esto:', { who }))
+    for (const x of items) out.push(tr('- De {from}: {tasks}.{order}', { from: x.a.from, tasks: x.tasks.slice(0, 25).map(shortTask).join('; '), order: x.a.order.length ? tr(' El usuario ha fijado este orden: respétalo.') : '' }))
+    if (items.every((x) => !x.a.order.length)) out.push(tr('El orden dentro de cada lista lo eliges tú: primero lo que esté a medias y lo que desbloquee otras tareas.'))
+    out.push(tr('Reserva cada una con pmc claim antes de tocarla. Cuando acabes todas, sigue con las tuyas.'))
   }
   const given = all.filter((a) => a.from === account)
-  if (given.length) out.push(`El usuario ha encargado tus tareas a ${given.map((a) => a.to).join(' y ')}: no las empieces; cuando te quedes sin nada, pmc next te da la siguiente libre.`)
+  if (given.length) out.push(tr('El usuario ha encargado tus tareas a {who}: no las empieces; cuando te quedes sin nada, pmc next te da la siguiente libre.', { who: given.map((a) => a.to).join(tr(' y ')) }))
   const others = all.filter((a) => a.to !== account && a.from !== account)
-  if (others.length) out.push(`Encargos que no son para ti (no cojas esas tareas): ${others.map((a) => `${a.to} hace las de ${a.from}`).join('; ')}.`)
+  if (others.length) out.push(tr('Encargos que no son para ti (no cojas esas tareas): {list}.', { list: others.map((a) => tr('{to} hace las de {from}', { to: a.to, from: a.from })).join('; ') }))
   return out
 }
 
@@ -341,29 +341,29 @@ export function takeOver(db: DB, t: TakeoverInput, now = Date.now()): string {
   const moveAnswer = db.prepare("UPDATE instructions SET target = ?, status = 'recibida', channel = 'pmc relevo', delivered_at = ?, updated_at = ? WHERE id = ?")
   for (const a of answers) {
     moveAnswer.run(t.to, now, now, a.id)
-    addEvent(db, { projectId: t.project.id, at: now, account: t.to, kind: 'recibida', title: `Claude ${t.to.slice(6)} ha recibido, al recoger el trabajo de ${t.from}: «${a.body.slice(0, 100)}»`, source: 'pmc relevo', ref: `ins:${a.id}` })
+    addEvent(db, { projectId: t.project.id, at: now, account: t.to, kind: 'recibida', title: tr('Claude {n} ha recibido, al recoger el trabajo de {from}: «{body}»', { n: t.to.slice(6), from: t.from, body: a.body.slice(0, 100) }), source: 'pmc relevo', ref: `ins:${a.id}` })
   }
   const names = keys.map((k) => { const x = taskKeyFor(db, t.project.id, k); return `${k}${x.title ? ' · ' + x.title : ''}` })
-  const hhmm = new Date(now).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+  const hhmm = new Date(now).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
   addNotice(t.from, [
-    `Mission Control: mientras no podías trabajar, ${t.to} ha seguido tu trabajo en ${t.project.name} desde las ${hhmm}${names.length ? `: ${names.join('; ')}` : ''}.`,
-    'Antes de tocar nada: lee docs/RELEVO.md (Último latido y En curso) y mira git log y git status de tu copia. No rehagas lo que ya hizo y no toques lo que tenga reservado (pmc claims).',
-    `Después sigue con tu siguiente tarea pendiente; si no te queda ninguna, reserva una tarea libre de docs/TASKS.md o una parada de otra cuenta con pmc claim.`
+    tr('Mission Control: mientras no podías trabajar, {to} ha seguido tu trabajo en {project} desde las {time}{names}.', { to: t.to, project: t.project.name, time: hhmm, names: names.length ? `: ${names.join('; ')}` : '' }),
+    tr('Antes de tocar nada: lee docs/RELEVO.md (Último latido y En curso) y mira git log y git status de tu copia. No rehagas lo que ya hizo y no toques lo que tenga reservado (pmc claims).'),
+    tr('Después sigue con tu siguiente tarea pendiente; si no te queda ninguna, reserva una tarea libre de docs/TASKS.md o una parada de otra cuenta con pmc claim.')
   ].join(' '), [t.project.root, ...t.project.copies.map((c) => c.path)], now)
-  addEvent(db, { projectId: t.project.id, at: now, account: t.to, kind: 'relevo-app', title: `${t.to} sigue el trabajo de ${t.from}${names.length ? ': ' + names.join('; ') : ''}`, source: 'pmc relevo' })
-  const out: string[] = [`Relevo: ahora llevas el trabajo de ${t.from} en ${t.project.name}${t.fromState ? ` (${t.fromState}${t.backAt ? `, vuelve el ${when(t.backAt)}` : ''})` : ''}.`]
-  if (names.length) out.push(`Reservas que pasan a ti: ${names.join('; ')}.`)
-  for (const a of answers) out.push(`Respuesta del usuario que esperaba a ${t.from} (ahora es tuya): ${a.body.replace(/ Apúntalo en docs\/TASKS\.md.*$/, '')} Apúntala en docs/TASKS.md y síguela; no se la vuelvas a preguntar.`)
-  for (const e of t.enCurso) out.push(`Lo que tenía en curso (RELEVO.md): ${e}`)
-  if (t.heartbeat) out.push(`Su último latido (${new Date(t.heartbeat.at).toLocaleString('es-ES')}): ${t.heartbeat.text.slice(0, 700)}`)
+  addEvent(db, { projectId: t.project.id, at: now, account: t.to, kind: 'relevo-app', title: tr('{to} sigue el trabajo de {from}{names}', { to: t.to, from: t.from, names: names.length ? ': ' + names.join('; ') : '' }), source: 'pmc relevo' })
+  const out: string[] = [tr('Relevo: ahora llevas el trabajo de {from} en {project}{state}.', { from: t.from, project: t.project.name, state: t.fromState ? ` (${t.fromState}${t.backAt ? tr(', vuelve el {when}', { when: when(t.backAt) }) : ''})` : '' })]
+  if (names.length) out.push(tr('Reservas que pasan a ti: {list}.', { list: names.join('; ') }))
+  for (const a of answers) out.push(tr('Respuesta del usuario que esperaba a {from} (ahora es tuya): {body} Apúntala en docs/TASKS.md y síguela; no se la vuelvas a preguntar.', { from: t.from, body: a.body.replace(/ Apúntalo en docs\/TASKS\.md.*$/, '') }))
+  for (const e of t.enCurso) out.push(tr('Lo que tenía en curso (RELEVO.md): {text}', { text: e }))
+  if (t.heartbeat) out.push(tr('Su último latido ({date}): {text}', { date: new Date(t.heartbeat.at).toLocaleString(locale()), text: t.heartbeat.text.slice(0, 700) }))
   const dirty = t.copies.filter((c) => c.dirty > 0)
-  if (dirty.length) out.push(`Cambios sin guardar: ${dirty.map((c) => `${c.label} (${c.branch ?? '—'}): ${c.dirty} archivos`).join('; ')}. Son suyos y están a medias: revísalos con git status y git diff y sigue a partir de ellos; no los borres.`)
+  if (dirty.length) out.push(tr('Cambios sin guardar: {list}. Son suyos y están a medias: revísalos con git status y git diff y sigue a partir de ellos; no los borres.', { list: dirty.map((c) => tr('{label} ({branch}): {n} archivos', { label: c.label, branch: c.branch ?? '—', n: c.dirty })).join('; ') }))
   // 14-11: a blocked one (EV25, waiting for the user's second PC) was listed as work to carry on.
   const open = tasks.filter((x) => !keys.includes(x.key) && x.status !== 'bloqueada').slice(0, 12)
   const blocked = tasks.filter((x) => !keys.includes(x.key) && x.status === 'bloqueada').slice(0, 6)
-  if (open.length) out.push(`Otras tareas suyas sin terminar: ${open.map((x) => `${x.ext_id ?? x.key} · ${x.title}`).join('; ')}.`)
-  if (blocked.length) out.push(`Bloqueadas, esperan al usuario o un hecho real (no son para ahora): ${blocked.map((x) => x.ext_id ?? x.key).join(', ')}.`)
-  out.push(`Ahora: pon en RELEVO.md la línea En curso (${t.to}, desde las ${hhmm}: sigue lo de ${t.from}) y continúa. ${t.from} recibirá un aviso al volver para que no repita tu trabajo.`)
+  if (open.length) out.push(tr('Otras tareas suyas sin terminar: {list}.', { list: open.map((x) => `${x.ext_id ?? x.key} · ${x.title}`).join('; ') }))
+  if (blocked.length) out.push(tr('Bloqueadas, esperan al usuario o un hecho real (no son para ahora): {list}.', { list: blocked.map((x) => x.ext_id ?? x.key).join(', ') }))
+  out.push(tr('Ahora: pon en RELEVO.md la línea En curso ({to}, desde las {time}: sigue lo de {from}) y continúa. {from} recibirá un aviso al volver para que no repita tu trabajo.', { to: t.to, time: hhmm, from: t.from }))
   return out.join('\n')
 }
 
@@ -372,16 +372,16 @@ export function protocolText(pmc: string): string {
   // EV36 (12-11) halved it; EV75 (13-11) again, to keep the whole startup package under 4.000 characters: the same orders
   // in fewer words. It goes into every session and after every compaction.
   return [
-    `Cómo se trabaja aquí: sitúate con ${pmc} parte; una tarea, ${pmc} tarea <ID> (RELEVO, TASKS y STATE son archivo: busca en ellos, no los leas enteros; si faltan TASKS y RELEVO, créalos).`,
-    `Si el usuario dice solo «sigue»: su encargo; si no, lo que dejó a medias una cuenta sin uso (${pmc} relevo <cuenta>); si no, tus reservas; si no, ${pmc} claim <ID> de la siguiente libre (o ${pmc} next), y ${pmc} release <ID> al acabar.`,
-    `Al empezar o cambiar de faena: ${pmc} ahora "frase corta". Al cerrar cada bloque: ${pmc} guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está", y sigue: con uso y trabajo no termines el turno ni resumas para el usuario (lo ve en Mission Control); que el límite te corte a mitad es lo que quiere.`,
-    `Para que el usuario decida, no te pares: ${pmc} decide "título" --pregunta "…" --opcion "A: …" --opcion "B: …" --foto "ruta::qué se ve" --defecto "A" [--espera 12] [--tarea ID] y sigue con otra cosa (la respuesta llega sola, o con ${pmc} respuestas).`,
-    `Tareas nuevas: «(tras: ID)» si esperan a otras y el modelo que basta: [sonnet], [opus] o [fable].`,
-    `Antes de dar algo por hecho: ${pmc} verifica <ID> (si falla, arréglalo; lo que no tenga prueba, dilo). Lo que se ve o se oye: ${pmc} entrega <ID> --que "…" --mirar "…" --foto "ruta::qué se ve".`,
-    `Antes de algo pesado (Unity, Blender, la gráfica): ${pmc} recursos y ${pmc} recurso <unity|gpu|build> "para qué" (--soltar al acabar); si el usuario juega o edita vídeo, no lo lances. Más de 5 min: ${pmc} trabajo "título" --log … --salida …`,
+    tr('Cómo se trabaja aquí: sitúate con {pmc} parte; una tarea, {pmc} tarea <ID> (RELEVO, TASKS y STATE son archivo: busca en ellos, no los leas enteros; si faltan TASKS y RELEVO, créalos).', { pmc }),
+    tr('Si el usuario dice solo «sigue»: su encargo; si no, lo que dejó a medias una cuenta sin uso ({pmc} relevo <cuenta>); si no, tus reservas; si no, {pmc} claim <ID> de la siguiente libre (o {pmc} next), y {pmc} release <ID> al acabar.', { pmc }),
+    tr('Al empezar o cambiar de faena: {pmc} ahora "frase corta". Al cerrar cada bloque: {pmc} guarda "qué has hecho y qué queda" --probado "qué y cómo" --siguiente "el paso concreto" --no-rehacer "lo que ya está", y sigue: con uso y trabajo no termines el turno ni resumas para el usuario (lo ve en Mission Control); que el límite te corte a mitad es lo que quiere.', { pmc }),
+    tr('Para que el usuario decida, no te pares: {pmc} decide "título" --pregunta "…" --opcion "A: …" --opcion "B: …" --foto "ruta::qué se ve" --defecto "A" [--espera 12] [--tarea ID] y sigue con otra cosa (la respuesta llega sola, o con {pmc} respuestas).', { pmc }),
+    tr('Tareas nuevas: «(tras: ID)» si esperan a otras y el modelo que basta: [sonnet], [opus] o [fable].'),
+    tr('Antes de dar algo por hecho: {pmc} verifica <ID> (si falla, arréglalo; lo que no tenga prueba, dilo). Lo que se ve o se oye: {pmc} entrega <ID> --que "…" --mirar "…" --foto "ruta::qué se ve".', { pmc }),
+    tr('Antes de algo pesado (Unity, Blender, la gráfica): {pmc} recursos y {pmc} recurso <unity|gpu|build> "para qué" (--soltar al acabar); si el usuario juega o edita vídeo, no lo lances. Más de 5 min: {pmc} trabajo "título" --log … --salida …', { pmc }),
     // EV32 (13-11): 0 calls in 7 days in two projects after asking for them; Claude Code itself tells each session to
     // launch subagents only when the user asks (they start cold and cost more). Asking here was only noise.
-    `No sobrescribas una imagen con nota del usuario: guarda la nueva con otro nombre.`
+    tr('No sobrescribas una imagen con nota del usuario: guarda la nueva con otro nombre.')
   ].join(' ')
 }
 
@@ -405,7 +405,7 @@ export function commentsReached(db: DB, ins: { commentId?: number }[], pmc: stri
   const ids = ins.map((i) => i.commentId).filter((x): x is number => typeof x === 'number')
   for (const id of ids) {
     const c = db.prepare('SELECT status FROM comments WHERE id = ?').get(id) as { status: string } | undefined
-    if (c?.status === 'pendiente') setCommentStatus(db, id, 'recibido', 'Le ha llegado a un Claude')
+    if (c?.status === 'pendiente') setCommentStatus(db, id, 'recibido', tr('Le ha llegado a un Claude'))
   }
   return ids.length ? t('Notas sobre imágenes (n.º {v0}): cuando arregles cada una, {pmc} corregido <n.º> "qué has cambiado" (con --foto "ruta::qué se ve" si se ve), y vuelve al usuario a Revisar para que la apruebe.', { v0: ids.join(', '), pmc: pmc }) : ''
 }
@@ -429,22 +429,22 @@ export function teamContext(account: AccountId, now = Date.now(), file = join(pa
   const stuckText = (t: any): string => {
     const here = stuckHere(t)
     const away = stuckElsewhere(t)
-    const named = here.length ? `, con tareas suyas paradas${projectId && t.stuckIn ? ' aquí' : ''}: ${here.map((x: string) => x.split(/[\s·(]/)[0]).filter(Boolean).slice(0, 6).join(', ')}${here.length > 6 ? ` y ${here.length - 6} más` : ''}` : ''
-    return named + (away ? `${named ? ' (y' : ', con'} ${away} parada${away > 1 ? 's' : ''} en otros proyectos${named ? ')' : ''}` : '')
+    const named = here.length ? tr(', con tareas suyas paradas{here}: {list}{more}', { here: projectId && t.stuckIn ? tr(' aquí') : '', list: here.map((x: string) => x.split(/[\s·(]/)[0]).filter(Boolean).slice(0, 6).join(', '), more: here.length > 6 ? tr(' y {n} más', { n: here.length - 6 }) : '' }) : ''
+    return named + (away ? (named ? tn(away, ' (y {n} parada en otros proyectos)', ' (y {n} paradas en otros proyectos)') : tn(away, ', con {n} parada en otros proyectos', ', con {n} paradas en otros proyectos')) : '')
   }
   const others = data.team.filter((t) => t.id !== account).map((t) => {
-    if (t.status === 'baja') return `${t.id} de baja (no cuentes con ella)`
+    if (t.status === 'baja') return tr('{id} de baja (no cuentes con ella)', { id: t.id })
     // Set aside but working on its own (the backup account in its project, 13-11: «claude5 apartada… no se usa» while it
     // worked on the video project all day): it is said, so nobody thinks it is free or idle.
-    if (t.status === 'pausada' && t.state === 'trabajando') return `${t.id} trabajando aparte${t.projectId ? ` en ${t.projectId}` : ''} (cuenta apartada de lo demás: no le dejes trabajo ni cuentes con ella aquí)`
-    if (t.status === 'pausada') return `${t.id} apartada por el usuario (no se usa ni se le deja trabajo)`
+    if (t.status === 'pausada' && t.state === 'trabajando') return tr('{id} trabajando aparte{where} (cuenta apartada de lo demás: no le dejes trabajo ni cuentes con ella aquí)', { id: t.id, where: t.projectId ? tr(' en {project}', { project: t.projectId }) : '' })
+    if (t.status === 'pausada') return tr('{id} apartada por el usuario (no se usa ni se le deja trabajo)', { id: t.id })
     // A limit that already ended is not "sin uso" (12-11 11:30: «claude5 sin uso hasta las 07:30», four hours later).
-    if (t.state === 'sin-uso' && typeof t.backAt === 'number' && t.backAt <= now) return `${t.id} libre (su límite acabó el ${when(t.backAt)})`
-    if (t.state === 'sin-uso') return `${t.id} sin uso${t.backAt ? ` hasta el ${when(t.backAt)}` : ''}${t.gaveTo ? `, con sus tareas encargadas a ${t.gaveTo}` : stuckText(t)}`
-    if (t.state === 'trabajando') return `${t.id} trabajando${t.doing ? ` (${String(t.doing).slice(0, 60)})` : ''}`
-    return `${t.id} ${t.state === 'esperando' ? 'esperando al usuario' : 'libre'}${t.weekFree != null ? `, semana ${t.weekFree} % libre` : ''}`
+    if (t.state === 'sin-uso' && typeof t.backAt === 'number' && t.backAt <= now) return tr('{id} libre (su límite acabó el {when})', { id: t.id, when: when(t.backAt) })
+    if (t.state === 'sin-uso') return tr('{id} sin uso{back}{rest}', { id: t.id, back: t.backAt ? tr(' hasta el {when}', { when: when(t.backAt) }) : '', rest: t.gaveTo ? tr(', con sus tareas encargadas a {to}', { to: t.gaveTo }) : stuckText(t) })
+    if (t.state === 'trabajando') return tr('{id} trabajando{doing}', { id: t.id, doing: t.doing ? ` (${String(t.doing).slice(0, 60)})` : '' })
+    return tr('{id} {state}{week}', { id: t.id, state: t.state === 'esperando' ? tr('esperando al usuario') : tr('libre'), week: t.weekFree != null ? tr(', semana {pct} % libre', { pct: t.weekFree }) : '' })
   })
-  const lines = [`Las otras cuentas ahora: ${others.join('; ')}.`]
+  const lines = [tr('Las otras cuentas ahora: {list}.', { list: others.join('; ') })]
   // «Próximo» (the user, 4-11): the order he wants the accounts to start in.
   // Only when the accounts take turns («Se relevan entre ellos») does the order hold anyone back. With «Cada uno sigue con lo
   // suyo» or «Solo cuando yo lo diga» every open account works (12-11 11:30: claude3 was told to stop because claude5, a
@@ -462,18 +462,18 @@ export function teamContext(account: AccountId, now = Date.now(), file = join(pa
       const t = data.team.find((x) => x.id === id)
       return t && !t.status && t.state === 'disponible' && t.weekFree !== 0 && t.fiveFree !== 0
     })
-    lines.push(`Turno que ha elegido el usuario: ${order.join(' → ')}.${ahead.length ? ` Van antes que tú y están libres: ${ahead.join(', ')}. Si este trabajo es de relevo (seguir lo de una cuenta agotada), déjaselo a ella; lo tuyo propio, síguelo.` : ''}`)
+    lines.push(tr('Turno que ha elegido el usuario: {order}.{ahead}', { order: order.join(' → '), ahead: ahead.length ? tr(' Van antes que tú y están libres: {list}. Si este trabajo es de relevo (seguir lo de una cuenta agotada), déjaselo a ella; lo tuyo propio, síguelo.', { list: ahead.join(', ') }) : '' }))
   }
   if (me?.weekFree != null) {
     // The figure is from this account's last reply. If it is old and says there is nothing left, the user may have topped
     // it up since (12-11: claude3 was told "0 %" with a full week): say how old it is instead of telling it to stop.
     const age = typeof me.usageAt === 'number' ? now - me.usageAt : 0
-    const old = age > 30 * 60_000 ? ` (dato de hace ${age >= 2 * 3600_000 ? `${Math.round(age / 3600_000)} h` : `${Math.round(age / 60_000)} min`})` : ''
-    if (old && (me.weekFree === 0 || me.fiveFree === 0)) lines.push(`Según tu última lectura${old}, no te quedaba uso. Si estás leyendo esto es que vuelves a tenerlo (reinicio o recarga del usuario): la cifra real llega con tu primera respuesta; trabaja con normalidad y deja puntos de control en el relevo.`)
-    else lines.push(`A ti te queda el ${me.weekFree} % de la semana${me.fiveFree != null ? ` y el ${me.fiveFree} % de las 5 horas` : ''}${old}: cuando se vaya acabando, guarda (commit) y deja el relevo al día, y sigue trabajando hasta que el límite te corte: no te pares ni te despidas tú antes, aunque estés al 99 %.`)
+    const old = age > 30 * 60_000 ? tr(' (dato de hace {age})', { age: age >= 2 * 3600_000 ? `${Math.round(age / 3600_000)} h` : `${Math.round(age / 60_000)} min` }) : ''
+    if (old && (me.weekFree === 0 || me.fiveFree === 0)) lines.push(tr('Según tu última lectura{old}, no te quedaba uso. Si estás leyendo esto es que vuelves a tenerlo (reinicio o recarga del usuario): la cifra real llega con tu primera respuesta; trabaja con normalidad y deja puntos de control en el relevo.', { old }))
+    else lines.push(tr('A ti te queda el {week} % de la semana{five}{old}: cuando se vaya acabando, guarda (commit) y deja el relevo al día, y sigue trabajando hasta que el límite te corte: no te pares ni te despidas tú antes, aunque estés al 99 %.', { week: me.weekFree, five: me.fiveFree != null ? tr(' y el {pct} % de las 5 horas', { pct: me.fiveFree }) : '', old }))
   }
   if (data.team.some((t) => t.id !== account && t.state === 'sin-uso' && !t.gaveTo && stuckHere(t).length))
-    lines.push('Si acabas lo tuyo, puedes seguir una tarea parada de una cuenta sin uso: resérvala antes con pmc claim para que nadie la repita.')
+    lines.push(tr('Si acabas lo tuyo, puedes seguir una tarea parada de una cuenta sin uso: resérvala antes con pmc claim para que nadie la repita.'))
   return lines.join('\n')
 }
 
@@ -507,10 +507,10 @@ export function groupedLines(ins: { kind: string; body: string; id?: number }[])
     else groups.push({ kind: i.kind, items: [{ text, where }] })
   }
   return groups.map((g) => {
-    const label = KIND_LABEL[g.kind as keyof typeof KIND_LABEL] ?? g.kind
+    const label = t(KIND_LABEL[g.kind as keyof typeof KIND_LABEL] ?? g.kind)
     const first = g.items[0]
     if (g.items.length > 1) {
-      const where = g.items.map((it) => `${it.where ?? '(sin archivo)'}${it.text.trim().toLowerCase() !== first.text.trim().toLowerCase() ? ` («${it.text.trim()}»)` : ''}`).join('; ')
+      const where = g.items.map((it) => `${it.where ?? tr('(sin archivo)')}${it.text.trim().toLowerCase() !== first.text.trim().toLowerCase() ? ` («${it.text.trim()}»)` : ''}`).join('; ')
       return t('- [{label}, el mismo problema en {length} archivos] {v0}. Marcado en: {where}. Trátalo como una sola orden: corrige la causa y revisa también los demás casos parecidos (por ejemplo, el resto de armas u oficios), no solo los marcados.', { label: label, length: g.items.length, v0: first.text.trim(), where: where })
     }
     return `- [${label}] ${first.text}${first.where ? ` — sobre ${first.where}` : ''}`
@@ -523,20 +523,20 @@ export function groupedLines(ins: { kind: string; body: string; id?: number }[])
  * other note is something to file where it belongs (TASKS.md, its section, priority and account), not a new main task.
  */
 export function notesText(projectName: string, ins: { kind: string; body: string; id?: number }[], during: boolean): string[] {
-  const first = ins.filter((i) => i.kind === 'prioridad' || i.body.startsWith('Relevo en '))
+  const first = ins.filter((i) => i.kind === 'prioridad' || i.body.startsWith('Relevo en ') || i.body.startsWith('Handoff in '))
   const reviews = ins.filter((i) => !first.includes(i) && i.body.startsWith(REVIEW_PREFIX))
   const rest = ins.filter((i) => !first.includes(i) && !reviews.includes(i))
   const out: string[] = []
   if (first.length) {
-    out.push(`Mission Control: el usuario ha marcado ${first.length === 1 ? 'esto' : 'estas cosas'} en ${projectName} para hacer antes que lo demás${during ? ' (cierra antes el paso en el que estás, sin dejar nada roto)' : ''}:`)
+    out.push(tr('Mission Control: el usuario ha marcado {what} en {project} para hacer antes que lo demás{during}:', { what: first.length === 1 ? tr('esto') : tr('estas cosas'), project: projectName, during: during ? tr(' (cierra antes el paso en el que estás, sin dejar nada roto)') : '' }))
     out.push(...groupedLines(first))
   }
   if (reviews.length) {
-    out.push(`Mission Control: el usuario ha revisado trabajo hecho en ${projectName} y pide cambios. No cortes lo que estás haciendo, pero hazlos antes de empezar nada nuevo${during ? ', en cuanto cierres lo que tienes entre manos' : ''}:`)
+    out.push(tr('Mission Control: el usuario ha revisado trabajo hecho en {project} y pide cambios. No cortes lo que estás haciendo, pero hazlos antes de empezar nada nuevo{during}:', { project: projectName, during: during ? tr(', en cuanto cierres lo que tienes entre manos') : '' }))
     out.push(...groupedLines(reviews))
   }
   if (rest.length) {
-    out.push(`Mission Control: el usuario ha dejado ${rest.length === 1 ? 'una nota' : `${rest.length} notas`} en ${projectName}. No son tu tarea principal ni te hacen parar: ${during ? 'cuando cierres el paso en el que estás, ' : ''}apunta cada una en docs/TASKS.md donde le toque (su sección, su prioridad y la cuenta que mejor encaje, que puede ser otra)${rest.some((i) => i.id != null && (i.kind === 'general' || i.kind === 'tarea')) ? ', con su marca (MC-…) en la línea para que el usuario vea en la app que está apuntada,' : ''} y sigue con lo tuyo por orden de prioridad. Hazla tú enseguida solo si corrige justo lo que estás haciendo.`)
+    out.push(tr('Mission Control: el usuario ha dejado {notes} en {project}. No son tu tarea principal ni te hacen parar: {when}apunta cada una en docs/TASKS.md donde le toque (su sección, su prioridad y la cuenta que mejor encaje, que puede ser otra){mark} y sigue con lo tuyo por orden de prioridad. Hazla tú enseguida solo si corrige justo lo que estás haciendo.', { notes: rest.length === 1 ? tr('una nota') : tr('{n} notas', { n: rest.length }), project: projectName, when: during ? tr('cuando cierres el paso en el que estás, ') : '', mark: rest.some((i) => i.id != null && (i.kind === 'general' || i.kind === 'tarea')) ? tr(', con su marca (MC-…) en la línea para que el usuario vea en la app que está apuntada,') : '' }))
     out.push(...groupedLines(rest))
   }
   return out
@@ -556,7 +556,7 @@ export function prioritiesText(db: DB, projectId: string, account: AccountId, no
   const holders = new Map(listClaims(db, projectId, now).filter((c) => !c.abandoned).map((c) => [c.taskKey, c.account]))
   const items = list.map((t) => {
     const h = holders.get(t.key)
-    return `${t.extId ?? t.key} · ${t.title.slice(0, 70)} [${t.priority === 0 ? 'urgente' : 'alta'}${h ? (h === account ? ', la tienes tú' : `, la tiene ${h}`) : ''}]`
+    return `${t.extId ?? t.key} · ${t.title.slice(0, 70)} [${t.priority === 0 ? tr('urgente') : tr('alta')}${h ? (h === account ? tr(', la tienes tú') : tr(', la tiene {holder}', { holder: h })) : ''}]`
   })
   return t('Prioridades del usuario, antes que el resto y la más alta primero (si está libre, resérvala con pmc claim; si la tiene otra cuenta, sigue con la siguiente): {v0}.', { v0: items.join('; ') })
 }
@@ -658,7 +658,7 @@ export function nextTasks(db: DB, projectId: string, account: AccountId, limit =
  */
 export const STALE_RELAY_MS = 12 * 3600_000
 export function expireStaleRelays(db: DB, now = Date.now()): number {
-  return Number(db.prepare("UPDATE instructions SET status = 'anulada', updated_at = ? WHERE body LIKE 'Relevo en %' AND status IN ('guardada', 'pendiente-entrega', 'entregada') AND created_at < ?").run(now, now - STALE_RELAY_MS).changes)
+  return Number(db.prepare("UPDATE instructions SET status = 'anulada', updated_at = ? WHERE (body LIKE 'Relevo en %' OR body LIKE 'Handoff in %') AND status IN ('guardada', 'pendiente-entrega', 'entregada') AND created_at < ?").run(now, now - STALE_RELAY_MS).changes)
 }
 
 export function deliverPending(db: DB, project: ProjectConfig, account: AccountId, now = Date.now()): string {
@@ -695,7 +695,7 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
   // EV65: what was marked done lately with nothing to prove it: the next one checks it instead of trusting the box.
   try {
     const unchecked = db.prepare("SELECT COALESCE(ext_id, key) AS id FROM tasks t WHERE project_id = ? AND gone = 0 AND COALESCE(override, status) = 'terminada' AND updated_at > ? AND NOT EXISTS (SELECT 1 FROM verifications v WHERE v.project_id = t.project_id AND v.task_key = t.key) ORDER BY updated_at DESC LIMIT 6").all(project.id, now - 3 * 86400_000) as { id: string }[]
-    if (unchecked.length) opt(`Mission Control · hechas sin comprobar en ${project.name} (estos días, sin pmc verifica ni entrega con foto): ${unchecked.map((u) => u.id).join(', ')}. Si tocan lo tuyo, compruébalas antes de construir encima.`, 4)
+    if (unchecked.length) opt(tr('Mission Control · hechas sin comprobar en {project} (estos días, sin pmc verifica ni entrega con foto): {list}. Si tocan lo tuyo, compruébalas antes de construir encima.', { project: project.name, list: unchecked.map((u) => u.id).join(', ') }), 4)
   } catch { /* no verifications table yet */ }
   if (ins.length) {
     out.push(...notesText(project.name, ins, false))
@@ -709,28 +709,28 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
     }
   }
   if (stillOpen.length) {
-    out.push(`Mission Control: cambios que el usuario pidió al revisar y siguen sin hacer en ${project.name}. Van antes que las tareas nuevas; al acabar cada uno, pmc entrega <ID> --que … --mirar … --foto … para que vuelva a «Para revisar»:`)
+    out.push(tr('Mission Control: cambios que el usuario pidió al revisar y siguen sin hacer en {project}. Van antes que las tareas nuevas; al acabar cada uno, pmc entrega <ID> --que … --mirar … --foto … para que vuelva a «Para revisar»:', { project: project.name }))
     // EV75: the start of each note (the whole one is in pmc tarea <ID>), at most 10: they were 5.000 characters in the game project.
-    const short = (s: string) => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > 150 ? t.slice(0, 150).replace(/\s+\S*$/, '') + '… (entera: pmc tarea ' : t }
+    const short = (s: string) => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > 150 ? t.slice(0, 150).replace(/\s+\S*$/, '') + tr('… (entera: pmc tarea ') : t }
     for (const c of stillOpen.slice(0, 10)) { const s = short(c.note); out.push(`- ${c.extId ?? c.title}: ${s.endsWith('pmc tarea ') ? s + (c.extId ?? c.title.slice(0, 30)) + ')' : s}`) }
-    if (stillOpen.length > 10) out.push(`- y ${stillOpen.length - 10} más: pmc parte las lista todas.`)
+    if (stillOpen.length > 10) out.push(tr('- y {n} más: pmc parte las lista todas.', { n: stillOpen.length - 10 }))
   }
   const notice = takeNotice(account, project.root)
   if (notice) out.push(notice)
   pruneAssignments(db, project.id, now)
   const assigned = assignmentsText(db, project.id, account)
   // EV75: a long list of passed-on tasks is cut (pmc parte has it all): 920 characters for claude1 in the game project.
-  if (assigned.length) out.push(...assigned.map((s) => (s.length > 480 ? s.slice(0, 480).replace(/[;,][^;,]*$/, '') + '… (todas en pmc parte)' : s)))
+  if (assigned.length) out.push(...assigned.map((s) => (s.length > 480 ? s.slice(0, 480).replace(/[;,][^;,]*$/, '') + tr('… (todas en pmc parte)') : s)))
   const team = teamContext(account, now, undefined, project.id)
   if (team) opt((out.length ? '' : 'Mission Control: ') + team, 2)
-  if (mine.length) out.push(`Tienes reservadas: ${mine.map((c) => c.taskKey).join(', ')}.`)
+  if (mine.length) out.push(tr('Tienes reservadas: {list}.', { list: mine.map((c) => c.taskKey).join(', ') }))
   else {
     // EV37: «sigue» starts on the right task without first running pmc parte and pmc next to find it.
     const next = nextTasks(db, project.id, account, 3, now).filter((t) => !t.change)
     if (next.length) {
-      const say = (t: (typeof next)[number]) => `${t.extId ?? t.key} · ${t.title.slice(0, 90)}${t.status === 'en-desarrollo' ? ' (a medias)' : ''}${t.model ? ` [${t.model}]` : ''}${t.assignedFrom ? ` (de ${t.assignedFrom})` : ''}`
-      out.push(`Tu siguiente tarea libre, si no hay encargo ni relevo: ${say(next[0])}. Resérvala con pmc claim <ID> y ve a por ella; pmc tarea <ID> te da su texto entero.`)
-      if (next.length > 1) opt(`Después: ${next.slice(1).map(say).join('; ')}.`, 3)
+      const say = (t: (typeof next)[number]) => `${t.extId ?? t.key} · ${t.title.slice(0, 90)}${t.status === 'en-desarrollo' ? tr(' (a medias)') : ''}${t.model ? ` [${t.model}]` : ''}${t.assignedFrom ? tr(' (de {from})', { from: t.assignedFrom }) : ''}`
+      out.push(tr('Tu siguiente tarea libre, si no hay encargo ni relevo: {task}. Resérvala con pmc claim <ID> y ve a por ella; pmc tarea <ID> te da su texto entero.', { task: say(next[0]) }))
+      if (next.length > 1) opt(tr('Después: {list}.', { list: next.slice(1).map(say).join('; ') }), 3)
     }
   }
   const prio = prioritiesText(db, project.id, account, now)
@@ -738,8 +738,8 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
   const out_ = teamStates(now)
   const parked = others.filter((c) => out_.get(c.account) === 'sin-uso')
   const busy = others.filter((c) => out_.get(c.account) !== 'sin-uso')
-  if (busy.length) opt(`No toques (las tienen otras cuentas que pueden seguir): ${busy.map((c) => `${c.taskKey} (${c.account})`).join(', ')}.`, 5)
-  if (parked.length) opt(`Reservadas por cuentas sin uso, que puedes seguir con relevo: ${parked.map((c) => `${c.taskKey} (${c.account})`).join(', ')}.`, 6)
+  if (busy.length) opt(tr('No toques (las tienen otras cuentas que pueden seguir): {list}.', { list: busy.map((c) => `${c.taskKey} (${c.account})`).join(', ') }), 5)
+  if (parked.length) opt(tr('Reservadas por cuentas sin uso, que puedes seguir con relevo: {list}.', { list: parked.map((c) => `${c.taskKey} (${c.account})`).join(', ') }), 6)
   out.push(protocolText(pmcCommand()))
   const fit = fitPackage(out, (s) => drop.get(s) ?? 0)
   return (fit[0].startsWith('Mission Control') ? '' : 'Mission Control: ') + fit.join('\n')
@@ -777,7 +777,7 @@ export function sharedFileWarning(db: DB, account: AccountId, file: string, sess
     .get(path.split('\\').join('/'), account, now - SHARED_FILE_MS) as { account: string; at: number } | undefined
   if (!other) return undefined
   const name = path.split(/[\\/]/).pop() ?? path
-  const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: t('Claude {v0} y Claude {v1} han escrito el mismo archivo: {name}', { v0: account.slice(6), v1: other.account.slice(6), name: name }), detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${path.toLowerCase()}` })
+  const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: t('Claude {v0} y Claude {v1} han escrito el mismo archivo: {name}', { v0: account.slice(6), v1: other.account.slice(6), name: name }), detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${pathKey(path)}` })
   if (!fresh) return undefined
   const min = Math.max(1, Math.round((now - other.at) / 60_000))
   return t('Mission Control: {account} escribió este mismo archivo ({path}) hace {min} min. Vuelve a leerlo antes de tocarlo otra vez (puede haber cambiado desde que lo leíste), no deshagas sus cambios y mira con pmc claims qué tarea lleva: si las dos tocan lo mismo, deja la tuya en un punto que compile y sigue por otra parte, o apúntalo en el relevo para que no os piséis.', { account: other.account, path: path, min: min })

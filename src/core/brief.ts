@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, t as tr, locale } from './i18n'
 // The work brief (`pmc parte`) and one task's text (`pmc tarea <ID>`): what a session needs to start, in a couple of
 // kilobytes. The game project's RELEVO.md is 104 KB and its TASKS.md 297 KB (12-11), nearly all of it history, and every session
 // and every hand-off was told to read them. The long files stay as an archive to search; nobody has to read them whole.
@@ -10,11 +10,13 @@ import { hideCodeStars, showCodeStars, stripMd } from './parse/tasks'
 import { listClaims, nextTasks, taskKeyFor, teamContext } from './coord'
 import { openChangesFor } from './changes'
 import { lastVerification, verificationLine } from './verify'
-import { HEARTBEAT, IN_PROGRESS } from './docwords'
+import { HEARTBEAT, HOW_HEADING, IN_PROGRESS, TO_FILL_RE } from './docwords'
 
 export const BRIEF_MAX = 4500
 /** EV121: what a session with nothing left in its queue does instead of stopping (as autonomous mode says at Stop). */
 export const IDLE_IDEA = 'Antes de parar, piensa qué mejorar aquí (lo que falla, lo que falta, lo que el usuario pidió y no está, pruebas, rendimiento, lo que se ve), apúntalo en docs/TASKS.md como tareas con «se da por buena cuando…», reserva la primera y empiézala.'
+/** The same, in the app's language (IDLE_IDEA is the Spanish key). */
+export const idleIdea = (): string => t(IDLE_IDEA)
 
 const HEARTBEAT_MAX = 1800
 const EN_CURSO_MAX = 600
@@ -60,47 +62,47 @@ export function workingNotes(project: ProjectConfig): string | undefined {
   const doc = newestDoc(project, 'PROYECTO.md')
   if (!doc) return t('Este proyecto no tiene ficha (docs/PROYECTO.md): pmc preparar la crea; rellénala leyendo el proyecto (10 minutos como mucho).')
   const md = readText(doc.file)
-  const m = md.match(/^##\s+Cómo trabajarlo mejor\s*\r?\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)
-  const toFill = /\(por completar\)/.test(md)
+  const m = md.match(new RegExp(`^##\\s+${HOW_HEADING}\\s*\\r?\\n([\\s\\S]*?)(?=^##\\s|$(?![\\s\\S]))`, 'm'))
+  const toFill = TO_FILL_RE.test(md)
   if (!m) return toFill ? t('La ficha del proyecto ({file}) está a medio rellenar: complétala leyendo el proyecto.', { file: doc.file }) : undefined
   const text = stripMd(m[1].replace(/\r?\n+/g, ' ').trim())
-  return `CÓMO SE TRABAJA AQUÍ: ${cut(text, HOW_MAX, '(sigue en docs/PROYECTO.md)')}${toFill ? ' La ficha tiene partes «(por completar)»: complétalas leyendo el proyecto.' : ''}`.trim()
+  return `${t('CÓMO SE TRABAJA AQUÍ: {text}', { text: cut(text, HOW_MAX, t('(sigue en docs/PROYECTO.md)')) })}${toFill ? t(' La ficha tiene partes «(por completar)»: complétalas leyendo el proyecto.') : ''}`.trim()
 }
 
 /** Everything a session needs to start working in this project, short. Reads the newest RELEVO.md of all the copies. */
 export function briefText(db: DB, project: ProjectConfig, account: AccountId, opts: BriefOptions = {}): string {
   const now = opts.now ?? Date.now()
-  const out: string[] = [`Parte de ${project.name} para ${account} (${new Date(now).toLocaleString('es-ES', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}).`]
+  const out: string[] = [tr('Parte de {project} para {account} ({when}).', { project: project.name, account, when: new Date(now).toLocaleString(locale(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) })]
   const doc = newestDoc(project, 'RELEVO.md')
   if (doc) {
     const live = liveRelevo(readText(doc.file))
-    if (live.enCurso) out.push(`EN CURSO: ${cut(live.enCurso, EN_CURSO_MAX, '')}`.trim())
-    if (live.latest) out.push(`ÚLTIMO LATIDO: ${cut(live.latest, HEARTBEAT_MAX, `(sigue en ${doc.file}; busca «Último latido»)`)}`)
-    if (!live.enCurso && !live.latest) out.push(`RELEVO.md (${doc.file}) no tiene «En curso» ni «Último latido»: ponlos al cerrar tu primer bloque.`)
-  } else out.push('Este proyecto no tiene docs/RELEVO.md: créalo al cerrar tu primer bloque (una línea «En curso» y un «Último latido» con fecha y hora).')
+    if (live.enCurso) out.push(tr('EN CURSO: {text}', { text: cut(live.enCurso, EN_CURSO_MAX, '') }).trim())
+    if (live.latest) out.push(tr('ÚLTIMO LATIDO: {text}', { text: cut(live.latest, HEARTBEAT_MAX, tr('(sigue en {file}; busca «Último latido»)', { file: doc.file })) }))
+    if (!live.enCurso && !live.latest) out.push(tr('RELEVO.md ({file}) no tiene «En curso» ni «Último latido»: ponlos al cerrar tu primer bloque.', { file: doc.file }))
+  } else out.push(tr('Este proyecto no tiene docs/RELEVO.md: créalo al cerrar tu primer bloque (una línea «En curso» y un «Último latido» con fecha y hora).'))
   const how = workingNotes(project)
   if (how) out.push(how)
 
   const changes = openChangesFor(db, project.id, account)
   if (changes.length) {
-    out.push('CAMBIOS QUE PIDIÓ EL USUARIO AL REVISAR (van antes que lo nuevo):')
+    out.push(tr('CAMBIOS QUE PIDIÓ EL USUARIO AL REVISAR (van antes que lo nuevo):'))
     for (const c of changes.slice(0, 5)) out.push(`- ${c.extId ?? c.title}: ${cut(c.note, 300, '')}`.trim())
   }
   // nextTasks puts the changes first and counts them in its limit: ask for room for both.
   const next = nextTasks(db, project.id, account, 6 + changes.length, now).filter((t) => !t.change).slice(0, 6)
   if (next.length) {
-    const P = ['URGENTE', 'alta', '', 'baja']
-    out.push('TU COLA (por orden):')
+    const P = [tr('URGENTE'), tr('alta'), '', tr('baja')]
+    out.push(tr('TU COLA (por orden):'))
     for (const t of next) {
-      const tags = [P[t.priority], t.assignedFrom ? `encargo, era de ${t.assignedFrom}` : '', t.status === 'en-desarrollo' ? 'a medias' : '', t.mine ? 'reservada por ti' : '', t.model ? `basta con ${t.model}` : ''].filter(Boolean)
+      const tags = [P[t.priority], t.assignedFrom ? tr('encargo, era de {from}', { from: t.assignedFrom }) : '', t.status === 'en-desarrollo' ? tr('a medias') : '', t.mine ? tr('reservada por ti') : '', t.model ? tr('basta con {model}', { model: t.model }) : ''].filter(Boolean)
       out.push(`- ${t.extId ?? t.key} · ${cut(stripMd(t.title), 110, '')}${tags.length ? ` [${tags.join(', ')}]` : ''}`)
     }
-  } else out.push(`TU COLA: no queda ninguna tarea libre (las que esperan al usuario o un hecho real no cuentan). ${IDLE_IDEA}`)
+  } else out.push(tr('TU COLA: no queda ninguna tarea libre (las que esperan al usuario o un hecho real no cuentan). {idea}', { idea: idleIdea() }))
   const claims = listClaims(db, project.id, now).filter((c) => !c.abandoned && c.account !== account)
-  if (claims.length) out.push(`RESERVADAS POR OTRAS CUENTAS (no las toques): ${claims.slice(0, 12).map((c) => `${c.taskKey} (${c.account})`).join(', ')}.`)
+  if (claims.length) out.push(tr('RESERVADAS POR OTRAS CUENTAS (no las toques): {list}.', { list: claims.slice(0, 12).map((c) => `${c.taskKey} (${c.account})`).join(', ') }))
   const team = teamContext(account, now, opts.teamFile, project.id)
-  if (team) out.push(`EQUIPO: ${team.split('\n')[0].replace(/^Las otras cuentas ahora: /, '')}`)
-  out.push('El texto completo de una tarea: pmc tarea <ID>. No leas RELEVO.md, TASKS.md ni STATE.md enteros: son archivo; busca en ellos solo lo que te falte.')
+  if (team) out.push(tr('EQUIPO: {text}', { text: team.split('\n')[0].replace(/^Las otras cuentas ahora: /, '') }))
+  out.push(tr('El texto completo de una tarea: pmc tarea <ID>. No leas RELEVO.md, TASKS.md ni STATE.md enteros: son archivo; busca en ellos solo lo que te falte.'))
   const text = out.join('\n')
   return text.length <= BRIEF_MAX ? text : text.slice(0, BRIEF_MAX - 1) + '…'
 }
@@ -130,7 +132,7 @@ export function condenseNotes(line: string, keep = NOTES_SHOWN): { text: string;
   }
   if (notes.length <= keep + 1) return { text: line, hidden: 0 }
   const gone = notes.length - keep
-  const text = `${m[1]}${notes.slice(0, keep).join(' ')} *(${gone} notas anteriores: pmc tarea <ID> --todo)* ${rest}`
+  const text = `${m[1]}${notes.slice(0, keep).join(' ')} *(${tr('{n} notas anteriores: pmc tarea <ID> --todo', { n: gone })})* ${rest}`
   return { text: showCodeStars(text), hidden: gone }
 }
 
@@ -162,17 +164,17 @@ export function taskText(db: DB, project: ProjectConfig, idOrKey: string, now = 
     }
   }
   const P = ['urgente', 'alta', 'normal', 'baja']
-  out.push(`${r.ext_id ?? r.key} · ${r.st}${r.verified ? ' (aceptada por el usuario)' : ''} · prioridad ${P[r.priority] ?? 'normal'}${r.owner ? ` · de ${r.owner}` : ''}${r.section ? ` · sección «${stripMd(r.section).slice(0, 90)}»` : ''}`)
+  out.push(`${r.ext_id ?? r.key} · ${r.st}${r.verified ? tr(' (aceptada por el usuario)') : ''} · ${tr('prioridad {p}', { p: tr(P[r.priority] ?? 'normal') })}${r.owner ? tr(' · de {owner}', { owner: r.owner }) : ''}${r.section ? tr(' · sección «{section}»', { section: stripMd(r.section).slice(0, 90) }) : ''}`)
   const holder = listClaims(db, project.id, now).find((c) => c.taskKey === r.key && !c.abandoned)
-  if (holder) out.push(`Reservada por ${holder.account}${holder.note ? ` (${holder.note})` : ''}.`)
+  if (holder) out.push(tr('Reservada por {account}{note}.', { account: holder.account, note: holder.note ? ` (${holder.note})` : '' }))
   const change = db.prepare("SELECT note FROM task_changes WHERE project_id = ? AND task_key = ? AND status = 'pedido' ORDER BY id DESC LIMIT 1").get(project.id, r.key) as { note: string } | undefined
-  if (change) out.push(`El usuario pidió al revisarla: ${change.note}`)
+  if (change) out.push(tr('El usuario pidió al revisarla: {note}', { note: change.note }))
   const seen = lastVerification(db, project.id, r.key)
   if (seen || r.st === 'terminada') out.push(verificationLine(seen))
   out.push(body ?? `${r.title}${r.detail ? '\n' + r.detail : ''}`)
-  if (r.source_file) out.push(`(${r.source_file}${r.source_line ? `, línea ${r.source_line}` : ''})`)
+  if (r.source_file) out.push(`(${r.source_file}${r.source_line ? tr(', línea {line}', { line: r.source_line }) : ''})`)
   const text = out.join('\n')
-  return text.length <= TASK_MAX ? text : text.slice(0, TASK_MAX) + `\n… (cortado; el resto está en ${r.source_file}, línea ${r.source_line})`
+  return text.length <= TASK_MAX ? text : text.slice(0, TASK_MAX) + '\n' + tr('… (cortado; el resto está en {file}, línea {line})', { file: r.source_file, line: r.source_line })
 }
 
 export { taskKeyFor }

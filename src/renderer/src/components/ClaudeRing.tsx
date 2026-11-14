@@ -122,7 +122,7 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
               ? <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{tight.which === 'five' ? t('queda · 5 h') : t('queda · sem.')}</span>
               : <>
                 <span style={{ fontSize: tiny(0.09), color: 'var(--label-2)', fontWeight: 650, marginTop: 1 }}>{t('queda')}</span>
-                <span style={{ fontSize: tiny(0.085), color: 'var(--label-2)', fontWeight: 550 }}>{tight.which === 'five' ? '5 horas' : 'semana'}</span>
+                <span style={{ fontSize: tiny(0.085), color: 'var(--label-2)', fontWeight: 550 }}>{tight.which === 'five' ? t('5 horas') : t('semana')}</span>
               </>}
           </>
         ) : (
@@ -144,7 +144,7 @@ export function UsageBar({ a, which, now, compact }: { a: AgentCard; which: 'fiv
   const v = usageView(a, which, now)
   const base = ACCOUNT_COLOR[a.id]
   const color = leftColor(v.left, base)
-  const name = which === 'five' ? '5 horas' : t('Semana')
+  const name = which === 'five' ? t('5 horas') : t('Semana')
   const fast = v.left != null && v.timeLeft != null && !v.out && v.left / 100 < v.timeLeft - 0.08
   // EV114: with the week used up, what is left of the 5 hours cannot be used: said so, and the bar greyed (13-11: Claude 1
   // showed «queda 21 %» in orange and «a este ritmo se acaba 14:02» with no week left).

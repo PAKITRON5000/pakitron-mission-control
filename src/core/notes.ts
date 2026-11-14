@@ -78,9 +78,9 @@ export function pickNoteRoute(o: {
 
 /** What is typed into the window: one line (the console sends on Enter), with the mark that links it to its task. */
 export function typedNoteText(projectName: string, id: number, body: string): string {
-  return `Mission Control · nota del usuario para ${projectName} (MC-${id}): «${body.replace(/\s*\r?\n\s*/g, ' ').trim()}». ` +
-    'Si estabas con algo, ciérralo antes sin dejar nada roto. Apúntala en docs/TASKS.md donde le toque (su sección, su prioridad y la cuenta que mejor encaje), ' +
-    `con la marca (MC-${id}) en su línea para que el usuario vea en la app que está apuntada, y hazla si te toca a ti por prioridad; si no, sigue con lo tuyo.`
+  return t('Mission Control · nota del usuario para {project} (MC-{id}): «{body}». ', { project: projectName, id, body: body.replace(/\s*\r?\n\s*/g, ' ').trim() }) +
+    t('Si estabas con algo, ciérralo antes sin dejar nada roto. Apúntala en docs/TASKS.md donde le toque (su sección, su prioridad y la cuenta que mejor encaje), ') +
+    t('con la marca (MC-{id}) en su línea para que el usuario vea en la app que está apuntada, y hazla si te toca a ti por prioridad; si no, sigue con lo tuyo.', { id })
 }
 
 /** Typed into a window: delivered, waiting for that Claude's next step to count as read. */
