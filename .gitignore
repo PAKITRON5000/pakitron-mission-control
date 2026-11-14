@@ -1,0 +1,13 @@
+node_modules/
+out/
+dist/
+graphify-out/
+*.log
+# Trabajo en curso y datos de este PC: no son código
+docs/en-curso/
+.claude/*
+!.claude/agents/
+!.claude/skills/
+!.claude/settings.json
+*.db
+*.db-*

@@ -1,0 +1,104 @@
+/* EV131: the shapes of the app (layouts/*.tsx), loaded only with them. The colours come from the theme on top. */
+.app.lay-lateral, .app.lay-columna, .app.lay-tablero, .app.lay-dividida, .app.lay-mosaico, .app.lay-mapa { grid-template-rows: 52px minmax(0, 1fr); }
+.app.lay-consola { grid-template-rows: 46px minmax(0, 1fr) 30px; }
+
+/* ---- Barra lateral ---- */
+.lay-lateral .sidebar { transition: width 180ms ease; }
+
+/* ---- Columna ---- */
+.col-stage { display: flex; justify-content: center; min-height: 0; background: color-mix(in srgb, var(--chrome) 70%, var(--bg)); }
+.col-frame { position: relative; width: min(600px, 100%); display: flex; flex-direction: column; min-height: 0; background: var(--bg); box-shadow: 0 0 0 0.5px var(--sep), 0 24px 70px rgba(0, 0, 0, 0.28); }
+.col-tabs { flex: none; display: flex; justify-content: space-around; padding: 6px 6px 8px; background: var(--chrome); backdrop-filter: blur(20px) saturate(160%); box-shadow: 0 -0.5px 0 var(--sep); }
+.col-tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--label-3); font-size: 11.5px; font-weight: 650; padding: 5px 10px 4px; border-radius: 12px; min-width: 66px; }
+.col-tab.on { color: var(--label); background: var(--fill); }
+.col-badge { position: absolute; top: 0; right: 10px; background: var(--red); color: white; height: 16px; padding: 0 5px; font-size: 10px; }
+.col-more { position: absolute; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.38); display: flex; align-items: flex-end; }
+.col-more-sheet { width: 100%; background: var(--bg-elev); border-radius: 20px 20px 0 0; padding: 18px 14px 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; box-shadow: var(--shadow-3); }
+.col-more-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 6px 12px; border: 0; border-radius: 16px; background: var(--fill); color: var(--label); font-weight: 650; font-size: 13px; }
+.col-more-item:hover { background: var(--fill-2); }
+.lay-columna .content-inner { padding: 20px 16px 40px; }
+
+/* ---- Tablero ---- */
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 14px; }
+.board-tile { text-align: left; display: flex; flex-direction: column; gap: 10px; min-height: 156px; padding: 18px 18px 16px; border: 0; border-radius: 22px; background: color-mix(in srgb, var(--tile-c) 9%, var(--bg-elev)); box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--tile-c) 30%, var(--sep)); color: var(--label); transition: transform 140ms ease, box-shadow 140ms ease; min-width: 0; }
+.board-tile:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tile-c) 55%, transparent), var(--shadow-2); }
+.board-tile.hot { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--tile-c) 80%, transparent); }
+.board-name { font-weight: 700; font-size: 15px; color: var(--label-2); }
+.board-big { font-size: 28px; font-weight: 760; letter-spacing: -0.02em; line-height: 1.1; overflow-wrap: anywhere; }
+.board-sub { font-size: 13px; color: var(--label-3); line-height: 1.35; overflow-wrap: anywhere; }
+
+/* ---- Consola ---- */
+.lay-consola { --mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace; }
+.con-prompt { font-family: var(--mono); font-size: 13px; color: var(--label-2); padding: 4px 10px; border-radius: 6px; background: var(--fill); cursor: text; min-width: 0; max-width: 46vw; }
+.con-prompt b { color: var(--green); font-weight: 700; }
+.con-caret { display: inline-block; width: 7px; height: 14px; margin-left: 4px; vertical-align: -2px; background: var(--label-2); animation: con-blink 1.1s steps(1) infinite; }
+@keyframes con-blink { 50% { opacity: 0; } }
+.pmc-still .con-caret, .reduce-motion .con-caret { animation: none; }
+.con-body { display: flex; min-height: 0; }
+.con-nav { flex: none; width: 190px; overflow-y: auto; padding: 10px 8px; background: var(--chrome); box-shadow: 0.5px 0 0 var(--sep); font-family: var(--mono); font-size: 13px; }
+.con-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--label-2); text-align: left; font: inherit; }
+.con-item:hover { background: var(--fill); color: var(--label); }
+.con-item.on { background: var(--accent); color: white; }
+.con-key { width: 16px; flex: none; color: var(--label-3); }
+.con-item.on .con-key { color: rgba(255, 255, 255, 0.75); }
+.con-badge { margin-left: auto; color: var(--red); font-weight: 700; }
+.con-item.on .con-badge { color: white; }
+.con-sep { height: 0.5px; background: var(--sep); margin: 8px 4px; }
+.lay-consola .con-content .content-inner { padding: 18px 24px 40px; }
+.lay-consola .content .card, .lay-consola .content .group { border-radius: 6px; }
+.con-status { display: flex; align-items: center; gap: 16px; padding: 0 12px; background: var(--chrome); box-shadow: 0 -0.5px 0 var(--sep); font-family: var(--mono); font-size: 12px; overflow: hidden; white-space: nowrap; min-width: 0; }
+.con-agent { border: 0; background: transparent; color: var(--label-2); font: inherit; padding: 0; flex: none; }
+.con-agent:hover { color: var(--label); }
+
+/* ---- Dos paneles ---- */
+.split { display: flex; min-height: 0; min-width: 0; }
+.split.two .pane { width: 50%; }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.pane + .pane { box-shadow: -0.5px 0 0 var(--sep), -1px 0 0 var(--sep); }
+.pane-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 14px; background: var(--chrome); box-shadow: 0 0.5px 0 var(--sep); min-width: 0; }
+.pane-title { font-weight: 720; font-size: 14px; flex: none; }
+.pane-picks { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+.pane-pick { position: relative; border: 0; background: transparent; padding: 3px; border-radius: 8px; opacity: 0.5; flex: none; }
+.pane-pick:hover { opacity: 0.9; }
+.pane-pick.on { opacity: 1; background: var(--fill-2); }
+.pane-dot { position: absolute; top: 1px; right: 1px; width: 7px; height: 7px; border-radius: 99px; background: var(--red); }
+.lay-dividida .content-inner, .lay-mosaico .mos-body .content-inner { padding: 20px clamp(14px, 1.6vw, 28px) 48px; }
+
+/* ---- Mosaico ---- */
+.mosaic { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px; background: color-mix(in srgb, var(--chrome) 60%, var(--bg)); }
+@media (max-width: 959px) { .mosaic { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: 560px; overflow-y: auto; } }
+.mos-tile { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-radius: 16px; overflow: hidden; background: var(--bg); box-shadow: 0 0 0 0.5px var(--sep), var(--shadow-1); border-top: 3px solid color-mix(in srgb, var(--panel-c) 75%, transparent); }
+.mos-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; background: var(--chrome); box-shadow: 0 0.5px 0 var(--sep); min-width: 0; }
+.mos-pick { border: 0; background: transparent; color: var(--label); font-weight: 720; font-size: 14px; padding: 2px 4px; border-radius: 6px; min-width: 0; }
+.mos-pick:hover { background: var(--fill); }
+.mos-body { flex: 1; }
+.lay-mosaico .mos-body .t-display { font-size: 24px; }
+
+/* ---- Mapa ---- */
+.map-stage { position: relative; display: flex; min-height: 0; min-width: 0; background: var(--bg); overflow: hidden; }
+.map-area { flex: 1; min-width: 0; overflow: auto; padding: 24px 24px 100px; display: flex; flex-direction: column; justify-content: safe center; }
+.map-drawer { flex: none; width: min(880px, 64vw); display: flex; min-height: 0; box-shadow: -0.5px 0 0 var(--sep), -24px 0 60px rgba(0, 0, 0, 0.25); animation: map-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1); position: relative; z-index: 3; background: var(--bg); }
+.map-drawer > .content { flex: 1; }
+@keyframes map-in { from { transform: translateX(40px); opacity: 0; } }
+.map-dock { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 4; display: flex; gap: 4px; padding: 6px 8px; border-radius: 20px; background: color-mix(in srgb, var(--bg-elev) 86%, transparent); backdrop-filter: blur(18px) saturate(160%); box-shadow: 0 0 0 0.5px var(--sep), var(--shadow-3); max-width: calc(100% - 28px); overflow-x: auto; scrollbar-width: none; }
+.drawer-open .map-dock { left: calc((100% - min(880px, 64vw)) / 2); max-width: calc(100% - min(880px, 64vw) - 28px); }
+@media (max-width: 1099px) {
+  .map-drawer { position: absolute; inset: 0 0 74px 0; width: auto; }
+  .drawer-open .map-dock { left: 50%; max-width: calc(100% - 28px); }
+}
+.map-dock-item { position: relative; border: 0; background: transparent; padding: 4px; border-radius: 12px; transition: transform 140ms ease; flex: none; }
+.map-dock-item:hover { transform: translateY(-3px) scale(1.06); }
+.map-dock-item.on { background: var(--fill-2); }
+.map-dock-badge { position: absolute; top: -2px; right: -2px; background: var(--red); color: white; height: 16px; padding: 0 5px; font-size: 10px; }
+
+/* The floating «Claudes» goes over the bars at the bottom of these two (13-11, captures at 900 px). */
+.lay-columna .dock-pill, .lay-mapa .dock-pill { bottom: 84px; }
+
+/* Consola in a narrow window (900 px are ~720 of CSS): the orders keep only their number, the screen gets the width. */
+@media (max-width: 899px) {
+  .con-nav { width: 58px; padding: 10px 6px; }
+  .con-item { justify-content: center; padding: 0; gap: 0; }
+  .con-item > .truncate, .con-item > span:not(.con-key):not(.con-badge) { display: none; }
+  .con-badge { position: absolute; margin: 0; right: 4px; font-size: 10px; }
+  .con-item { position: relative; }
+}

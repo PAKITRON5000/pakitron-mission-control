@@ -1,0 +1,6 @@
+{
+  "verifica": [
+    { "nombre": "tipos", "orden": "npx tsc --noEmit -p tsconfig.json", "minutos": 5 },
+    { "nombre": "pruebas", "orden": "npm test", "minutos": 10, "resumen": "Tests +[0-9]+ passed.*" }
+  ]
+}

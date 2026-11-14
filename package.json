@@ -1,0 +1,95 @@
+{
+  "name": "pakitron-mission-control",
+  "productName": "Pakitron Mission Control",
+  "version": "0.32.43",
+  "description": "Coordina tus cuentas de Claude Code en tus proyectos: quién trabaja dónde y quién sigue cuando una se queda sin uso",
+  "author": "Pakitron",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build && vite build -c vite.cli.config.ts",
+    "start": "electron-vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist": "npm run build && electron-builder --win",
+    "build:dir": "npm run build && electron-builder --win dir",
+    "actualizar": "npm run build:dir && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/actualizar.ps1",
+    "capturas": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/capturas.ps1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/nunito": "^5.3.0",
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.6",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@types/web-push": "^3.6.4",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^1.66.0",
+    "motion": "^14.9.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5",
+    "web-push": "^3.6.7"
+  },
+  "allowScripts": {
+    "electron@45.2.1": true
+  },
+  "build": {
+    "appId": "es.pakitron.missioncontrol",
+    "productName": "Pakitron Mission Control",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/main/**",
+      "out/preload/**",
+      "out/renderer/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "out/cli/pmc.mjs",
+        "to": "pmc/pmc.mjs"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mission Control",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

@@ -1,0 +1,162 @@
+/*
+ * Three looks for the whole app (EV82, the user 13-11: «muy visual y llamativa, satisfactoria, útil y fácil de entender»).
+ * Each is a layer over the base tokens of styles.css, chosen in Ajustes (settings.look) and set on <html data-look>.
+ * Screens do not change: only colour, depth, shape and type. «sobria» is the base as it was.
+ */
+@import '@fontsource-variable/nunito';
+@import '@fontsource-variable/jetbrains-mono';
+
+/* ---- A · Viva: the same calm layout with light and colour: an ambient glow behind, cards that lift, bigger numbers. ---- */
+html[data-look='viva'].dark {
+  --bg: #07070c;
+  --bg-elev: #15151d;
+  --bg-elev-2: #1d1d28;
+  --card-edge: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
+  --shadow-1: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 10px 30px rgb(0 0 0 / 0.35);
+}
+html[data-look='viva'] .content {
+  background:
+    radial-gradient(1200px 520px at 12% -8%, color-mix(in srgb, var(--indigo) 22%, transparent), transparent 62%),
+    radial-gradient(900px 480px at 96% 4%, color-mix(in srgb, var(--pink) 16%, transparent), transparent 60%),
+    var(--bg);
+}
+html[data-look='viva'] .card { transition: transform 180ms cubic-bezier(.2, .8, .2, 1), box-shadow 180ms; }
+html[data-look='viva'] button.card:hover, html[data-look='viva'] .card:has(> button:hover) { transform: translateY(-1px); }
+html[data-look='viva'] .t-display { font-size: 36px; background: linear-gradient(90deg, var(--label), color-mix(in srgb, var(--label) 70%, var(--accent))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+html[data-look='viva'] .t-display .icon-sq, html[data-look='viva'] .t-display span { -webkit-text-fill-color: initial; }
+html[data-look='viva'] .icon-sq-lg { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 6px 18px color-mix(in srgb, currentColor 0%, rgb(0 0 0 / 0.35)); }
+html[data-look='viva'] .btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 85%, white), var(--accent)); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent); }
+html[data-look='viva'] .sidebar { background: linear-gradient(180deg, rgb(20 20 30 / 0.92), rgb(10 10 16 / 0.92)); }
+
+/* ---- B · Lúdica: rounded, saturated, with a chunky depth like a game menu; friendly type. ---- */
+html[data-look='ludica'] { --font: 'Nunito Variable', 'Segoe UI', system-ui, sans-serif; --radius: 16px; --radius-lg: 24px; }
+html[data-look='ludica'].dark {
+  --bg: #120d1d;
+  --bg-elev: #211833;
+  --bg-elev-2: #2b2042;
+  --bg-sunken: #0d0915;
+  --chrome: rgb(26 19 40 / 0.94);
+  --fill: rgb(176 146 255 / 0.12);
+  --fill-2: rgb(176 146 255 / 0.19);
+  --fill-3: rgb(176 146 255 / 0.27);
+  --sep: rgb(176 146 255 / 0.18);
+  --accent: #ff5fa2;
+  --accent-soft: rgb(255 95 162 / 0.2);
+  --card-edge: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --shadow-1: 0 6px 0 rgb(0 0 0 / 0.38);
+}
+html[data-look='ludica'] body { letter-spacing: 0; font-feature-settings: normal; }
+html[data-look='ludica'] .card { border-radius: 24px; }
+html[data-look='ludica'] .group { border-radius: 20px; box-shadow: 0 5px 0 rgb(0 0 0 / 0.32), var(--card-edge); }
+html[data-look='ludica'] .btn { border-radius: 999px; font-weight: 760; }
+html[data-look='ludica'] .btn-primary { background: linear-gradient(180deg, #ff86bb, #ff4f93); box-shadow: 0 3px 0 #a5195a; }
+html[data-look='ludica'] .btn-primary:active { transform: translateY(2px); box-shadow: 0 1px 0 #a5195a; }
+html[data-look='ludica'] .t-hero, html[data-look='ludica'] .t-display { font-weight: 900; letter-spacing: -0.015em; }
+html[data-look='ludica'] .t-title, html[data-look='ludica'] .t-section, html[data-look='ludica'] .t-head { font-weight: 820; letter-spacing: -0.005em; }
+html[data-look='ludica'] .icon-sq { border-radius: 9px; box-shadow: 0 2px 0 rgb(0 0 0 / 0.35); }
+html[data-look='ludica'] .icon-sq-lg { width: 36px; height: 36px; border-radius: 12px; box-shadow: 0 4px 0 rgb(0 0 0 / 0.35); }
+html[data-look='ludica'] .pill { font-weight: 800; }
+html[data-look='ludica'] .seg { border-radius: 999px; }
+html[data-look='ludica'] .seg button, html[data-look='ludica'] .seg .seg-thumb { border-radius: 999px; }
+html[data-look='ludica'] .sidebar { background: #1a1229; }
+html[data-look='ludica'] .nav-item { border-radius: 12px; font-weight: 700; }
+html[data-look='ludica'] .content { background: radial-gradient(900px 500px at 85% -10%, rgb(255 95 162 / 0.14), transparent 60%), radial-gradient(800px 420px at 0% 0%, rgb(120 90 255 / 0.16), transparent 60%), var(--bg); }
+
+/* ---- C · Panel de mando: dark control room, thin glowing edges, console numbers, uppercase headings. ---- */
+html[data-look='mando'] { --radius: 8px; --radius-lg: 10px; }
+html[data-look='mando'].dark {
+  --bg: #04070c;
+  --bg-elev: #0a111b;
+  --bg-elev-2: #0f1925;
+  --bg-sunken: #03060a;
+  --chrome: rgb(6 11 18 / 0.94);
+  --fill: rgb(70 160 255 / 0.08);
+  --fill-2: rgb(70 160 255 / 0.14);
+  --fill-3: rgb(70 160 255 / 0.22);
+  --sep: rgb(70 160 255 / 0.16);
+  --accent: #36d0ff;
+  --accent-soft: rgb(54 208 255 / 0.18);
+  --card-edge: inset 0 0 0 1px rgb(70 160 255 / 0.16);
+  --shadow-1: 0 0 0 1px rgb(70 160 255 / 0.05), 0 0 24px rgb(54 208 255 / 0.05);
+}
+html[data-look='mando'] .card { background: linear-gradient(180deg, rgb(17 30 46 / 0.92), rgb(9 16 25 / 0.92)); }
+html[data-look='mando'] .num, html[data-look='mando'] .t-big { font-family: 'JetBrains Mono Variable', ui-monospace, monospace; letter-spacing: -0.02em; }
+html[data-look='mando'] .t-hero, html[data-look='mando'] .t-display, html[data-look='mando'] .t-section { text-transform: uppercase; letter-spacing: 0.035em; font-weight: 760; }
+html[data-look='mando'] .t-micro, html[data-look='mando'] .side-label { letter-spacing: 0.12em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 70%, var(--label-3)); }
+html[data-look='mando'] .live-dot { box-shadow: 0 0 10px currentColor, 0 0 0 2px var(--bg-elev) !important; }
+html[data-look='mando'] .btn-primary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 16px rgb(54 208 255 / 0.25); }
+html[data-look='mando'] .sidebar { background: #050a11; box-shadow: inset -1px 0 0 rgb(70 160 255 / 0.12); }
+html[data-look='mando'] .content { background: linear-gradient(rgb(70 160 255 / 0.035) 1px, transparent 1px) 0 0 / 100% 28px, var(--bg); }
+
+/* ---- D · Neón arcade (bolder, 13-11): near-black violet, neon pink and cyan edges that glow, heavy rounded type. ---- */
+html[data-look='neon'] { --font: 'Nunito Variable', 'Segoe UI', system-ui, sans-serif; --radius: 14px; --radius-lg: 20px; }
+html[data-look='neon'], html[data-look='neon'].dark {
+  --bg: #0b0414;
+  --bg-elev: #160a26;
+  --bg-elev-2: #1f0f35;
+  --bg-sunken: #07020d;
+  --chrome: rgb(18 7 31 / 0.94);
+  --label: #fff4ff;
+  --label-2: rgb(255 228 255 / 0.74);
+  --label-3: rgb(255 210 255 / 0.48);
+  --fill: rgb(255 60 200 / 0.1);
+  --fill-2: rgb(255 60 200 / 0.17);
+  --fill-3: rgb(255 60 200 / 0.26);
+  --sep: rgb(255 60 200 / 0.22);
+  --accent: #ff3fd0;
+  --accent-soft: rgb(255 63 208 / 0.22);
+  --card-edge: inset 0 0 0 1px rgb(255 63 208 / 0.35);
+  --shadow-1: 0 0 22px rgb(255 63 208 / 0.16), 0 0 46px rgb(0 225 255 / 0.06);
+}
+html[data-look='neon'] body { font-feature-settings: normal; }
+html[data-look='neon'] .content { background: radial-gradient(1000px 600px at 50% -20%, rgb(255 63 208 / 0.22), transparent 60%), linear-gradient(transparent 96%, rgb(0 225 255 / 0.07) 96%) 0 0 / 100% 36px, var(--bg); }
+html[data-look='neon'] .card { background: linear-gradient(180deg, rgb(34 13 56 / 0.95), rgb(20 8 36 / 0.95)); }
+html[data-look='neon'] .t-hero, html[data-look='neon'] .t-display { font-weight: 900; color: #fff; text-shadow: 0 0 18px rgb(255 63 208 / 0.75), 0 0 2px #fff; }
+html[data-look='neon'] .t-title, html[data-look='neon'] .t-section { font-weight: 850; text-shadow: 0 0 12px rgb(0 225 255 / 0.45); }
+html[data-look='neon'] .btn { border-radius: 999px; font-weight: 800; }
+html[data-look='neon'] .btn-primary { background: linear-gradient(90deg, #ff3fd0, #7b5cff 55%, #00e1ff); color: white; box-shadow: 0 0 18px rgb(255 63 208 / 0.55); }
+html[data-look='neon'] .icon-sq { box-shadow: 0 0 12px currentColor; }
+html[data-look='neon'] .live-dot { box-shadow: 0 0 12px currentColor, 0 0 0 2px var(--bg-elev) !important; }
+html[data-look='neon'] .sidebar { background: #0e0519; box-shadow: inset -1px 0 0 rgb(255 63 208 / 0.3); }
+html[data-look='neon'] .nav-item[aria-current='page'] { box-shadow: inset 0 0 0 1px rgb(0 225 255 / 0.5), 0 0 14px rgb(0 225 255 / 0.25); }
+html[data-look='neon'] .seg { border-radius: 999px; }
+html[data-look='neon'] .seg button, html[data-look='neon'] .seg .seg-thumb { border-radius: 999px; }
+
+/* ---- E · Cómic (bolder, 13-11): cream paper, thick black ink, hard offset shadows, flat saturated colour, chunky type. ---- */
+html[data-look='comic'] { --font: 'Nunito Variable', 'Segoe UI', system-ui, sans-serif; --radius: 12px; --radius-lg: 18px; }
+html[data-look='comic'], html[data-look='comic'].dark {
+  --bg: #fff6e0;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #fff9ec;
+  --bg-sunken: #f7e9c4;
+  --chrome: rgb(255 238 196 / 0.97);
+  --label: #17120a;
+  --label-2: rgb(23 18 10 / 0.78);
+  --label-3: rgb(23 18 10 / 0.55);
+  --label-4: rgb(23 18 10 / 0.3);
+  --fill: rgb(23 18 10 / 0.07);
+  --fill-2: rgb(23 18 10 / 0.12);
+  --fill-3: rgb(23 18 10 / 0.18);
+  --sep: rgb(23 18 10 / 0.35);
+  --accent: #ff4d2e;
+  --accent-soft: rgb(255 77 46 / 0.18);
+  --card-edge: inset 0 0 0 2.5px #17120a;
+  --shadow-1: 5px 5px 0 #17120a;
+  --scrim: rgb(23 18 10 / 0.45);
+}
+html[data-look='comic'] body { font-feature-settings: normal; letter-spacing: 0; }
+html[data-look='comic'] .content { background: radial-gradient(rgb(23 18 10 / 0.07) 1.2px, transparent 1.4px) 0 0 / 14px 14px, var(--bg); }
+html[data-look='comic'] .card, html[data-look='comic'] .group { box-shadow: 5px 5px 0 #17120a, inset 0 0 0 2.5px #17120a; }
+html[data-look='comic'] .t-hero, html[data-look='comic'] .t-display { font-weight: 900; letter-spacing: -0.01em; text-shadow: 3px 3px 0 #ffd23f; }
+html[data-look='comic'] .t-title, html[data-look='comic'] .t-section, html[data-look='comic'] .t-head { font-weight: 850; }
+html[data-look='comic'] .btn { border-radius: 10px; font-weight: 800; box-shadow: inset 0 0 0 2px #17120a, 2px 2px 0 #17120a; background: #fff; }
+html[data-look='comic'] .btn:active { transform: translate(2px, 2px); box-shadow: inset 0 0 0 2px #17120a; }
+html[data-look='comic'] .btn-primary { background: #ff4d2e; color: #fff; }
+html[data-look='comic'] .btn-ghost { box-shadow: none; background: transparent; }
+html[data-look='comic'] .icon-sq { box-shadow: inset 0 0 0 2px #17120a; }
+html[data-look='comic'] .pill { box-shadow: inset 0 0 0 1.5px #17120a; font-weight: 800; }
+html[data-look='comic'] .sidebar { background: #ffd23f; box-shadow: inset -2.5px 0 0 #17120a; }
+html[data-look='comic'] .nav-item { font-weight: 800; }
+html[data-look='comic'] .nav-item[aria-current='page'] > div { background: #fff !important; box-shadow: inset 0 0 0 2px #17120a, 3px 3px 0 #17120a; }
+html[data-look='comic'] .titlebar { background: #fff6e0; box-shadow: inset 0 -2.5px 0 #17120a; }
+html[data-look='comic'] .seg { box-shadow: inset 0 0 0 2px #17120a; }
