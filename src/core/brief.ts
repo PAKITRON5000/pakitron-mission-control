@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The work brief (`pmc parte`) and one task's text (`pmc tarea <ID>`): what a session needs to start, in a couple of
 // kilobytes. The game project's RELEVO.md is 104 KB and its TASKS.md 297 KB (12-11), nearly all of it history, and every session
 // and every hand-off was told to read them. The long files stay as an archive to search; nobody has to read them whole.
@@ -9,6 +10,7 @@ import { hideCodeStars, showCodeStars, stripMd } from './parse/tasks'
 import { listClaims, nextTasks, taskKeyFor, teamContext } from './coord'
 import { openChangesFor } from './changes'
 import { lastVerification, verificationLine } from './verify'
+import { HEARTBEAT, IN_PROGRESS } from './docwords'
 
 export const BRIEF_MAX = 4500
 /** EV121: what a session with nothing left in its queue does instead of stopping (as autonomous mode says at Stop). */
@@ -27,14 +29,14 @@ export function liveRelevo(markdown: string): { enCurso?: string; latest?: strin
   for (let i = 0; i < lines.length && !(enCurso && latest); i++) {
     const raw = lines[i]
     if (!enCurso) {
-      const m = raw.match(/^\*\*En curso[^*]*\*\*:?\s*(.+)$/i)
+      const m = raw.match(new RegExp(`^\\*\\*${IN_PROGRESS}[^*]*\\*\\*:?\\s*(.+)$`, 'i'))
       if (m) { enCurso = stripMd(m[1]); continue }
     }
     if (!latest) {
-      const inline = raw.match(/^\*\*Último latido[^*]*\*\*:?\s*(.+)$/i)
+      const inline = raw.match(new RegExp(`^\\*\\*${HEARTBEAT}[^*]*\\*\\*:?\\s*(.+)$`, 'i'))
       if (inline) { latest = stripMd(inline[1]); continue }
       // As a heading («## Último latido: 2026-11-01 01:29 (claude1)»): the heading and the text under it.
-      const head = raw.match(/^#{1,4}\s+Último latido[^:]*:?\s*(.*)$/i)
+      const head = raw.match(new RegExp(`^#{1,4}\\s+${HEARTBEAT}[^:]*:?\\s*(.*)$`, 'i'))
       if (head) {
         const body: string[] = [head[1]]
         for (let j = i + 1; j < lines.length && !/^#{1,4}\s/.test(lines[j]) && body.join(' ').length < HEARTBEAT_MAX; j++) body.push(lines[j])
@@ -56,11 +58,11 @@ const HOW_MAX = 520
  */
 export function workingNotes(project: ProjectConfig): string | undefined {
   const doc = newestDoc(project, 'PROYECTO.md')
-  if (!doc) return 'Este proyecto no tiene ficha (docs/PROYECTO.md): pmc preparar la crea; rellénala leyendo el proyecto (10 minutos como mucho).'
+  if (!doc) return t('Este proyecto no tiene ficha (docs/PROYECTO.md): pmc preparar la crea; rellénala leyendo el proyecto (10 minutos como mucho).')
   const md = readText(doc.file)
   const m = md.match(/^##\s+Cómo trabajarlo mejor\s*\r?\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/m)
   const toFill = /\(por completar\)/.test(md)
-  if (!m) return toFill ? `La ficha del proyecto (${doc.file}) está a medio rellenar: complétala leyendo el proyecto.` : undefined
+  if (!m) return toFill ? t('La ficha del proyecto ({file}) está a medio rellenar: complétala leyendo el proyecto.', { file: doc.file }) : undefined
   const text = stripMd(m[1].replace(/\r?\n+/g, ' ').trim())
   return `CÓMO SE TRABAJA AQUÍ: ${cut(text, HOW_MAX, '(sigue en docs/PROYECTO.md)')}${toFill ? ' La ficha tiene partes «(por completar)»: complétalas leyendo el proyecto.' : ''}`.trim()
 }

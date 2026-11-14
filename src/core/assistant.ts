@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The assistant inside the app (EV85, Decidir #127, the user: «algo que puedas preguntarle o pedirle y que funcione con el
 // Claude en trabajo en paralelo… no como un menú sino un asistente… y un apartado visual para él»).
 //
@@ -86,16 +87,16 @@ const DAY = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 /** «a las 04:30» today (or within the next hours), «el vie a las 04:30» otherwise. */
 export function whenText(ms: number, now: number): string {
   const d = new Date(ms)
-  if (d.toDateString() === new Date(now).toDateString() || (ms > now && ms - now < 12 * 3600_000)) return `a las ${hhmm(ms)}`
-  return `el ${DAY[d.getDay()]} ${d.getDate()} a las ${hhmm(ms)}`
+  if (d.toDateString() === new Date(now).toDateString() || (ms > now && ms - now < 12 * 3600_000)) return t('a las {v0}', { v0: hhmm(ms) })
+  return t('el {v0} {v1} a las {v2}', { v0: DAY[d.getDay()], v1: d.getDate(), v2: hhmm(ms) })
 }
 export function agoText(ms: number, now: number): string {
   const m = Math.round((now - ms) / 60_000)
   if (m < 1) return 'ahora mismo'
-  if (m < 60) return `hace ${m} min`
+  if (m < 60) return t('hace {m} min', { m: m })
   const h = Math.round(m / 60)
-  if (h < 24) return `hace ${h} h`
-  return `hace ${Math.round(h / 24)} d`
+  if (h < 24) return t('hace {h} h', { h: h })
+  return t('hace {v0} d', { v0: Math.round(h / 24) })
 }
 
 /** The time the words point to («anoche», «hoy», «ayer», «esta mañana», «las últimas 3 horas»…). */
@@ -215,14 +216,14 @@ const CHIPS_START = ['¿Qué me espera?', '¿Quién trabaja?', '¿Cuánto uso qu
 export function answerHelp(): Reply {
   return {
     intent: 'ayuda',
-    text: 'Pregúntame lo que quieras de tus proyectos y te contesto con lo que ya sabe la app, sin gastar uso. Si me pides algo («haz…», «arregla…», «que Claude 3 mire…»), se lo paso al Claude que tenga el turno en ese proyecto y te digo cuándo lo verá.',
+    text: t('Pregúntame lo que quieras de tus proyectos y te contesto con lo que ya sabe la app, sin gastar uso. Si me pides algo («haz…», «arregla…», «que Claude 3 mire…»), se lo paso al Claude que tenga el turno en ese proyecto y te digo cuándo lo verá.'),
     rows: [
-      { title: '¿Qué me espera?', sub: 'Preguntas para decidir, cosas para revisar, en todos los proyectos', color: 'var(--red)' },
-      { title: '¿Quién trabaja? · ¿Qué hace Claude 3?', sub: 'Dónde está cada Claude y en qué anda', color: 'var(--green)' },
-      { title: '¿Cuánto uso queda?', sub: 'La semana y las 5 horas de cada cuenta, y cuándo vuelve', color: 'var(--blue)' },
-      { title: 'Fotos del glaciar', sub: 'Busca en la galería de cualquier proyecto', color: 'var(--pink)' },
-      { title: '¿Qué hizo Claude 3 anoche?', sub: 'Tareas terminadas, commits, relevos y límites', color: 'var(--indigo)' },
-      { title: '¿Cómo va la rueda? · ¿Qué queda en mi proyecto? · ¿En qué va EV85?', sub: 'Turnos, tareas y agenda', color: 'var(--orange)' }
+      { title: t('¿Qué me espera?'), sub: t('Preguntas para decidir, cosas para revisar, en todos los proyectos'), color: 'var(--red)' },
+      { title: t('¿Quién trabaja? · ¿Qué hace Claude 3?'), sub: t('Dónde está cada Claude y en qué anda'), color: 'var(--green)' },
+      { title: t('¿Cuánto uso queda?'), sub: t('La semana y las 5 horas de cada cuenta, y cuándo vuelve'), color: 'var(--blue)' },
+      { title: t('Fotos del glaciar'), sub: t('Busca en la galería de cualquier proyecto'), color: 'var(--pink)' },
+      { title: t('¿Qué hizo Claude 3 anoche?'), sub: t('Tareas terminadas, commits, relevos y límites'), color: 'var(--indigo)' },
+      { title: t('¿Cómo va la rueda? · ¿Qué queda en mi proyecto? · ¿En qué va EV85?'), sub: t('Turnos, tareas y agenda'), color: 'var(--orange)' }
     ],
     chips: CHIPS_START
   }
@@ -251,8 +252,8 @@ export function answerWaiting(projects: WaitingProject[], hooksMissing: string[]
   for (const p of projects) for (const t of p.review.slice(0, 3)) {
     rows.push({ title: `${t.extId ? t.extId + ' · ' : ''}${t.title}`, sub: `Terminada, para que la mires · ${p.name}`, color: 'var(--orange)', go: { route: 'tareas', projectId: p.id, focus: { kind: 'task', id: t.id } } })
   }
-  for (const p of projects) if (p.comments) rows.push({ title: `${p.comments} ${p.comments === 1 ? 'corrección hecha' : 'correcciones hechas'} sobre tus notas`, sub: `En Revisar · ${p.name}`, color: 'var(--yellow)', go: { route: 'revisiones', projectId: p.id } })
-  for (const id of hooksMissing) rows.push({ title: `${who(id)} no tiene los ganchos de la app`, sub: 'Solo lo puedes arreglar tú: un clic en Inicio', account: id, go: { route: 'inicio' } })
+  for (const p of projects) if (p.comments) rows.push({ title: t('{comments} {v0} sobre tus notas', { comments: p.comments, v0: p.comments === 1 ? 'corrección hecha' : 'correcciones hechas' }), sub: t('En Revisar · {name}', { name: p.name }), color: 'var(--yellow)', go: { route: 'revisiones', projectId: p.id } })
+  for (const id of hooksMissing) rows.push({ title: t('{v0} no tiene los ganchos de la app', { v0: who(id) }), sub: t('Solo lo puedes arreglar tú: un clic en Inicio'), account: id, go: { route: 'inicio' } })
   const parts: string[] = []
   const where = (pick: (p: WaitingProject) => number) => { const ps = projects.filter((p) => pick(p) > 0).map((p) => p.name); return ps.length ? ` (${ps.join(', ')})` : '' }
   if (dec) parts.push(`${dec} ${dec === 1 ? 'pregunta' : 'preguntas'} en Decidir${where((p) => p.decisions.length)}`)
@@ -264,7 +265,7 @@ export function answerWaiting(projects: WaitingProject[], hooksMissing: string[]
   const text = total
     ? `Te ${total === 1 ? 'espera' : 'esperan'} ${list(parts)}.${dec ? ' Lo primero, las preguntas: hay Claude esperando tu respuesta.' : ''}`
     : `Nada te espera ahora: ninguna pregunta, nada para revisar.${unchecked ? ` Hay ${unchecked} ${unchecked === 1 ? 'tarea hecha' : 'tareas hechas'} esta semana sin comprobar: en Tareas salen en amarillo.` : ' Todo en marcha.'}`
-  return { intent: 'espera', text, rows: rows.slice(0, 10), more: dec ? { label: 'Abrir Decidir', go: { route: 'decisiones', projectId: projects.find((p) => p.decisions.length)?.id } } : undefined, chips: ['¿Quién trabaja?', '¿Qué hicieron anoche?'] }
+  return { intent: 'espera', text, rows: rows.slice(0, 10), more: dec ? { label: t('Abrir Decidir'), go: { route: 'decisiones', projectId: projects.find((p) => p.decisions.length)?.id } } : undefined, chips: ['¿Quién trabaja?', '¿Qué hicieron anoche?'] }
 }
 
 /** «a, b y c». */
@@ -284,7 +285,7 @@ export function answerWho(agents: AgentInfo[], projects: { id: string; name: str
     const doing = a.focus && now - a.focus.at < 6 * 3600_000 ? `«${a.focus.text}»` : undefined
     return {
       title: `${who(a.id)} · ${STATE_WORD[a.state] ?? a.state}${w ? ` en ${w}` : ''}${back}`,
-      sub: doing ? `${doing} · ${agoText(a.focus!.at, now)}` : a.lastAt ? `Lo último que hizo, ${agoText(a.lastAt, now)}` : undefined,
+      sub: doing ? `${doing} · ${agoText(a.focus!.at, now)}` : a.lastAt ? t('Lo último que hizo, {v0}', { v0: agoText(a.lastAt, now) }) : undefined,
       account: a.id,
       go: { agent: a.id }
     }
@@ -292,8 +293,8 @@ export function answerWho(agents: AgentInfo[], projects: { id: string; name: str
   const use = agents.filter(inUse)
   if (account) {
     const a = agents.find((x) => x.id === account)
-    if (!a) return { intent: 'quien', text: `No conozco a ${who(account)}.`, chips: ['¿Quién trabaja?'] }
-    if (!inUse(a)) return { intent: 'quien', text: `${who(a.id)} está ${a.out === 'baja' || a.state === 'baja' ? 'de baja' : 'apartada («No usar»)'}: no trabaja ni se le deja trabajo.`, chips: ['¿Quién trabaja?'] }
+    if (!a) return { intent: 'quien', text: t('No conozco a {v0}.', { v0: who(account) }), chips: ['¿Quién trabaja?'] }
+    if (!inUse(a)) return { intent: 'quien', text: t('{v0} está {v1}: no trabaja ni se le deja trabajo.', { v0: who(a.id), v1: a.out === 'baja' || a.state === 'baja' ? 'de baja' : 'apartada («No usar»)' }), chips: ['¿Quién trabaja?'] }
     const r = line(a)
     const usage = usageLine(a, now)
     return { intent: 'quien', text: `${r.title}.${r.sub ? ` ${r.sub}.` : ''}${usage ? ` ${usage}.` : ''}`, rows: [r], chips: [`¿Qué hizo ${who(a.id)} hoy?`, '¿Cuánto uso queda?'] }
@@ -317,21 +318,21 @@ function left(w: { used: number; resetsAt: number } | undefined, now: number): n
 }
 
 function usageLine(a: AgentInfo, now: number): string {
-  if (a.state === 'sin-uso') return `Sin uso${a.backAt ? `; vuelve ${whenText(a.backAt, now)}` : ''}`
+  if (a.state === 'sin-uso') return t('Sin uso{v0}', { v0: a.backAt ? `; vuelve ${whenText(a.backAt, now)}` : '' })
   const wk = left(a.week, now)
   const fv = left(a.five, now)
   const bits: string[] = []
   if (wk != null) bits.push(`le queda el ${wk} % de la semana`)
   if (fv != null) bits.push(`el ${fv} % de sus 5 horas${a.minutesLeft != null && a.minutesLeft < 120 ? ` (a este ritmo, unos ${a.minutesLeft} min)` : ''}`)
-  return bits.length ? bits.join(' y ').replace(/^l/, 'L') : 'Sin lecturas de uso todavía'
+  return bits.length ? bits.join(' y ').replace(/^l/, 'L') : t('Sin lecturas de uso todavía')
 }
 
 export function answerUsage(agents: AgentInfo[], account: string | undefined, now: number): Reply {
   const use = agents.filter(inUse).filter((a) => !account || a.id === account)
-  if (!use.length) return { intent: 'uso', text: account ? `${who(account)} no está en uso (apartada o de baja).` : 'No hay cuentas en uso.' }
+  if (!use.length) return { intent: 'uso', text: account ? t('{v0} no está en uso (apartada o de baja).', { v0: who(account) }) : t('No hay cuentas en uso.') }
   const rows: ReplyRow[] = use.map((a) => {
     const wk = left(a.week, now)
-    return { title: `${who(a.id)}${a.alias ? ' · ' + a.alias : ''}`, sub: usageLine(a, now), account: a.id, meter: a.state === 'sin-uso' ? { pct: 0, label: 'sin uso' } : wk != null ? { pct: wk, label: `${wk} % de la semana` } : undefined, go: { agent: a.id } }
+    return { title: `${who(a.id)}${a.alias ? ' · ' + a.alias : ''}`, sub: usageLine(a, now), account: a.id, meter: a.state === 'sin-uso' ? { pct: 0, label: t('sin uso') } : wk != null ? { pct: wk, label: t('{wk} % de la semana', { wk: wk }) } : undefined, go: { agent: a.id } }
   })
   if (account) return { intent: 'uso', text: `${who(account)}: ${usageLine(use[0], now).replace(/^L/, 'l')}.`, rows, chips: ['¿Cuánto uso queda?', `¿Qué hace ${who(account)}?`] }
   const withWeek = use.filter((a) => a.state !== 'sin-uso' && left(a.week, now) != null)
@@ -350,14 +351,14 @@ export function answerUsage(agents: AgentInfo[], account: string | undefined, no
 export function answerPhotos(topic: string, found: { id: number; name: string; projectId: string; projectName: string }[], total: number, projectId?: string): Reply {
   const what = topic ? `con «${topic}»` : 'nuevas'
   if (!found.length) {
-    return { intent: 'fotos', text: topic ? `No encuentro imágenes con «${topic}» en la galería. Prueba con otra palabra (el nombre de la carpeta o del archivo).` : 'La galería está vacía.', more: { label: 'Abrir la Galería', go: { route: 'galeria', projectId } }, chips: ['Fotos de hoy'] }
+    return { intent: 'fotos', text: topic ? t('No encuentro imágenes con «{topic}» en la galería. Prueba con otra palabra (el nombre de la carpeta o del archivo).', { topic: topic }) : t('La galería está vacía.'), more: { label: t('Abrir la Galería'), go: { route: 'galeria', projectId } }, chips: ['Fotos de hoy'] }
   }
   const projects = [...new Set(found.map((f) => f.projectName))]
   const text = topic
     ? `${total === 1 ? 'Hay 1 imagen' : `Hay ${total} imágenes`} ${what}${projects.length === 1 ? ` en ${projects[0]}` : ''}${total > found.length ? `; aquí tienes las ${found.length} más nuevas` : ''}. Toca una para verla en grande.`
     : `Las ${found.length} imágenes más nuevas${projects.length === 1 ? ` de ${projects[0]}` : ''}. Toca una para verla en grande.`
   const first = found[0]
-  return { intent: 'fotos', text, photos: found.map(({ id, name, projectId }) => ({ id, name, projectId })), more: { label: 'Ver todas en la Galería', go: { route: 'galeria', projectId: first.projectId, focus: topic ? { kind: 'asset', id: -1, q: topic } : undefined } } }
+  return { intent: 'fotos', text, photos: found.map(({ id, name, projectId }) => ({ id, name, projectId })), more: { label: t('Ver todas en la Galería'), go: { route: 'galeria', projectId: first.projectId, focus: topic ? { kind: 'asset', id: -1, q: topic } : undefined } } }
 }
 
 // ---- what happened -----------------------------------------------------------------------------------------------------
@@ -375,7 +376,7 @@ export function answerDid(input: { account?: string; range: Range; events: DidEv
   const evs = input.events.filter((e) => e.at >= range.from && e.at <= range.to && mine(e)).sort((a, b) => b.at - a.at)
   const span = `${range.label} (de las ${hhmm(range.from)} a las ${hhmm(range.to)})`
   const subject = account ? who(account) : 'los Claude'
-  if (!evs.length) return { intent: 'hizo', text: `No veo nada de ${subject} ${span}.`, chips: account ? [`¿Qué hace ${who(account)}?`, `¿Qué hizo ${who(account)} hoy?`] : ['¿Quién trabaja?'] }
+  if (!evs.length) return { intent: 'hizo', text: t('No veo nada de {subject} {span}.', { subject: subject, span: span }), chips: account ? [`¿Qué hace ${who(account)}?`, `¿Qué hizo ${who(account)} hoy?`] : ['¿Quién trabaja?'] }
   const by = (k: string[]) => evs.filter((e) => k.includes(e.kind))
   const done = by(['tarea-hecha', 'tarea-hecha-fecha'])
   const commits = by(['commit'])
@@ -396,12 +397,12 @@ export function answerDid(input: { account?: string; range: Range; events: DidEv
   const rows: ReplyRow[] = []
   // The task's title now, not the one in the event (13-11: events kept a note as title, «EV89 · Casi hecho (13-11…»).
   const titleOf = (e: DidEvent) => { const id = e.title.split(' · ')[0]; const current = input.titles?.[`${e.projectId}:${id}`]; return current ? `${id} · ${current}` : e.title.replace(/: marcada como hecha$/, '') }
-  for (const e of done.slice(0, 5)) rows.push({ title: titleOf(e), sub: `Terminada a las ${hhmm(e.at)} · ${pname(e.projectId)}`, color: 'var(--green)', account: account ?? ownerOf(e.ref, e.at), go: { route: 'tareas', projectId: e.projectId, focus: { kind: 'task', id: -1, q: e.title.split(' · ')[0] } } })
-  for (const e of beats.slice(0, 2)) rows.push({ title: e.title, sub: `Su relevo a las ${hhmm(e.at)} · ${pname(e.projectId)}`, account: e.account, color: 'var(--indigo)', go: { route: 'cronologia', projectId: e.projectId } })
-  for (const e of commits.slice(0, 4)) rows.push({ title: e.title, sub: `Commit a las ${hhmm(e.at)}${e.projectId ? ' · ' + pname(e.projectId) : ''}`, color: 'var(--gray)', go: { route: 'cronologia', projectId: e.projectId } })
-  for (const e of asked.slice(0, 2)) rows.push({ title: e.title, sub: `A las ${hhmm(e.at)} · ${pname(e.projectId)}`, account: e.account, color: 'var(--red)', go: { route: 'decisiones', projectId: e.projectId } })
-  for (const e of limits.slice(0, 2)) rows.push({ title: e.title, sub: `A las ${hhmm(e.at)}`, account: e.account, color: 'var(--orange)' })
-  return { intent: 'hizo', text, rows: rows.slice(0, 10), more: { label: 'Verlo todo en la Cronología', go: { route: 'cronologia', projectId: evs.find((e) => e.projectId)?.projectId } }, chips: account ? [`¿Qué hace ${who(account)} ahora?`, '¿Qué me espera?'] : ['¿Qué me espera?', '¿Quién trabaja?'] }
+  for (const e of done.slice(0, 5)) rows.push({ title: titleOf(e), sub: t('Terminada a las {v0} · {v1}', { v0: hhmm(e.at), v1: pname(e.projectId) }), color: 'var(--green)', account: account ?? ownerOf(e.ref, e.at), go: { route: 'tareas', projectId: e.projectId, focus: { kind: 'task', id: -1, q: e.title.split(' · ')[0] } } })
+  for (const e of beats.slice(0, 2)) rows.push({ title: e.title, sub: t('Su relevo a las {v0} · {v1}', { v0: hhmm(e.at), v1: pname(e.projectId) }), account: e.account, color: 'var(--indigo)', go: { route: 'cronologia', projectId: e.projectId } })
+  for (const e of commits.slice(0, 4)) rows.push({ title: e.title, sub: t('Commit a las {v0}{v1}', { v0: hhmm(e.at), v1: e.projectId ? ' · ' + pname(e.projectId) : '' }), color: 'var(--gray)', go: { route: 'cronologia', projectId: e.projectId } })
+  for (const e of asked.slice(0, 2)) rows.push({ title: e.title, sub: t('A las {v0} · {v1}', { v0: hhmm(e.at), v1: pname(e.projectId) }), account: e.account, color: 'var(--red)', go: { route: 'decisiones', projectId: e.projectId } })
+  for (const e of limits.slice(0, 2)) rows.push({ title: e.title, sub: t('A las {v0}', { v0: hhmm(e.at) }), account: e.account, color: 'var(--orange)' })
+  return { intent: 'hizo', text, rows: rows.slice(0, 10), more: { label: t('Verlo todo en la Cronología'), go: { route: 'cronologia', projectId: evs.find((e) => e.projectId)?.projectId } }, chips: account ? [`¿Qué hace ${who(account)} ahora?`, '¿Qué me espera?'] : ['¿Qué me espera?', '¿Quién trabaja?'] }
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -438,7 +439,7 @@ export function answerTasks(input: { taskId?: string; project: { id: string; nam
   return {
     intent: 'tareas', text,
     rows: pick.slice(0, 6).map((t) => ({ title: `${t.extId ? t.extId + ' · ' : ''}${t.title}`, sub: `${cap(STATUS_WORD[t.status] ?? t.status)}${owner(t) ? ' · la lleva ' + who(owner(t)!) : ''}`, account: owner(t), color: t.mark === '~' ? 'var(--orange)' : 'var(--blue)', go: { route: 'tareas', projectId: t.projectId, focus: { kind: 'task', id: t.id } } })),
-    more: { label: 'Abrir Tareas', go: { route: 'tareas', projectId: input.project.id } },
+    more: { label: t('Abrir Tareas'), go: { route: 'tareas', projectId: input.project.id } },
     chips: ['¿Quién trabaja?', '¿Cómo va la rueda?']
   }
 }
@@ -447,7 +448,7 @@ export function answerTasks(input: { taskId?: string; project: { id: string; nam
 
 export function answerWheel(project: { id: string; name: string }, chain: RelayChain | undefined, members: ChainMember[], now: number): Reply {
   if (!chain?.on || !chain.order.length) {
-    return { intent: 'rueda', text: `En ${project.name} la rueda de relevos está apagada: cada Claude trabaja cuando lo abres tú. Se enciende en Relevos.`, more: { label: 'Abrir Relevos', go: { route: 'relevos', projectId: project.id } }, chips: ['¿Quién trabaja?'] }
+    return { intent: 'rueda', text: t('En {name} la rueda de relevos está apagada: cada Claude trabaja cuando lo abres tú. Se enciende en Relevos.', { name: project.name }), more: { label: t('Abrir Relevos'), go: { route: 'relevos', projectId: project.id } }, chips: ['¿Quién trabaja?'] }
   }
   const holder = chain.holder
   const m = members.find((x) => x.id === holder)
@@ -462,7 +463,7 @@ export function answerWheel(project: { id: string; name: string }, chain: RelayC
     intent: 'rueda',
     text: parts.join('; ') + `.${chain.until?.section ? ` Trabaja en la agenda «${chain.until.section}».` : ''}`,
     rows: views.map((v) => ({ title: who(v.id), sub: v.text, account: v.id, color: color[v.status], go: { agent: v.id } })),
-    more: { label: 'Abrir Relevos', go: { route: 'relevos', projectId: project.id } },
+    more: { label: t('Abrir Relevos'), go: { route: 'relevos', projectId: project.id } },
     chips: ['¿Cuánto uso queda?', `¿Qué queda en ${project.name}?`]
   }
 }
@@ -491,7 +492,7 @@ export function planRequest(i: RequestInput): Reply {
   const body = i.text.trim()
   if (i.kind === 'nota' || i.kind === 'idea') {
     const send: SendPlan = { projectId: project.id, project: project.name, body, kind: i.kind, who: 'nadie', when: i.kind === 'idea' ? 'Se guarda en Tareas › Ideas, para decidir después' : 'Solo para ti: no se envía', start: false }
-    return { intent: 'pedido', text: i.kind === 'idea' ? `Parece una idea: la guardo en ${project.name} › Tareas › Ideas, sin mandársela a nadie.` : 'Lo guardo como nota tuya, sin mandárselo a nadie.', send }
+    return { intent: 'pedido', text: i.kind === 'idea' ? t('Parece una idea: la guardo en {name} › Tareas › Ideas, sin mandársela a nadie.', { name: project.name }) : t('Lo guardo como nota tuya, sin mandárselo a nadie.'), send }
   }
   const kind: SendPlan['kind'] = i.kind === 'correccion' || i.kind === 'prioridad' ? i.kind : 'mensaje'
   const byId = (id?: string) => i.agents.find((a) => a.id === id)
@@ -523,18 +524,18 @@ export function planRequest(i: RequestInput): Reply {
 
 /** What to say once it is sent, from what the dispatcher did (startOn). */
 export function sentText(plan: SendPlan, started?: { action: string; why: string }): string {
-  if (plan.kind === 'idea') return `Guardada en ${plan.project} › Tareas › Ideas.`
+  if (plan.kind === 'idea') return t('Guardada en {project} › Tareas › Ideas.', { project: plan.project })
   if (plan.kind === 'nota') return 'Guardada como nota tuya.'
-  if (!started) return `Hecho: se lo he pasado a ${plan.who}. ${plan.when}`
-  if (started.action === 'abrir') return `Hecho: ${plan.who} se abre en ${plan.project} y empieza por esto.`
-  if (started.action === 'avisar') return `Hecho: se lo he escrito a ${plan.who} en su ventana.`
-  return `Guardado para ${plan.who}; no se abre ninguna ventana: ${started.why}. Lo verá en cuanto trabaje en ${plan.project}.`
+  if (!started) return t('Hecho: se lo he pasado a {who}. {when}', { who: plan.who, when: plan.when })
+  if (started.action === 'abrir') return t('Hecho: {who} se abre en {project} y empieza por esto.', { who: plan.who, project: plan.project })
+  if (started.action === 'avisar') return t('Hecho: se lo he escrito a {who} en su ventana.', { who: plan.who })
+  return t('Guardado para {who}; no se abre ninguna ventana: {why}. Lo verá en cuanto trabaje en {project}.', { who: plan.who, why: started.why, project: plan.project })
 }
 
 export function answerUnknown(): Reply {
   return {
     intent: 'nose',
-    text: `Eso no lo sé contestar con lo que sabe la app. Puedo preguntárselo a un Claude (gasta un poco de uso) o, si es un encargo, dímelo como tal («haz…», «arregla…») y se lo paso al que tenga el turno.`,
+    text: t('Eso no lo sé contestar con lo que sabe la app. Puedo preguntárselo a un Claude (gasta un poco de uso) o, si es un encargo, dímelo como tal («haz…», «arregla…») y se lo paso al que tenga el turno.'),
     offerClaude: true,
     chips: CHIPS_START.slice(0, 3)
   }

@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { useState } from 'react'
 import { Check, Pencil, Repeat, RotateCcw, UserPlus, ChevronRight } from 'lucide-react'
 import { useStore, useAsync } from '../lib/store'
@@ -24,18 +25,18 @@ export function AliasEdit({ a, onDone }: { a: AgentCard; onDone?: (t: string) =>
     const before = accName(a.id)
     await api('nameAccount', a.id, text)
     await refresh()
-    ;(onDone ?? toast)(text.trim() ? `${before} se llama ahora «${text.trim()}» (solo en la app)` : `Vuelve a llamarse Claude ${a.id.slice(6)}`)
+    ;(onDone ?? toast)(text.trim() ? t('{before} se llama ahora «{v0}» (solo en la app)', { before: before, v0: text.trim() }) : t('Vuelve a llamarse Claude {v0}', { v0: a.id.slice(6) }))
   }
   if (editing) return (
     <span className="flex items-center gap-1 min-w-0">
-      <input className="field" style={{ height: 30, width: 210 }} autoFocus value={text} maxLength={30} placeholder={`Claude ${a.id.slice(6)}`} onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') { setText(cur); setEditing(false) } }} onBlur={() => void save()} aria-label={`Nombre de ${accName(a.id)}`} />
-      <button className="btn btn-sm btn-icon btn-ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => void save()} aria-label="Guardar"><Check size={13} /></button>
+      <input className="field" style={{ height: 30, width: 210 }} autoFocus value={text} maxLength={30} placeholder={t('Claude {v0}', { v0: a.id.slice(6) })} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') { setText(cur); setEditing(false) } }} onBlur={() => void save()} aria-label={t('Nombre de {v0}', { v0: accName(a.id) })} />
+      <button className="btn btn-sm btn-icon btn-ghost" onMouseDown={(e) => e.preventDefault()} onClick={() => void save()} aria-label={t('Guardar')}><Check size={13} /></button>
     </span>
   )
   return (
-    <button className="flex items-center gap-1.5 border-0 bg-transparent p-0 min-w-0 group" onClick={() => { setText(cur); setEditing(true) }} title="Ponle el nombre que quieras: se verá así en toda la app (solo para ti; no cambia cómo arranca)">
-      <span className="t-body c2 truncate">{cur ? `Se llama «${cur}»` : 'Ponle un nombre'}</span>
+    <button className="flex items-center gap-1.5 border-0 bg-transparent p-0 min-w-0 group" onClick={() => { setText(cur); setEditing(true) }} title={t('Ponle el nombre que quieras: se verá así en toda la app (solo para ti; no cambia cómo arranca)')}>
+      <span className="t-body c2 truncate">{cur ? t('Se llama «{cur}»', { cur: cur }) : t('Ponle un nombre')}</span>
       <Pencil size={12} className="c3 opacity-50 group-hover:opacity-100 flex-none" />
     </button>
   )
@@ -48,9 +49,9 @@ function StatusSwitch({ a }: { a: AgentCard }) {
     <Segmented value={st === 'pausada' ? 'pausada' : st === 'baja' ? 'baja' : 'uso'}
       onChange={(v) => void api('setSettings', { accountStatus: { ...(state?.settings.accountStatus ?? {}), [a.id]: v === 'uso' ? undefined : v } }).then(async () => {
         await refresh()
-        toast(v === 'uso' ? `${accName(a.id)} vuelve a usarse` : v === 'pausada' ? `${accName(a.id)} apartada: no se usa ni se le deja trabajo` : `${accName(a.id)} de baja`)
+        toast(v === 'uso' ? t('{v0} vuelve a usarse', { v0: accName(a.id) }) : v === 'pausada' ? t('{v0} apartada: no se usa ni se le deja trabajo', { v0: accName(a.id) }) : t('{v0} de baja', { v0: accName(a.id) }))
       })}
-      options={[{ value: 'uso', label: 'En uso' }, { value: 'pausada', label: 'No usar' }, { value: 'baja', label: 'De baja' }]} />
+      options={[{ value: 'uso', label: t('En uso') }, { value: 'pausada', label: t('No usar') }, { value: 'baja', label: t('De baja') }]} />
   )
 }
 
@@ -71,13 +72,13 @@ function ReserveLine({ a }: { a: AgentCard }) {
         const p = state.projects.find((x) => x.id === r.projectId)
         const set = (on: boolean) => void api('setSettings', { reserves: rules.map((x) => (x === r ? { ...x, on } : x)) }).then(async () => {
           await refresh()
-          toast(on ? `${accName(a.id)} se abrirá sola en ${p?.name ?? r.projectId} cuando todas las demás estén sin uso` : `${accName(a.id)} ya no se abre sola en ${p?.name ?? r.projectId}`)
+          toast(on ? t('{v0} se abrirá sola en {v1} cuando todas las demás estén sin uso', { v0: accName(a.id), v1: p?.name ?? r.projectId }) : t('{v0} ya no se abre sola en {v1}', { v0: accName(a.id), v1: p?.name ?? r.projectId }))
         })
         return (
           <div key={r.projectId} className="rounded-xl px-3 py-2.5 flex flex-col gap-2" style={{ background: r.on ? 'color-mix(in srgb, var(--blue) 10%, transparent)' : 'var(--fill)' }}>
-            <span className="t-body"><b>De reserva para {p?.name ?? r.projectId}:</b> se abre sola allí cuando todas las demás cuentas en uso están sin uso{state.settings.accountStatus?.[a.id] === 'pausada' ? ', aunque esté en «No usar»' : ''}.</span>
+            <span className="t-body"><b>{t('De reserva para {v0}:', { v0: p?.name ?? r.projectId })}</b> {t('se abre sola allí cuando todas las demás cuentas en uso están sin uso{v0}.', { v0: state.settings.accountStatus?.[a.id] === 'pausada' ? t(', aunque esté en «No usar»') : '' })}</span>
             {r.on && live.data?.find((x) => x.projectId === r.projectId) && <span className="t-small c2">{reserveNow({ ...live.data.find((x) => x.projectId === r.projectId)!, account: a.id }, state.agents)}</span>}
-            <Segmented value={r.on ? 'si' : 'no'} onChange={(v) => set(v === 'si')} options={[{ value: 'si', label: 'Sí' }, { value: 'no', label: 'No' }]} />
+            <Segmented value={r.on ? 'si' : 'no'} onChange={(v) => set(v === 'si')} options={[{ value: 'si', label: t('Sí') }, { value: 'no', label: t('No') }]} />
           </div>
         )
       })}
@@ -87,7 +88,7 @@ function ReserveLine({ a }: { a: AgentCard }) {
 
 /** One account, whole: its name, how much it has left, what it is doing and where, and what can be done with it. */
 /** EV146: the e-mail and the plan («… · Pro»; «Pago por uso (clave)» alone for a key, which has no e-mail). */
-const accountLine = (a: AgentCard) => [a.identity.email ?? (a.identity.hasLogin ? '' : 'Sin sesión iniciada en este PC'), a.identity.plan?.label].filter(Boolean).join(' · ') || 'Sesión iniciada'
+const accountLine = (a: AgentCard) => [a.identity.email ?? (a.identity.hasLogin ? '' : t('Sin sesión iniciada en este PC')), a.identity.plan?.label].filter(Boolean).join(' · ') || t('Sesión iniciada')
 
 /** EV146: its plan gives no usage to read and none has come (Team, Enterprise, a key, a cloud). */
 export const noUsageToRead = (a: AgentCard) => Boolean(a.identity.plan && !a.identity.plan.limits && !a.usage.snapshot?.fiveHour && !a.usage.snapshot?.sevenDay)
@@ -105,9 +106,9 @@ function AccountPanel({ a }: { a: AgentCard }) {
         <div className="flex items-center gap-4 min-w-0">
           <ClaudeRing a={a} now={now} size={96} />
           <div className="min-w-0 flex flex-col gap-1">
-            <button className="t-title text-left border-0 bg-transparent p-0" onClick={() => setAgentOpen(a.id)} title="Ver su ficha">{accName(a.id)}</button>
+            <button className="t-title text-left border-0 bg-transparent p-0" onClick={() => setAgentOpen(a.id)} title={t('Ver su ficha')}>{accName(a.id)}</button>
             <AliasEdit a={a} />
-            <span className="t-small c2 truncate" title="El correo con el que está iniciada esta cuenta">{accountLine(a)}</span>
+            <span className="t-small c2 truncate" title={t('El correo con el que está iniciada esta cuenta')}>{accountLine(a)}</span>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="pill" style={{ background: `color-mix(in srgb, ${m.color} 16%, transparent)`, color: m.color }}><span className={`dot ${a.state === 'trabajando' ? 'live-dot' : ''}`} style={{ background: m.color, color: m.color }} />{m.label}</span>
               {modelName(a.model) && <span className="t-small c3">{modelName(a.model)}</span>}
@@ -123,16 +124,16 @@ function AccountPanel({ a }: { a: AgentCard }) {
         {wheel && (
           <div className="rounded-xl px-3 py-2 t-small flex items-center gap-2" style={{ background: mine ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'var(--fill)' }}>
             <Repeat size={13} style={{ color: mine ? 'var(--green)' : 'var(--label-3)' }} />
-            <span><b>Rueda de {wheelName}:</b> {mine ? 'tiene el turno' : 'espera su turno'} <span className="c3">({wheel[1]!.order.map(accName).join(' → ')})</span></span>
+            <span><b>{t('Rueda de {wheelName}:', { wheelName: wheelName })}</b> {mine ? t('tiene el turno') : t('espera su turno')} <span className="c3">({wheel[1]!.order.map(accName).join(' → ')})</span></span>
           </div>
         )}
-        <div className="t-micro c3">Ahora</div>
+        <div className="t-micro c3">{t('Ahora')}</div>
         <WhoWhere ids={[a.id]} bare />
         <div className="t-small c3 mt-auto flex items-center gap-2 flex-wrap">
-          <span>{a.assigned.length ? `${a.assigned.length} tareas a su nombre` : 'Sin tareas a su nombre'}</span>
-          {a.heartbeat && <span>· último relevo {whenFull(a.heartbeat.at, now)}</span>}
-          {a.lastActivityAt && <span>· activa {ago(a.lastActivityAt, now)}</span>}
-          <button className="btn btn-sm btn-ghost ml-auto" onClick={() => setAgentOpen(a.id)}>Su ficha <ChevronRight size={12} /></button>
+          <span>{a.assigned.length ? t('{length} tareas a su nombre', { length: a.assigned.length }) : t('Sin tareas a su nombre')}</span>
+          {a.heartbeat && <span>{t('· último relevo {v0}', { v0: whenFull(a.heartbeat.at, now) })}</span>}
+          {a.lastActivityAt && <span>{t('· activa {v0}', { v0: ago(a.lastActivityAt, now) })}</span>}
+          <button className="btn btn-sm btn-ghost ml-auto" onClick={() => setAgentOpen(a.id)}>{t('Su ficha')} <ChevronRight size={12} /></button>
         </div>
       </div>
     </section>
@@ -156,16 +157,16 @@ export function Accounts() {
     <div className="content-inner max-w-[1320px]">
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
-          <h1 className="t-display flex items-center gap-3"><span className="icon-sq icon-sq-lg" style={{ background: 'var(--purple)' }}><UserPlus size={16} /></span>Cuentas</h1>
-          <div className="t-head c2 mt-2" style={{ fontWeight: 450 }}>Cada cuenta entera: cuánto uso le queda, qué hace, en qué proyecto y ventana, y qué puedes hacer con ella. Pulsa el nombre para cambiarlo.</div>
+          <h1 className="t-display flex items-center gap-3"><span className="icon-sq icon-sq-lg" style={{ background: 'var(--purple)' }}><UserPlus size={16} /></span>{t('Cuentas')}</h1>
+          <div className="t-head c2 mt-2" style={{ fontWeight: 450 }}>{t('Cada cuenta entera: cuánto uso le queda, qué hace, en qué proyecto y ventana, y qué puedes hacer con ella. Pulsa el nombre para cambiarlo.')}</div>
         </div>
-        <button className="btn ml-auto" onClick={() => go('relevos')}><Repeat size={14} /> Quién releva a quién</button>
+        <button className="btn ml-auto" onClick={() => go('relevos')}><Repeat size={14} /> {t('Quién releva a quién')}</button>
       </div>
       {setup && (
         // EV126: a PC with no account yet: what is missing instead of an empty «Claude 1» that looks like one.
-        <section className="card p-5 mb-4 flex items-center gap-4 flex-wrap" aria-label="Tu primera cuenta">
+        <section className="card p-5 mb-4 flex items-center gap-4 flex-wrap" aria-label={t('Tu primera cuenta')}>
           <div className="min-w-0 flex-1">
-            <div className="t-body" style={{ fontWeight: 650 }}>Aún no hay ninguna cuenta con la sesión iniciada en este PC</div>
+            <div className="t-body" style={{ fontWeight: 650 }}>{t('Aún no hay ninguna cuenta con la sesión iniciada en este PC')}</div>
             <div className="t-small c2 mt-1">{setup.text}</div>
           </div>
           <button className="btn btn-primary flex-none" onClick={() => void setup.button.run()}>{setup.button.label}</button>
@@ -176,7 +177,7 @@ export function Accounts() {
       </div>
       {aside.length > 0 && (
         <div className="mt-6">
-          <div className="t-section mb-2">Sin usar</div>
+          <div className="t-section mb-2">{t('Sin usar')}</div>
           {/* EV105 (the user, 13-11: «que se vea el correo de cada una y los créditos restantes aunque estén en No usar»). */}
           <div className="flex flex-col gap-3">
             {aside.map((a) => {
@@ -189,11 +190,11 @@ export function Accounts() {
                     <div className="min-w-0 flex flex-col gap-1">
                       <div className="t-body" style={{ fontWeight: 650 }}>{accName(a.id)}</div>
                       <AliasEdit a={a} />
-                      <span className="t-small c2 truncate" title="El correo con el que está iniciada esta cuenta">{accountLine(a)}</span>
-                      <span className="t-small c3">{a.state === 'baja' ? 'Ya no se paga: nunca se abre' : reserveName ? `Apartada: solo se abre de reserva para ${reserveName}` : 'Apartada: nunca se abre ni se le deja trabajo'}</span>
+                      <span className="t-small c2 truncate" title={t('El correo con el que está iniciada esta cuenta')}>{accountLine(a)}</span>
+                      <span className="t-small c3">{a.state === 'baja' ? t('Ya no se paga: nunca se abre') : reserveName ? t('Apartada: solo se abre de reserva para {reserveName}', { reserveName: reserveName }) : t('Apartada: nunca se abre ni se le deja trabajo')}</span>
                     </div>
                   </div>
-                  {noUsageToRead(a) ? <div className="t-small c3">{a.identity.plan!.label}: Claude Code no dice cuánto uso queda.</div> : <UsageBars a={a} now={now} compact />}
+                  {noUsageToRead(a) ? <div className="t-small c3">{t('{label}: Claude Code no dice cuánto uso queda.', { label: a.identity.plan!.label })}</div> : <UsageBars a={a} now={now} compact />}
                   <div className="flex flex-col gap-2 min-w-0">
                     <StatusSwitch a={a} />
                     <ReserveLine a={a} />
@@ -206,7 +207,7 @@ export function Accounts() {
       )}
       {/* EV71: the conversations, open and saved, are all in Chats (with Retomar); here only the way there. */}
       <div className="mt-8">
-        <button className="btn btn-ghost" onClick={() => go('chats')}><RotateCcw size={13} /> Las conversaciones{project ? ` de ${project.name}` : ''}, abiertas y guardadas, están en Chats</button>
+        <button className="btn btn-ghost" onClick={() => go('chats')}><RotateCcw size={13} /> {t('Las conversaciones{v0}, abiertas y guardadas, están en Chats', { v0: project ? t(' de {name}', { name: project.name }) : '' })}</button>
       </div>
     </div>
   )

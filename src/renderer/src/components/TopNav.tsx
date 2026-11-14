@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Palette, Plus, Smartphone } from 'lucide-react'
+import { t } from '../../../core/i18n'
 import { useStore, type Route } from '../lib/store'
 import { api } from '../lib/api'
 import { NAV, type NavGroup } from './Sidebar'
@@ -14,7 +15,7 @@ export function ProjectTabs() {
   const { state, toast } = useStore()
   if (!state) return null
   return (
-    <div className="no-drag flex items-end gap-1 min-w-0 overflow-x-auto self-end h-full" style={{ scrollbarWidth: 'none' }} role="tablist" aria-label="Proyectos">
+    <div className="no-drag flex items-end gap-1 min-w-0 overflow-x-auto self-end h-full" style={{ scrollbarWidth: 'none' }} role="tablist" aria-label={t('Proyectos')}>
       {state.projects.map((p) => {
         const on = p.id === state.activeProjectId
         const x = state.pending?.[p.id]
@@ -26,13 +27,13 @@ export function ProjectTabs() {
             {on && <motion.span layoutId="tab-top" transition={SPRING} className="absolute left-2 right-2 top-0 rounded-b" style={{ height: 3, background: p.color }} />}
             <span className="dot flex-none" style={{ background: p.color, boxShadow: on ? `0 0 8px ${p.color}` : undefined }} />
             <span className="truncate min-w-0 max-w-[200px]">{p.name}</span>
-            {x?.decisions ? <span className="pill num" style={{ background: 'var(--red)', color: 'white', height: 18, padding: '0 6px' }} title="Preguntas en Decidir">{x.decisions}</span> : null}
-            {x?.review ? <span className="pill num" style={{ background: 'var(--orange)', color: 'white', height: 18, padding: '0 6px' }} title="Tareas para revisar">{x.review}</span> : null}
-            {x?.comments ? <span className="pill num" style={{ background: 'var(--yellow)', color: '#3a2a00', height: 18, padding: '0 6px' }} title="Correcciones en Revisar">{x.comments}</span> : null}
+            {x?.decisions ? <span className="pill num" style={{ background: 'var(--red)', color: 'white', height: 18, padding: '0 6px' }} title={t('Preguntas en Decidir')}>{x.decisions}</span> : null}
+            {x?.review ? <span className="pill num" style={{ background: 'var(--orange)', color: 'white', height: 18, padding: '0 6px' }} title={t('Tareas para revisar')}>{x.review}</span> : null}
+            {x?.comments ? <span className="pill num" style={{ background: 'var(--yellow)', color: '#3a2a00', height: 18, padding: '0 6px' }} title={t('Correcciones en Revisar')}>{x.comments}</span> : null}
           </button>
         )
       })}
-      <button className="btn btn-sm btn-icon btn-ghost flex-none mb-1.5" title="Añadir proyecto" onClick={() => void api<any>('addProject').then((r) => r && toast(`Proyecto añadido: ${r.name}`))}><Plus size={14} /></button>
+      <button className="btn btn-sm btn-icon btn-ghost flex-none mb-1.5" title={t('Añadir proyecto')} onClick={() => void api<any>('addProject').then((r) => r && toast(t('Proyecto añadido: {name}', { name: r.name })))}><Plus size={14} /></button>
     </div>
   )
 }
@@ -40,7 +41,7 @@ export function ProjectTabs() {
 /** Ctrl+1…9 open the first nine sections of the menu (EV69). */
 const shortcut = (route: Route) => { const i = NAV.filter((x) => x.group !== 'ajustes').findIndex((x) => x.route === route); return i >= 0 && i < 9 ? `Ctrl+${i + 1}` : '' }
 
-const GROUP_LABEL: Record<NavGroup, string> = { tuyo: '', claude: 'Los Claude', proyecto: 'Proyecto', ajustes: '' }
+const GROUP_LABEL: Record<NavGroup, string> = { tuyo: '', get claude() { return t('Los Claude') }, get proyecto() { return t('Proyecto') }, ajustes: '' }
 
 /** The sections, in a row under the tabs, grouped like the old sidebar; the accounts in use at the right. */
 export function SectionMenu() {
@@ -76,7 +77,7 @@ export function SectionMenu() {
   const badge: Partial<Record<Route, number>> = { tareas: state.summary?.tasks.review || undefined, revisiones: state.commentsToReview || undefined, decisiones: allDecisions || undefined }
   const groups: NavGroup[] = ['tuyo', 'claude', 'proyecto']
   return (
-    <nav ref={bar} className={`topmenu no-drag${wrap ? ' wrap' : ''}`} aria-label="Apartados">
+    <nav ref={bar} className={`topmenu no-drag${wrap ? ' wrap' : ''}`} aria-label={t('Apartados')}>
       {/* EV106: only the sections scroll when the window is narrow; the accounts, Personalizar and Ajustes stay in sight. */}
       <div ref={strip} className="topmenu-scroll" onWheel={(e) => { const el = e.currentTarget; if (el.scrollWidth > el.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY }}>
       {groups.map((g, gi) => (
@@ -108,9 +109,9 @@ export function SectionMenu() {
         ))}
         <span className="topmenu-sep" aria-hidden />
         {/* EV87: the themes one click away (the user, 13-11: «¿y dónde se cambia de tema?»): Ajustes opens on Apariencia. */}
-        <button className="topmenu-item" onClick={() => { go('ajustes', 'general'); setTimeout(() => document.getElementById('apariencia')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }} title="Tamaño de letra y temas (Ctrl + / Ctrl − cambian el tamaño)"><span className="icon-sq relative" style={{ background: 'var(--fill-2)', color: 'var(--label)' }}><Palette size={17} /></span><span className="relative topmenu-text">Temas</span></button>
+        <button className="topmenu-item" onClick={() => { go('ajustes', 'general'); setTimeout(() => document.getElementById('apariencia')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }} title={t('Tamaño de letra y temas (Ctrl + / Ctrl − cambian el tamaño)')}><span className="icon-sq relative" style={{ background: 'var(--fill-2)', color: 'var(--label)' }}><Palette size={17} /></span><span className="relative topmenu-text">{t('Temas')}</span></button>
         {/* EV158 (the user, 14-11: «volver a darme las instrucciones en algún sitio que lo lea claro… que no recuerdo el link»): the phone's link, QR and steps one click away. */}
-        <button className={`topmenu-item ${route === 'ajustes' && param === 'avisos' ? 'on' : ''}`} onClick={() => go('ajustes', 'avisos')} title="Abrir Mission Control en el móvil: su enlace, el código QR y los pasos"><span className="icon-sq relative" style={{ background: 'var(--fill-2)', color: 'var(--label)' }}><Smartphone size={17} /></span><span className="relative topmenu-text">Móvil</span></button>
+        <button className={`topmenu-item ${route === 'ajustes' && param === 'avisos' ? 'on' : ''}`} onClick={() => go('ajustes', 'avisos')} title={t('Abrir Mission Control en el móvil: su enlace, el código QR y los pasos')}><span className="icon-sq relative" style={{ background: 'var(--fill-2)', color: 'var(--label)' }}><Smartphone size={17} /></span><span className="relative topmenu-text">{t('Móvil')}</span></button>
         {NAV.filter((n) => n.group === 'ajustes').map((n) => {
           const I = n.icon
           return <button key={n.route} className={`topmenu-item ${route === n.route ? 'on' : ''}`} onClick={() => go(n.route)} title={n.label}><span className="icon-sq relative" style={{ background: 'var(--fill-2)', color: 'var(--label)' }}><I size={17} /></span><span className="relative topmenu-text">{n.label}</span></button>

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The one gate every automatic window goes through (the user, 12-11 at 06:00: «no para de abrir pestañas cada vez que
 // uno termina, porque no está entendiendo cómo funciona el relevo automático ni qué claude trabaja en qué»).
 //
@@ -55,20 +56,20 @@ const name = (id: string) => `Claude ${id.slice(6)}`
 export function decideLaunch(ask: LaunchAsk, w: LaunchWorld): LaunchDecision {
   const who = name(ask.account)
   const st = w.status[ask.account]
-  if (st && !(st === 'pausada' && ask.reason === 'reserva')) return { action: 'nada', why: `${who} está ${st === 'baja' ? 'de baja' : 'apartada («No usar»)'}` }
+  if (st && !(st === 'pausada' && ask.reason === 'reserva')) return { action: 'nada', why: t('{who} está {v0}', { who: who, v0: st === 'baja' ? 'de baja' : 'apartada («No usar»)' }) }
   const mine = w.windows.filter((x) => x.account === ask.account && x.pid)
   const here = mine.find((x) => x.projectId === ask.projectId)
   if (here) {
-    if (here.working) return { action: 'nada', why: `${who} ya está trabajando en su ventana de este proyecto` }
-    return { action: 'avisar', pid: here.pid!, sessionId: here.sessionId, why: `${who} ya tiene su ventana abierta en este proyecto: se le escribe ahí en vez de abrir otra` }
+    if (here.working) return { action: 'nada', why: t('{who} ya está trabajando en su ventana de este proyecto', { who: who }) }
+    return { action: 'avisar', pid: here.pid!, sessionId: here.sessionId, why: t('{who} ya tiene su ventana abierta en este proyecto: se le escribe ahí en vez de abrir otra', { who: who }) }
   }
   const elsewhere = mine.find((x) => x.working) ?? mine[0]
-  if (elsewhere) return { action: 'nada', why: `${who} ya tiene una ventana abierta${elsewhere.projectId ? ` en otro proyecto (${elsewhere.projectId})` : ''}: una cuenta, una ventana` }
+  if (elsewhere) return { action: 'nada', why: t('{who} ya tiene una ventana abierta{v0}: una cuenta, una ventana', { who: who, v0: elsewhere.projectId ? ` en otro proyecto (${elsewhere.projectId})` : '' }) }
   const others = (w.workingOn[ask.projectId] ?? []).filter((a) => a !== ask.account)
-  if (others.length >= Math.max(1, w.maxPerProject)) return { action: 'nada', why: `ya trabaja${others.length > 1 ? 'n' : ''} ${others.map(name).join(' y ')} en este proyecto (tope: ${Math.max(1, w.maxPerProject)} a la vez)` }
+  if (others.length >= Math.max(1, w.maxPerProject)) return { action: 'nada', why: t('ya trabaja{v0} {v1} en este proyecto (tope: {v2} a la vez)', { v0: others.length > 1 ? 'n' : '', v1: others.map(name).join(' y '), v2: Math.max(1, w.maxPerProject) }) }
   const last = w.lastOpened[ask.account]
-  if (last && w.now - last < OPEN_COOLDOWN_MS) return { action: 'nada', why: `${who} se abrió hace ${Math.max(1, Math.round((w.now - last) / 60_000))} min: se espera a que arranque` }
-  return { action: 'abrir', why: 'nadie más está en este proyecto y la cuenta no tiene ventana' }
+  if (last && w.now - last < OPEN_COOLDOWN_MS) return { action: 'nada', why: t('{who} se abrió hace {v0} min: se espera a que arranque', { who: who, v0: Math.max(1, Math.round((w.now - last) / 60_000)) }) }
+  return { action: 'abrir', why: t('nadie más está en este proyecto y la cuenta no tiene ventana') }
 }
 
 /** Who is working where, from the windows and sessions the app or the CLI can see. */

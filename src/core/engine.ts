@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Puts the readers together: tasks imported from TASKS.md, the four agent cards, the project summary and the timeline.
 // Every number here comes from a file, a command or the database; nothing is estimated.
 import { taskChanges } from './changes'
@@ -114,7 +115,7 @@ export function listTasks(db: DB, projectId: string): Task[] {
   const tags = new Map<string, ReturnType<typeof taskTags>>()
   const unblocks = new Map<string, string[]>()
   for (const r of rows) {
-    if (!/[(]tras:|[[{]/.test(`${r.title} ${r.detail ?? ''}`)) continue
+    if (!/[(](?:tras|after):|[[{]/.test(`${r.title} ${r.detail ?? ''}`)) continue
     const g = taskTags(`${r.title} ${r.detail ?? ''}`)
     tags.set(r.key, g)
     if ((r.override ?? r.status) !== 'terminada' && r.ext_id) for (const id of g.after) if (id !== r.ext_id) unblocks.set(id, [...(unblocks.get(id) ?? []), r.ext_id])
@@ -389,18 +390,18 @@ export function summarize(project: ProjectConfig, tasks: Task[], agents: AgentCa
   const count = (f: (t: Task) => boolean) => top.filter(f).length
   const alerts: Alert[] = []
   for (const a of agents) {
-    if (a.identity.emailMismatch) alerts.push({ level: 'critical', account: a.id, text: `${a.id}: su carpeta tiene iniciada otra cuenta (${a.identity.email})` })
+    if (a.identity.emailMismatch) alerts.push({ level: 'critical', account: a.id, text: t('{id}: su carpeta tiene iniciada otra cuenta ({email})', { id: a.id, email: a.identity.email }) })
     if (a.state === 'esperando') alerts.push({ level: 'warn', account: a.id, text: `${a.id} ${a.stateReason.toLowerCase()}` })
     if (a.usage.activeLimit && a.assigned.length)
-      alerts.push({ level: 'warn', account: a.id, text: `${a.id} sin uso y con ${a.assigned.length} tarea${a.assigned.length > 1 ? 's' : ''} en espera` })
+      alerts.push({ level: 'warn', account: a.id, text: t('{id} sin uso y con {length} tarea{v0} en espera', { id: a.id, length: a.assigned.length, v0: a.assigned.length > 1 ? 's' : '' }) })
     const s = a.usage.snapshot
     if (!a.usage.activeLimit && s?.sevenDay && s.sevenDay.usedPct >= 85 && s.sevenDay.resetsAt > now)
-      alerts.push({ level: 'warn', account: a.id, text: `${a.id} lleva el ${Math.round(s.sevenDay.usedPct)} % de su uso semanal` })
+      alerts.push({ level: 'warn', account: a.id, text: t('{id} lleva el {v0} % de su uso semanal', { id: a.id, v0: Math.round(s.sevenDay.usedPct) }) })
   }
   const missing = agents.filter((a) => !statusLineInstalled[a.id]).map((a) => a.id)
-  if (missing.length) alerts.push({ level: 'info', text: `Sin lectura de consumo en ${missing.join(', ')}: actívala en Ajustes` })
+  if (missing.length) alerts.push({ level: 'info', text: t('Sin lectura de consumo en {v0}: actívala en Ajustes', { v0: missing.join(', ') }) })
   for (const c of copies) {
-    if (c.error) alerts.push({ level: 'info', text: `${c.label}: no se pudo leer git (${c.error})` })
+    if (c.error) alerts.push({ level: 'info', text: t('{label}: no se pudo leer git ({error})', { label: c.label, error: c.error }) })
   }
   const lastActivityAt = Math.max(heartbeats[0]?.at ?? 0, ...agents.filter((a) => a.projectId === project.id).map((a) => a.lastActivityAt ?? 0), ...copies.map((c) => c.headAt ?? 0)) || undefined
   return {
@@ -456,7 +457,7 @@ export function timeline(input: TimelineInput): TimelineEvent[] {
   for (const l of input.limits) {
     if (l.at < from || l.at > to) continue
     const back = new Date(l.resetsAt)
-    out.push({ id: n--, at: l.at, account: l.account, kind: 'limite', title: `${l.account} se quedó sin uso (${l.kind}); vuelve el ${back.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' })} a las ${back.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`, source: 'wake.log' })
+    out.push({ id: n--, at: l.at, account: l.account, kind: 'limite', title: t('{account} se quedó sin uso ({kind}); vuelve el {v0} a las {v1}', { account: l.account, kind: l.kind, v0: back.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }), v1: back.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }), source: 'wake.log' })
   }
   const roots = [project.root, ...project.copies.map((c) => c.path)].map((p) => p.toLowerCase())
   for (const acc of input.accounts) {
@@ -486,7 +487,7 @@ export function timeline(input: TimelineInput): TimelineEvent[] {
   }
   // Tasks the agents marked as done with a date written next to it.
   for (const r of db.prepare("SELECT ext_id, title, done_at, owner FROM tasks WHERE project_id = ? AND mark = 'x' AND done_at BETWEEN ? AND ? AND key NOT IN (SELECT ref FROM events WHERE kind = 'tarea-hecha' AND ref IS NOT NULL)").all(project.id, from, to) as any[]) {
-    out.push({ id: n--, at: r.done_at, account: r.owner ?? undefined, kind: 'tarea-hecha-fecha', title: `${r.ext_id ? r.ext_id + ' · ' : ''}${r.title}`, detail: 'Marcada como hecha en TASKS.md con esta fecha (sin hora exacta).', source: 'TASKS.md' })
+    out.push({ id: n--, at: r.done_at, account: r.owner ?? undefined, kind: 'tarea-hecha-fecha', title: `${r.ext_id ? r.ext_id + ' · ' : ''}${r.title}`, detail: t('Marcada como hecha en TASKS.md con esta fecha (sin hora exacta).'), source: 'TASKS.md' })
   }
   return out.sort((a, b) => b.at - a.at)
 }

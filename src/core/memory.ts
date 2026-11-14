@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The project's memory (EV63, EV75; the user, 13-11: «la memoria, es más fácil gestionarla con el programa para que
 // Claude no se olvide de las cosas fácilmente porque tiene dónde acudir y leer»). Claude forgets what was asked or decided
 // when a conversation ends or is compacted; Mission Control keeps it, by project, and hands it over short at the start of
@@ -9,9 +10,9 @@ import { inForce } from './contradict'
 export type MemoryKind = 'regla' | 'preferencia' | 'dato'
 
 export const MEMORY_KINDS: { id: MemoryKind; label: string; hint: string }[] = [
-  { id: 'regla', label: 'Regla', hint: 'Lo que nunca o siempre se hace («no toques la aceleración del personaje», «pregunta antes de borrar»). Si nombras un archivo o una carpeta («no toques tools/unity.ps1»), los Claude no podrán cambiarlo ni borrarlo.' },
-  { id: 'preferencia', label: 'Preferencia', hint: 'Cómo le gustan las cosas al usuario («textos con humor», «fotos antes de preguntar»).' },
-  { id: 'dato', label: 'Dato', hint: 'Algo del proyecto que hay que saber («la copia de trabajo es rachas», «el monitor es 3440×1440»).' }
+  { id: 'regla', get label() { return t('Regla') }, get hint() { return t('Lo que nunca o siempre se hace («no toques la aceleración del personaje», «pregunta antes de borrar»). Si nombras un archivo o una carpeta («no toques tools/unity.ps1»), los Claude no podrán cambiarlo ni borrarlo.') } },
+  { id: 'preferencia', get label() { return t('Preferencia') }, get hint() { return t('Cómo le gustan las cosas al usuario («textos con humor», «fotos antes de preguntar»).') } },
+  { id: 'dato', get label() { return t('Dato') }, get hint() { return t('Algo del proyecto que hay que saber («la copia de trabajo es rachas», «el monitor es 3440×1440»).') } }
 ]
 
 export interface Memory {
@@ -53,7 +54,7 @@ export function memoryLine(text: string): string {
 
 export function addMemory(db: DB, m: { projectId: string; kind: MemoryKind; text: string; source: string }, now = Date.now()): Memory {
   const text = memoryLine(m.text)
-  if (!text) throw new Error('El recuerdo está vacío')
+  if (!text) throw new Error(t('El recuerdo está vacío'))
   const kind: MemoryKind = MEMORY_KINDS.some((k) => k.id === m.kind) ? m.kind : 'dato'
   // The same text twice is one memory (a Claude that saves it again after a compaction).
   const same = db.prepare('SELECT * FROM memories WHERE project_id = ? AND gone = 0 AND lower(text) = lower(?)').get(m.projectId, text)

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // EV141 (Decidir #148 «A», the user, 13-11): the relay wheel with Claude Code's background sessions instead of windows,
 // as an option. What was tried (docs/research/otros-orquestadores.md › «Prueba real»): `claude --bg --name …` starts one
 // with the account's subscription; `claude agents --json` says how each is; a new instruction is given by stopping it and
@@ -42,6 +43,6 @@ export function bgStartArgs(o: { name: string; prompt: string; model?: string; e
 
 /** Arguments to give a stopped session a new instruction on the same conversation (no other option, or it makes a copy). */
 export function bgResumeArgs(sessionId: string, prompt: string): string[] {
-  if (!/^[0-9a-f-]{8,}$/i.test(sessionId)) throw new Error('Id de sesión raro')
+  if (!/^[0-9a-f-]{8,}$/i.test(sessionId)) throw new Error(t('Id de sesión raro'))
   return ['--bg', '--resume', sessionId, prompt]
 }

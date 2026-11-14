@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The verification gate (`pmc verifica [ID]`): "done" stops being the agent's word. A project declares its checks in
 // pmc.json at the root of each copy (compile, tests, whatever it has); running them leaves a result tied to the task, the
 // commit it ran on and a log. Three states the board can tell apart: says it is done / passes the checks / accepted by the
@@ -157,9 +158,9 @@ export function failStreak(db: DB, projectId: string, taskKey: string): number {
 const hhmm = (ms: number) => new Date(ms).toLocaleString('es-ES', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function verificationLine(v: Verification | undefined): string {
-  if (!v) return 'Sin verificar: nadie ha pasado las comprobaciones con esta tarea.'
+  if (!v) return t('Sin verificar: nadie ha pasado las comprobaciones con esta tarea.')
   const where = v.commit ? ` sobre ${v.commit}${v.dirty ? ` más ${v.dirty} archivos sin guardar` : ''}` : ''
-  return v.outcome === 'bien' ? `Verificada (${hhmm(v.at)}${where}): ${v.summary}` : `LAS COMPROBACIONES FALLAN (${hhmm(v.at)}${where}): ${v.summary}`
+  return v.outcome === 'bien' ? `Verificada (${hhmm(v.at)}${where}): ${v.summary}` : t('LAS COMPROBACIONES FALLAN ({v0}{where}): {summary}', { v0: hhmm(v.at), where: where, summary: v.summary })
 }
 
 /** What the agent reads after a run: the result, and what to do with a failure so it does not loop. */
@@ -237,8 +238,8 @@ export function guardUnverified(data: any, v = readVerified(), read = (f: string
     // A run of the whole project in the last two hours also counts: it ran on the code that has the task in.
     const all = project.tasks['*']
     if (r?.outcome === 'bien' || r?.outcome === 'aplazada' || (!r && all?.outcome === 'bien' && now - all.at < 2 * 3600_000)) continue
-    if (r?.outcome === 'falla') return `Mission Control: ${id} no pasa sus comprobaciones (${r.summary}). Arréglalo y vuelve a pasar pmc verifica ${id} antes de marcarla hecha.`
-    return `Mission Control: antes de marcar ${id} como hecha, pasa pmc verifica ${id} (las comprobaciones del proyecto). Si de verdad no hay nada que comprobar, escribe en su línea «sin comprobación: por qué» y márcala.`
+    if (r?.outcome === 'falla') return t('Mission Control: {id} no pasa sus comprobaciones ({summary}). Arréglalo y vuelve a pasar pmc verifica {v0} antes de marcarla hecha.', { id: id, summary: r.summary, v0: id })
+    return t('Mission Control: antes de marcar {id} como hecha, pasa pmc verifica {v0} (las comprobaciones del proyecto). Si de verdad no hay nada que comprobar, escribe en su línea «sin comprobación: por qué» y márcala.', { id: id, v0: id })
   }
   return undefined
 }

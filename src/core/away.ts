@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // When the user is away (EV88; the user, 13-11: «y si espera una respuesta mía y no estoy? debería aceptar lo que sea, ya
 // di permiso para eso»). A window waiting for a permission while the user is not at the PC is answered by the app: yes to
 // what his standing permission covers, no (and a question in Decidir) to the four things he asked to confirm himself:
@@ -7,21 +8,21 @@ import { closeSync, openSync, readSync, statSync } from 'node:fs'
 export type AwayPolicy = 'seguro' | 'todo' | 'esperar'
 
 export const AWAY_POLICIES: { id: AwayPolicy; label: string; sub: string }[] = [
-  { id: 'seguro', label: 'Aceptar todo menos lo que pediste confirmar', sub: 'Acepta solo lo que cubre tu permiso; rechaza borrar lo irrecuperable, publicar fuera del PC, gastar dinero o tocar credenciales y te lo deja en Decidir.' },
-  { id: 'todo', label: 'Aceptar todo', sub: 'Acepta cualquier permiso cuando no estás.' },
-  { id: 'esperar', label: 'Esperarme', sub: 'No acepta nada: la ventana espera a que vuelvas.' }
+  { id: 'seguro', get label() { return t('Aceptar todo menos lo que pediste confirmar') }, get sub() { return t('Acepta solo lo que cubre tu permiso; rechaza borrar lo irrecuperable, publicar fuera del PC, gastar dinero o tocar credenciales y te lo deja en Decidir.') } },
+  { id: 'todo', get label() { return t('Aceptar todo') }, get sub() { return t('Acepta cualquier permiso cuando no estás.') } },
+  { id: 'esperar', get label() { return t('Esperarme') }, get sub() { return t('No acepta nada: la ventana espera a que vuelvas.') } }
 ]
 
 const RULES: { why: string; test: RegExp }[] = [
-  { why: 'borrar trabajo que no se puede recuperar', test: /\brm\s+-[a-z]*(rf|fr)\b|\bRemove-Item\b[^|;]*-Recurse|\bgit\s+(reset\s+--hard|clean\s+-[a-z]*f|checkout\s+--\s|push\s+[^;|]*--force)|\b(del|erase)\s+\/[sq]|\brmdir\s+\/s|\bFormat-Volume\b|\bdiskpart\b/i },
-  { why: 'publicar fuera de este PC', test: /\bgit\s+push\b|\bnpm\s+publish\b|\bgh\s+(release|repo\s+create|pr\s+(create|merge))|\bcurl\b[^|;]*\s-X\s*(POST|PUT|DELETE|PATCH)\b|\bInvoke-(RestMethod|WebRequest)\b[^|;]*-Method\s+(Post|Put|Delete|Patch)|\bscp\b|\bvercel\b|\bnetlify\s+deploy\b/i },
+  { get why() { return t('borrar trabajo que no se puede recuperar') }, test: /\brm\s+-[a-z]*(rf|fr)\b|\bRemove-Item\b[^|;]*-Recurse|\bgit\s+(reset\s+--hard|clean\s+-[a-z]*f|checkout\s+--\s|push\s+[^;|]*--force)|\b(del|erase)\s+\/[sq]|\brmdir\s+\/s|\bFormat-Volume\b|\bdiskpart\b/i },
+  { get why() { return t('publicar fuera de este PC') }, test: /\bgit\s+push\b|\bnpm\s+publish\b|\bgh\s+(release|repo\s+create|pr\s+(create|merge))|\bcurl\b[^|;]*\s-X\s*(POST|PUT|DELETE|PATCH)\b|\bInvoke-(RestMethod|WebRequest)\b[^|;]*-Method\s+(Post|Put|Delete|Patch)|\bscp\b|\bvercel\b|\bnetlify\s+deploy\b/i },
   { why: 'gastar dinero', test: /\b(stripe|paypal|checkout\.session|purchase|buy-credits|billing)\b/i },
-  { why: 'tocar credenciales o la seguridad', test: /\.credentials|credentials\.json|\bid_(rsa|ed25519)\b|[\\/]\.ssh[\\/]|\.env(\.|\b)|\b(api[_-]?key|secret|password|passwd|token)s?\b\s*[=:]|[\\/]\.claude[^\\/]*[\\/]settings\.json/i }
+  { get why() { return t('tocar credenciales o la seguridad') }, test: /\.credentials|credentials\.json|\bid_(rsa|ed25519)\b|[\\/]\.ssh[\\/]|\.env(\.|\b)|\b(api[_-]?key|secret|password|passwd|token)s?\b\s*[=:]|[\\/]\.claude[^\\/]*[\\/]settings\.json/i }
 ]
 
 /** Whether a tool call is one of the things the user wants to confirm himself, and which. */
 export function riskOf(tool?: string, input?: any): { risky: boolean; why?: string } {
-  if (!tool) return { risky: true, why: 'no se sabe qué pide' }
+  if (!tool) return { risky: true, why: t('no se sabe qué pide') }
   const text = [input?.command, input?.file_path, input?.notebook_path, input?.url, input?.content?.slice?.(0, 2000), input?.new_string?.slice?.(0, 2000)].filter(Boolean).join('\n')
   const hit = RULES.find((r) => r.test.test(text))
   return hit ? { risky: true, why: hit.why } : { risky: false }
@@ -68,10 +69,10 @@ export function yesOnScreen(screen: string): { key: '1'; question?: string } | {
   const lines = screen.split(/\r?\n/).map((l) => l.trimEnd()).filter((l) => l.trim() !== '')
   const tail = lines.slice(-16)
   const footer = tail.findIndex((l) => /Esc to cancel|Enter to confirm|Enter to select/i.test(l))
-  if (footer < 0) return { why: 'no se ve ningún menú abierto' }
+  if (footer < 0) return { why: t('no se ve ningún menú abierto') }
   const menu = tail.slice(0, footer)
   const yes = menu.findIndex((l) => /^\s*(?:[❯>›]\s*)?1\.\s+(?:Yes|Sí|Si)\b/i.test(l))
   const question = [...menu.slice(0, yes < 0 ? menu.length : yes)].reverse().find((l) => /\?\s*$/.test(l))?.trim()
-  if (yes < 0) return { why: `el menú no tiene «1. Yes»${question ? ` («${question.slice(0, 120)}»)` : ''}` }
+  if (yes < 0) return { why: t('el menú no tiene «1. Yes»{v0}', { v0: question ? ` («${question.slice(0, 120)}»)` : '' }) }
   return { key: '1', question }
 }

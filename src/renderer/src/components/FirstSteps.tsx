@@ -2,6 +2,7 @@
 // hay… pensado para un usuario que no es el de hoy»). Each step says what is already there, read from the app, and has
 // the one button that does it. Shown on Inicio while there is no project, or while a step is missing until the user
 // hides it; with everything done it does not show at all.
+import { t } from '../../../core/i18n'
 import { Check, Eye, FolderPlus, Repeat, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useStore, useAsync } from '../lib/store'
@@ -35,14 +36,14 @@ export function useClaudeSetup(): { text: string; button: { label: string; run: 
   }
   if (!setup.data.installed) {
     return {
-      text: 'Primero hace falta Claude Code, el programa de Claude para trabajar en tus carpetas. La app abre su instalador oficial en una ventana (un par de minutos); cuando acabe, este paso sigue solo.',
-      button: { label: 'Instalar Claude Code', run: () => say(() => api('claudeInstall'), 'Se abre el instalador de Claude Code: cuando diga que ha terminado, vuelve aquí') }
+      text: t('Primero hace falta Claude Code, el programa de Claude para trabajar en tus carpetas. La app abre su instalador oficial en una ventana (un par de minutos); cuando acabe, este paso sigue solo.'),
+      button: { label: t('Instalar Claude Code'), run: () => say(() => api('claudeInstall'), t('Se abre el instalador de Claude Code: cuando diga que ha terminado, vuelve aquí')) }
     }
   }
   const first = usable[0]
   return {
-    text: 'Claude Code ya está en este PC. Falta iniciar sesión con tu cuenta de Claude (Pro o Max): se abre una ventana y el navegador; cuando acabes, la app la ve sola.',
-    button: { label: 'Iniciar sesión', run: () => say(() => api('claudeLogin', first?.id ?? 'claude1'), 'Se abre una ventana para iniciar sesión: sigue los pasos del navegador') }
+    text: t('Claude Code ya está en este PC. Falta iniciar sesión con tu cuenta de Claude (Pro o Max): se abre una ventana y el navegador; cuando acabes, la app la ve sola.'),
+    button: { label: t('Iniciar sesión'), run: () => say(() => api('claudeLogin', first?.id ?? 'claude1'), t('Se abre una ventana para iniciar sesión: sigue los pasos del navegador')) }
   }
 }
 
@@ -64,56 +65,56 @@ export function FirstSteps() {
 
   const steps: Step[] = [
     {
-      key: 'cuentas', icon: <Users size={16} />, title: 'Tus cuentas de Claude', done: logged.length > 0,
+      key: 'cuentas', icon: <Users size={16} />, title: t('Tus cuentas de Claude'), done: logged.length > 0,
       text: logged.length
-        ? `${logged.length === 1 ? 'Hay 1 cuenta' : `Hay ${logged.length} cuentas`} con la sesión iniciada en este PC: ${names(logged)}. Si tienes más, añádelas en Cuentas.`
-        : setup?.text ?? 'La app busca sola las cuentas de Claude Code de este PC.',
-      button: logged.length || !setup ? { label: logged.length ? 'Ver las cuentas' : 'Buscar cuentas', run: () => go('agentes') } : setup.button
+        ? t('{v0} con la sesión iniciada en este PC: {v1}. Si tienes más, añádelas en Cuentas.', { v0: logged.length === 1 ? t('Hay 1 cuenta') : t('Hay {length} cuentas', { length: logged.length }), v1: names(logged) })
+        : setup?.text ?? t('La app busca sola las cuentas de Claude Code de este PC.'),
+      button: logged.length || !setup ? { label: logged.length ? t('Ver las cuentas') : t('Buscar cuentas'), run: () => go('agentes') } : setup.button
     },
     {
-      key: 'ganchos', icon: <Eye size={16} />, title: 'Que la app vea lo que hace cada Claude', done: logged.length > 0 && blind.length === 0,
+      key: 'ganchos', icon: <Eye size={16} />, title: t('Que la app vea lo que hace cada Claude'), done: logged.length > 0 && blind.length === 0,
       // Since EV52 the app puts them by itself (30 s after opening, then every 10 min): the button only saves the wait.
       text: !logged.length
-        ? 'Lo hace la app sola en cuanto haya una cuenta: así sabe cuándo empieza, para y escribe cada Claude (sin eso no podría coordinarlos).'
+        ? t('Lo hace la app sola en cuanto haya una cuenta: así sabe cuándo empieza, para y escribe cada Claude (sin eso no podría coordinarlos).')
         : blind.length
-          ? `La app aún no ve a ${names(blind)}: lo pone sola en unos minutos (guarda antes una copia de su configuración). Si no quieres esperar, actívalo ya.`
-          : `La app ve a ${names(logged)}: sabe cuándo empieza, para y escribe cada una.`,
-      button: blind.length ? { label: 'Activarlo ya', run: () => run(async () => { for (const a of blind) await api('hooksInstall', a.id) }, `Activado en ${names(blind)}`) } : undefined
+          ? t('La app aún no ve a {v0}: lo pone sola en unos minutos (guarda antes una copia de su configuración). Si no quieres esperar, actívalo ya.', { v0: names(blind) })
+          : t('La app ve a {v0}: sabe cuándo empieza, para y escribe cada una.', { v0: names(logged) }),
+      button: blind.length ? { label: t('Activarlo ya'), run: () => run(async () => { for (const a of blind) await api('hooksInstall', a.id) }, t('Activado en {v0}', { v0: names(blind) })) } : undefined
     },
     {
-      key: 'proyecto', icon: <FolderPlus size={16} />, title: 'Tu primer proyecto', done: state.projects.length > 0,
+      key: 'proyecto', icon: <FolderPlus size={16} />, title: t('Tu primer proyecto'), done: state.projects.length > 0,
       text: state.projects.length
-        ? `${state.projects.length === 1 ? 'Tienes 1 proyecto' : `Tienes ${state.projects.length} proyectos`}: ${state.projects.map((p) => p.name).join(', ')}.`
-        : 'Elige la carpeta de lo que quieras hacer (un juego, una web, un vídeo…). La app entiende qué es y la prepara para que varios Claude trabajen en ella sin pisarse.',
-      button: { label: state.projects.length ? 'Añadir otro' : 'Elegir la carpeta', run: () => run(() => api('addProject'), 'Proyecto añadido y preparado') },
+        ? `${state.projects.length === 1 ? t('Tienes 1 proyecto') : t('Tienes {n} proyectos', { n: state.projects.length })}: ${state.projects.map((p) => p.name).join(', ')}.`
+        : t('Elige la carpeta de lo que quieras hacer (un juego, una web, un vídeo…). La app entiende qué es y la prepara para que varios Claude trabajen en ella sin pisarse.'),
+      button: { label: state.projects.length ? t('Añadir otro') : t('Elegir la carpeta'), run: () => run(() => api('addProject'), t('Proyecto añadido y preparado')) },
       // EV56: the folders where a Claude already worked, offered with one click.
-      extra: (candidates.data ?? []).map((c) => ({ label: `Añadir ${c.name}`, title: `${c.root} · ${c.prompts} mensajes tuyos allí`, run: () => run(() => api('addProjectAt', c.root), `${c.name} añadido y preparado`) }))
+      extra: (candidates.data ?? []).map((c) => ({ label: t('Añadir {name}', { name: c.name }), title: t('{root} · {prompts} mensajes tuyos allí', { root: c.root, prompts: c.prompts }), run: () => run(() => api('addProjectAt', c.root), t('{name} añadido y preparado', { name: c.name })) }))
     },
     {
-      key: 'rueda', icon: <Repeat size={16} />, title: 'Quién sigue cuando uno se queda sin uso', done: wheelOn,
+      key: 'rueda', icon: <Repeat size={16} />, title: t('Quién sigue cuando uno se queda sin uso'), done: wheelOn,
       text: wheelOn
-        ? 'La rueda de relevos está encendida: cuando un Claude se queda sin uso, el siguiente sigue donde lo dejó.'
+        ? t('La rueda de relevos está encendida: cuando un Claude se queda sin uso, el siguiente sigue donde lo dejó.')
         : !project
-          ? 'Cuando tengas un proyecto: la rueda de relevos hace que, cuando un Claude se queda sin uso, el siguiente siga donde lo dejó.'
+          ? t('Cuando tengas un proyecto: la rueda de relevos hace que, cuando un Claude se queda sin uso, el siguiente siga donde lo dejó.')
           : !logged.length
-            ? 'Cuando tengas dos cuentas o más con sesión: la rueda de relevos hace que, cuando una se queda sin uso, la siguiente siga donde lo dejó.'
+            ? t('Cuando tengas dos cuentas o más con sesión: la rueda de relevos hace que, cuando una se queda sin uso, la siguiente siga donde lo dejó.')
           : logged.length < 2
-            ? `Con una sola cuenta no hace falta rueda: cuando se quede sin uso, seguirá ella misma al volver. Si añades otra, enciéndela aquí.`
-            : `Enciende la rueda en ${project.name} con ${names(logged)}: cuando una se quede sin uso, la siguiente seguirá donde lo dejó.`,
-      button: !wheelOn && project && logged.length >= 2 ? { label: 'Encender la rueda', run: () => run(() => api('chainSet', project.id, { on: true, order: logged.map((a) => a.id) }), `Rueda encendida en ${project.name}`) } : undefined
+            ? t('Con una sola cuenta no hace falta rueda: cuando se quede sin uso, seguirá ella misma al volver. Si añades otra, enciéndela aquí.')
+            : t('Enciende la rueda en {name} con {v0}: cuando una se quede sin uso, la siguiente seguirá donde lo dejó.', { name: project.name, v0: names(logged) }),
+      button: !wheelOn && project && logged.length >= 2 ? { label: t('Encender la rueda'), run: () => run(() => api('chainSet', project.id, { on: true, order: logged.map((a) => a.id) }), t('Rueda encendida en {name}', { name: project.name })) } : undefined
     }
   ]
 
   const done = steps.filter((s) => s.done).length
   if (state.projects.length && (done === steps.length || state.settings.firstRunDone)) return null
   return (
-    <section className="card p-5 mb-6 flex flex-col gap-4" aria-label="Primeros pasos">
+    <section className="card p-5 mb-6 flex flex-col gap-4" aria-label={t('Primeros pasos')}>
       <div className="flex items-start gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
-          <h2 className="t-title">Primeros pasos</h2>
-          <div className="t-body c2 mt-1">Cuatro cosas para que tus Claude trabajen solos y sin pisarse. La app ya ha mirado lo que hay: {done} de {steps.length} {done === 1 ? 'hecha' : 'hechas'}.</div>
+          <h2 className="t-title">{t('Primeros pasos')}</h2>
+          <div className="t-body c2 mt-1">{t('Cuatro cosas para que tus Claude trabajen solos y sin pisarse. La app ya ha mirado lo que hay: {done} de {length} {v0}.', { done: done, length: steps.length, v0: done === 1 ? t('hecha') : t('hechas') })}</div>
         </div>
-        {state.projects.length > 0 && <button className="btn btn-ghost" onClick={() => void api('setSettings', { firstRunDone: true }).then(refresh)}>Ocultar</button>}
+        {state.projects.length > 0 && <button className="btn btn-ghost" onClick={() => void api('setSettings', { firstRunDone: true }).then(refresh)}>{t('Ocultar')}</button>}
       </div>
       <ol className="flex flex-col gap-2.5 m-0 p-0 list-none">
         {steps.map((s, i) => (
@@ -124,7 +125,7 @@ export function FirstSteps() {
               <div className="t-small c2 mt-0.5">{s.text}</div>
               {s.extra && s.extra.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="t-small c3">Donde ya ha trabajado algún Claude:</span>
+                  <span className="t-small c3">{t('Donde ya ha trabajado algún Claude:')}</span>
                   {s.extra.map((x) => <button key={x.label} className="btn btn-sm" title={x.title} onClick={() => void x.run()}><FolderPlus size={13} /> {x.label}</button>)}
                 </div>
               )}

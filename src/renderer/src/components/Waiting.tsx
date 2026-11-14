@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { motion, AnimatePresence } from 'motion/react'
 import { Gavel, ListChecks, MessageSquareText } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -19,18 +20,18 @@ export function Waiting() {
     go(route)
   }
   return (
-    <div className="no-drag flex items-center gap-1.5 min-w-0 overflow-hidden" aria-label="Lo que te espera en cada proyecto">
-      <span className="t-small c3 flex-none hidden min-[1100px]:inline">Te esperan</span>
+    <div className="no-drag flex items-center gap-1.5 min-w-0 overflow-hidden" aria-label={t('Lo que te espera en cada proyecto')}>
+      <span className="t-small c3 flex-none hidden min-[1100px]:inline">{t('Te esperan')}</span>
       <AnimatePresence initial={false}>
         {rows.map(({ p, x }) => {
           const other = p.id !== state?.activeProjectId
           const route = x!.decisions ? 'decisiones' : x!.review ? 'tareas' : 'revisiones'
-          const title = [x!.decisions && `${x!.decisions} ${x!.decisions === 1 ? 'pregunta' : 'preguntas'} en Decidir`, x!.review && `${x!.review} para revisar en Tareas`, x!.comments && `${x!.comments} en Revisar`].filter(Boolean).join(' · ')
+          const title = [x!.decisions && t('{decisions} {v0} en Decidir', { decisions: x!.decisions, v0: x!.decisions === 1 ? t('pregunta') : t('preguntas') }), x!.review && t('{review} para revisar en Tareas', { review: x!.review }), x!.comments && t('{comments} en Revisar', { comments: x!.comments })].filter(Boolean).join(' · ')
           return (
             <motion.button key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={SPRING}
               className={`flex items-center gap-1.5 h-[28px] pl-2 pr-1 rounded-full border-0 flex-none ${other && x!.decisions ? 'waiting-pulse' : ''}`}
               style={{ background: `color-mix(in srgb, ${p.color} 16%, var(--fill))`, boxShadow: other && x!.decisions ? `inset 0 0 0 1.5px ${p.color}` : 'none' }}
-              onClick={() => void open(p.id, route)} title={`${p.name}: ${title}${other ? ' (otro proyecto: pulsa para ir)' : ''}`}>
+              onClick={() => void open(p.id, route)} title={`${p.name}: ${title}${other ? t(' (otro proyecto: pulsa para ir)') : ''}`}>
               <span className="dot" style={{ background: p.color }} />
               <span className="t-small truncate max-w-[140px]" style={{ fontWeight: 620 }}>{p.name}</span>
               {x!.decisions > 0 && <span className="pill num" style={{ background: 'var(--red)', color: 'white', height: 20, padding: '0 7px', gap: 4 }}><Gavel size={11} />{x!.decisions}</span>}

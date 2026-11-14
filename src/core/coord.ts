@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Coordination between the four accounts: task reservations with expiry (so two Claudes never do the same task by not
 // knowing), hand-offs when an account runs out, and the instructions waiting for an account when it starts a session.
 // Everything is in the shared SQLite database; the CLI (`pmc claim`, hooks) and the app use the same functions.
@@ -151,8 +152,8 @@ export function isWorkingOn(a: Pick<AgentCard, 'sessions'>, projectId: string): 
 /** Why launching an account now would only waste credits; undefined when it can go. `anyway`: the user has been warned and wants another window. */
 export function launchRefusal(a: Pick<AgentCard, 'id' | 'state' | 'sessions'>, projectId: string, anyway = false): string | undefined {
   const name = `Claude ${a.id.slice(6)}`
-  if (a.state === 'sin-uso') return `${name} no tiene uso ahora: programa su arranque para cuando vuelva`
-  if (!anyway && isWorkingOn(a, projectId)) return `${name} ya está trabajando en este proyecto: otra sesión gastaría el doble en lo mismo`
+  if (a.state === 'sin-uso') return t('{name} no tiene uso ahora: programa su arranque para cuando vuelva', { name: name })
+  if (!anyway && isWorkingOn(a, projectId)) return t('{name} ya está trabajando en este proyecto: otra sesión gastaría el doble en lo mismo', { name: name })
   return undefined
 }
 
@@ -206,7 +207,7 @@ export function assignedTasks(db: DB, projectId: string, a: Pick<Assignment, 'fr
 
 /** Assigns from's tasks to `to`. Pressing twice changes nothing; the opposite assignment, if there was one, is replaced. */
 export function addAssignment(db: DB, projectId: string, from: AccountId, to: AccountId, now = Date.now()): { assignment: Assignment; created: boolean } {
-  if (from === to) throw new Error('Una cuenta no puede encargarse a sí misma')
+  if (from === to) throw new Error(t('Una cuenta no puede encargarse a sí misma'))
   const cur = db.prepare('SELECT * FROM assignments WHERE project_id = ? AND to_account = ? AND from_account = ?').get(projectId, to, from) as any
   if (cur) return { assignment: assignmentRow(cur), created: false }
   db.prepare('DELETE FROM assignments WHERE project_id = ? AND to_account = ? AND from_account = ?').run(projectId, from, to)
@@ -242,7 +243,7 @@ export function pruneAssignments(db: DB, projectId: string, now = Date.now()): n
   for (const a of listAssignments(db, projectId)) {
     if (assignedTasks(db, projectId, a).length) continue
     removeAssignment(db, a.id)
-    addEvent(db, { projectId, at: now, account: a.to, kind: 'relevo-app', title: `Claude ${a.to.slice(6)} ha acabado lo que le encargaste de Claude ${a.from.slice(6)}`, source: 'Mission Control' })
+    addEvent(db, { projectId, at: now, account: a.to, kind: 'relevo-app', title: t('Claude {v0} ha acabado lo que le encargaste de Claude {v1}', { v0: a.to.slice(6), v1: a.from.slice(6) }), source: 'Mission Control' })
     n++
   }
   return n
@@ -407,13 +408,13 @@ export function commentsReached(db: DB, ins: { commentId?: number }[], pmc: stri
     const c = db.prepare('SELECT status FROM comments WHERE id = ?').get(id) as { status: string } | undefined
     if (c?.status === 'pendiente') setCommentStatus(db, id, 'recibido', 'Le ha llegado a un Claude')
   }
-  return ids.length ? `Notas sobre imágenes (n.º ${ids.join(', ')}): cuando arregles cada una, ${pmc} corregido <n.º> "qué has cambiado" (con --foto "ruta::qué se ve" si se ve), y vuelve al usuario a Revisar para que la apruebe.` : ''
+  return ids.length ? t('Notas sobre imágenes (n.º {v0}): cuando arregles cada una, {pmc} corregido <n.º> "qué has cambiado" (con --foto "ruta::qué se ve" si se ve), y vuelve al usuario a Revisar para que la apruebe.', { v0: ids.join(', '), pmc: pmc }) : ''
 }
 
 const DAY = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 const when = (ms: number) => {
   const d = new Date(ms)
-  return `${DAY[d.getDay()]} ${d.getDate()} a las ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return t('{v0} {v1} a las {v2}:{v3}', { v0: DAY[d.getDay()], v1: d.getDate(), v2: String(d.getHours()).padStart(2, '0'), v3: String(d.getMinutes()).padStart(2, '0') })
 }
 
 /** How the other accounts are, from the summary the app keeps (team.json, written every refresh). Old summaries are ignored. */
@@ -511,7 +512,7 @@ export function groupedLines(ins: { kind: string; body: string; id?: number }[])
     const first = g.items[0]
     if (g.items.length > 1) {
       const where = g.items.map((it) => `${it.where ?? '(sin archivo)'}${it.text.trim().toLowerCase() !== first.text.trim().toLowerCase() ? ` («${it.text.trim()}»)` : ''}`).join('; ')
-      return `- [${label}, el mismo problema en ${g.items.length} archivos] ${first.text.trim()}. Marcado en: ${where}. Trátalo como una sola orden: corrige la causa y revisa también los demás casos parecidos (por ejemplo, el resto de armas u oficios), no solo los marcados.`
+      return t('- [{label}, el mismo problema en {length} archivos] {v0}. Marcado en: {where}. Trátalo como una sola orden: corrige la causa y revisa también los demás casos parecidos (por ejemplo, el resto de armas u oficios), no solo los marcados.', { label: label, length: g.items.length, v0: first.text.trim(), where: where })
     }
     return `- [${label}] ${first.text}${first.where ? ` — sobre ${first.where}` : ''}`
   })
@@ -558,7 +559,7 @@ export function prioritiesText(db: DB, projectId: string, account: AccountId, no
     const h = holders.get(t.key)
     return `${t.extId ?? t.key} · ${t.title.slice(0, 70)} [${t.priority === 0 ? 'urgente' : 'alta'}${h ? (h === account ? ', la tienes tú' : `, la tiene ${h}`) : ''}]`
   })
-  return `Prioridades del usuario, antes que el resto y la más alta primero (si está libre, resérvala con pmc claim; si la tiene otra cuenta, sigue con la siguiente): ${items.join('; ')}.`
+  return t('Prioridades del usuario, antes que el resto y la más alta primero (si está libre, resérvala con pmc claim; si la tiene otra cuenta, sigue con la siguiente): {v0}.', { v0: items.join('; ') })
 }
 
 const TASK_ID = /^[A-Z][A-Za-z]{0,3}[0-9]+[a-z]?[0-9]*[a-z]?$/
@@ -568,7 +569,7 @@ const TASK_ID = /^[A-Z][A-Za-z]{0,3}[0-9]+[a-z]?[0-9]*[a-z]?$/
  * the model that is enough for it. Read from the text each time: nothing to keep in step.
  */
 export function taskTags(text: string): { after: string[]; model?: string; needs: string[] } {
-  const after = [...text.matchAll(/[(]tras:[ ]*([^)]+)[)]/gi)].flatMap((m) => m[1].split(/[ ,;]+/).map((x) => x.trim()).filter((x) => TASK_ID.test(x)))
+  const after = [...text.matchAll(/[(](?:tras|after):[ ]*([^)]+)[)]/gi)].flatMap((m) => m[1].split(/[ ,;]+/).map((x) => x.trim()).filter((x) => TASK_ID.test(x)))
   // «{unity}», «{gpu}»: a resource only one job can use at a time; two tasks that need the same one cannot run side by side.
   // The model and the resources are the tags at the end of the line, where they are written (all 63 in the game project): a
   // task that talks about them took the first one it named (13-11: EV20 «needed» Unity and the graphics card because its
@@ -671,7 +672,7 @@ export function deliverPending(db: DB, project: ProjectConfig, account: AccountI
   for (const i of ins) {
     mark.run(now, now, i.id)
     takeChange(db, i.id, account)
-    addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: `Claude ${account.slice(6)} ha recibido: «${i.body.slice(0, 100)}»`, source: 'hook PostToolUse', ref: `ins:${i.id}` })
+    addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: t('Claude {v0} ha recibido: «{v1}»', { v0: account.slice(6), v1: i.body.slice(0, 100) }), source: 'hook PostToolUse', ref: `ins:${i.id}` })
   }
   const back = commentsReached(db, ins, pmcCommand())
   return [...notesText(project.name, ins, true), ...(back ? [back] : [])].join('\n')
@@ -705,7 +706,7 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
     for (const i of ins) {
       mark.run(now, now, i.id)
       takeChange(db, i.id, account)
-      addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: `Claude ${account.slice(6)} ha recibido: «${i.body.slice(0, 100)}»`, source: 'hook SessionStart', ref: `ins:${i.id}` })
+      addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: t('Claude {v0} ha recibido: «{v1}»', { v0: account.slice(6), v1: i.body.slice(0, 100) }), source: 'hook SessionStart', ref: `ins:${i.id}` })
     }
   }
   if (stillOpen.length) {
@@ -777,10 +778,10 @@ export function sharedFileWarning(db: DB, account: AccountId, file: string, sess
     .get(path, account, now - SHARED_FILE_MS) as { account: string; at: number } | undefined
   if (!other) return undefined
   const name = path.split('\\').pop() ?? path
-  const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: `Claude ${account.slice(6)} y Claude ${other.account.slice(6)} han escrito el mismo archivo: ${name}`, detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${path.toLowerCase()}` })
+  const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: t('Claude {v0} y Claude {v1} han escrito el mismo archivo: {name}', { v0: account.slice(6), v1: other.account.slice(6), name: name }), detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${path.toLowerCase()}` })
   if (!fresh) return undefined
   const min = Math.max(1, Math.round((now - other.at) / 60_000))
-  return `Mission Control: ${other.account} escribió este mismo archivo (${path}) hace ${min} min. Vuelve a leerlo antes de tocarlo otra vez (puede haber cambiado desde que lo leíste), no deshagas sus cambios y mira con pmc claims qué tarea lleva: si las dos tocan lo mismo, deja la tuya en un punto que compile y sigue por otra parte, o apúntalo en el relevo para que no os piséis.`
+  return t('Mission Control: {account} escribió este mismo archivo ({path}) hace {min} min. Vuelve a leerlo antes de tocarlo otra vez (puede haber cambiado desde que lo leíste), no deshagas sus cambios y mira con pmc claims qué tarea lleva: si las dos tocan lo mismo, deja la tuya en un punto que compile y sigue por otra parte, o apúntalo en el relevo para que no os piséis.', { account: other.account, path: path, min: min })
 }
 
 /** Accounts the user marked «No usar» or «De baja», from the summary the app keeps. */

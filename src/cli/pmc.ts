@@ -25,7 +25,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.32.43'
+const VERSION = '0.32.49'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -496,6 +496,10 @@ async function openShared() {
   const { loadProjects, projectForPath } = await import('../core/projects')
   const coord = await import('../core/coord')
   const db = openDb()
+  // EV164: what the Claudes are told goes in the app's language (Ajustes › Idioma; none chosen: the system's, as the app).
+  const { getSetting } = await import('../core/db')
+  const { pickLang, setLang } = await import('../core/i18n')
+  setLang(pickLang(getSetting<{ lang?: string }>(db, 'ui', {}).lang, Intl.DateTimeFormat().resolvedOptions().locale))
   return { db, coord, projectOf: (cwd: string) => projectForPath(loadProjects(db), cwd).project }
 }
 
@@ -672,7 +676,7 @@ async function claims(cmd: string, args: string[]): Promise<void> {
         const f = join(d, 'RELEVO.md')
         if (!ex(f)) continue
         const text = readText(f)
-        for (const line of text.split(/\r?\n/)) if (/^\*\*En curso/i.test(line) && line.includes(from)) enCurso.push(line.replace(/\*\*/g, '').slice(0, 500))
+        for (const line of text.split(/\r?\n/)) if (/^\*\*(?:En curso|In progress)/i.test(line) && line.includes(from)) enCurso.push(line.replace(/\*\*/g, '').slice(0, 500))
         for (const h of parseRelevo(text, f).heartbeats) if (h.account === from && (!heartbeat || h.at > heartbeat.at)) heartbeat = { at: h.at, text: h.text }
       }
       const copies = project.copies.map((c) => {

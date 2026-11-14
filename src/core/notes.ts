@@ -5,6 +5,7 @@ import type { AccountId, AgentCard } from './types'
 import type { RelayChain } from './chain'
 import { isSessionWorking } from './working'
 import { addEvent, type DB } from './db'
+import { t, locale } from './i18n'
 
 export type NoteRoute =
   /** An open window of a Claude that is not doing anything: the note is typed into it, as if the user wrote there. */
@@ -58,21 +59,21 @@ export function pickNoteRoute(o: {
 
   // 3. Nobody here: a free account opens in the project. Not one that belongs to another project's wheel (it would miss
   // its turn there, EV153), not while this project has its own wheel (it opens whoever has the turn), and not one busy elsewhere.
-  if (wheel) return { kind: 'espera', why: `la rueda de relevos la dará a quien tenga el turno${wheel.holder ? ` (Claude ${wheel.holder.slice(6)})` : ''}` }
+  if (wheel) return { kind: 'espera', why: wheel.holder ? t('la rueda de relevos la dará a quien tenga el turno (Claude {n})', { n: wheel.holder.slice(6) }) : t('la rueda de relevos la dará a quien tenga el turno') }
   const otherWheels = Object.entries(o.chains ?? {}).filter(([pid, c]) => pid !== o.projectId && c?.on).flatMap(([, c]) => c!.order)
   const free = here
     .filter((a) => a.state === 'disponible' && !a.sessions.some((s) => isSessionWorking(s)) && !otherWheels.includes(a.id))
     .sort(order)[0]
   if (free) return { kind: 'abrir', account: free.id }
   if (o.target) {
-    const t = o.agents.find((a) => a.id === o.target)
-    const why = !t ? 'esa cuenta no está en este PC'
-      : excluded[t.id] ? `Claude ${t.id.slice(6)} está apartada`
-      : t.state === 'sin-uso' ? `Claude ${t.id.slice(6)} no tiene uso ahora; la leerá al volver`
-      : `Claude ${t.id.slice(6)} está en otro proyecto; la leerá al entrar en este`
+    const who = o.agents.find((a) => a.id === o.target)
+    const why = !who ? t('esa cuenta no está en este PC')
+      : excluded[who.id] ? t('Claude {n} está apartada', { n: who.id.slice(6) })
+      : who.state === 'sin-uso' ? t('Claude {n} no tiene uso ahora; la leerá al volver', { n: who.id.slice(6) })
+      : t('Claude {n} está en otro proyecto; la leerá al entrar en este', { n: who.id.slice(6) })
     return { kind: 'espera', why }
   }
-  return { kind: 'espera', why: 'no hay ningún Claude libre con uso; la leerá el primero que entre' }
+  return { kind: 'espera', why: t('no hay ningún Claude libre con uso; la leerá el primero que entre') }
 }
 
 /** What is typed into the window: one line (the console sends on Enter), with the mark that links it to its task. */
@@ -104,7 +105,7 @@ export function confirmTyped(db: DB, projectId: string, account: AccountId, now 
     .all(projectId, `ventana ${account}`, now) as { id: number; body: string }[]
   for (const r of rows) {
     db.prepare("UPDATE instructions SET status = 'recibida', updated_at = ? WHERE id = ?").run(now, r.id)
-    addEvent(db, { projectId, at: now, account, kind: 'recibida', title: `Claude ${account.slice(6)} ha leído tu nota: «${r.body.slice(0, 100)}»`, source: 'su ventana', ref: `ins:${r.id}` })
+    addEvent(db, { projectId, at: now, account, kind: 'recibida', title: t('Claude {v0} ha leído tu nota: «{v1}»', { v0: account.slice(6), v1: r.body.slice(0, 100) }), source: 'su ventana', ref: `ins:${r.id}` })
   }
   return rows.length
 }
@@ -150,18 +151,18 @@ export type NoteTone = 'espera' | 'enviada' | 'leida' | 'apuntada' | 'hecha' | '
 
 /** The line under each sent note: where it is now, in the user's words. */
 export function noteStatus(n: SentNote, route?: NoteRoute): { tone: NoteTone; text: string } {
-  const who = (a?: string) => (a ? `Claude ${a.slice(6)}` : 'un Claude')
-  const hm = (ms?: number) => (ms ? new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '')
-  if (n.status === 'anulada') return { tone: 'fallo', text: 'Anulada' }
-  if (n.status === 'fallida') return { tone: 'fallo', text: `No se pudo entregar${n.error ? `: ${n.error}` : ''}` }
-  if (n.task?.done || n.status === 'ejecutada') return { tone: 'hecha', text: n.task ? `Hecha (${n.task.id})` : 'Hecha' }
-  if (n.task) return { tone: 'apuntada', text: `Apuntada como ${n.task.id}${n.task.owner ? `, para ${who(n.task.owner)}` : ''}` }
-  if (n.status === 'recibida') return { tone: 'leida', text: `Leída por ${who(n.reader)} a las ${hm(n.updatedAt)}` }
-  if (n.status === 'entregada' && n.channel?.startsWith('ventana')) return { tone: 'enviada', text: `Escrita en la ventana de ${who(n.reader)} a las ${hm(n.deliveredAt)}; la está leyendo` }
-  if (n.status === 'entregada') return { tone: 'enviada', text: 'Escrita en el Buzón del proyecto' }
-  if (n.status === 'pendiente-entrega' && n.channel?.startsWith('abriendo')) return { tone: 'enviada', text: `Abriendo a ${who(n.reader)} para dársela` }
-  if (route?.kind === 'paso') return { tone: 'espera', text: `En cola: ${who(route.account)} la leerá al acabar su paso` }
-  if (route?.kind === 'ventana') return { tone: 'espera', text: `Enviando a ${who(route.account)}…` }
-  if (route?.kind === 'espera') return { tone: 'espera', text: `En espera: ${route.why}` }
-  return { tone: 'espera', text: 'En espera: la leerá el primer Claude que trabaje aquí' }
+  const who = (a?: string) => (a ? `Claude ${a.slice(6)}` : t('un Claude'))
+  const hm = (ms?: number) => (ms ? new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) : '')
+  if (n.status === 'anulada') return { tone: 'fallo', text: t('Anulada') }
+  if (n.status === 'fallida') return { tone: 'fallo', text: n.error ? t('No se pudo entregar: {error}', { error: n.error }) : t('No se pudo entregar') }
+  if (n.task?.done || n.status === 'ejecutada') return { tone: 'hecha', text: n.task ? t('Hecha ({id})', { id: n.task.id }) : t('Hecha') }
+  if (n.task) return { tone: 'apuntada', text: n.task.owner ? t('Apuntada como {id}, para {who}', { id: n.task.id, who: who(n.task.owner) }) : t('Apuntada como {id}', { id: n.task.id }) }
+  if (n.status === 'recibida') return { tone: 'leida', text: t('Leída por {who} a las {hm}', { who: who(n.reader), hm: hm(n.updatedAt) }) }
+  if (n.status === 'entregada' && n.channel?.startsWith('ventana')) return { tone: 'enviada', text: t('Escrita en la ventana de {who} a las {hm}; la está leyendo', { who: who(n.reader), hm: hm(n.deliveredAt) }) }
+  if (n.status === 'entregada') return { tone: 'enviada', text: t('Escrita en el Buzón del proyecto') }
+  if (n.status === 'pendiente-entrega' && n.channel?.startsWith('abriendo')) return { tone: 'enviada', text: t('Abriendo a {who} para dársela', { who: who(n.reader) }) }
+  if (route?.kind === 'paso') return { tone: 'espera', text: t('En cola: {who} la leerá al acabar su paso', { who: who(route.account) }) }
+  if (route?.kind === 'ventana') return { tone: 'espera', text: t('Enviando a {who}…', { who: who(route.account) }) }
+  if (route?.kind === 'espera') return { tone: 'espera', text: t('En espera: {why}', { why: route.why }) }
+  return { tone: 'espera', text: t('En espera: la leerá el primer Claude que trabaje aquí') }
 }

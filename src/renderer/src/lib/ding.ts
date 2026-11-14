@@ -1,11 +1,12 @@
+import { t } from '../../../core/i18n'
 // The tones of the notice, made here so there are no sound files to carry and the volume is exact.
 export const TONES: { id: string; label: string }[] = [
-  { id: 'campana', label: 'Campanita' },
-  { id: 'moneda', label: 'Moneda' },
-  { id: 'madera', label: 'Madera' },
-  { id: 'cerdito', label: 'Cerdito' },
-  { id: 'suave', label: 'Suave' },
-  { id: 'ninguno', label: 'Sin sonido' }
+  { id: 'campana', get label() { return t('Campanita') } },
+  { id: 'moneda', get label() { return t('Moneda') } },
+  { id: 'madera', get label() { return t('Madera') } },
+  { id: 'cerdito', get label() { return t('Cerdito') } },
+  { id: 'suave', get label() { return t('Suave') } },
+  { id: 'ninguno', get label() { return t('Sin sonido') } }
 ]
 
 type Note = { at: number; freq: number; to?: number; length: number; wave: OscillatorType; level: number }

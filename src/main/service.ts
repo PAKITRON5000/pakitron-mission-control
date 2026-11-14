@@ -1,3 +1,4 @@
+import { t } from '../core/i18n'
 // The local service inside the app: keeps the database current from the real sources on timers, and answers the
 // interface. Reads are cheap and incremental (mtime checks); nothing here spends any account's usage.
 import { fitTeam, settingsFor, teamAdvice } from '../core/workmode'
@@ -14,7 +15,7 @@ import { openDb, backupDb, getSetting, setSetting, addEvent, type DB } from '../
 import { DEFAULT_ACCOUNTS, readLimits, detectAccounts, readIdentity } from '../core/accounts'
 import { isStalled, STALL_MS } from '../core/pace'
 import { listAgents, sessionOwners, savedSessions, readTranscriptTail } from '../core/sessions'
-import { detectProject, loadProjects, saveProject, refreshProjectCopies, copyStatus, recentCommits, commitsSince, projectForPath, type Commit } from '../core/projects'
+import { detectProject, loadProjects, saveProject, refreshProjectCopies, copyStatus, recentCommits, commitsSince, projectForPath, forgetProject, settingsWithoutProject, dropOrphanAssets, type Commit } from '../core/projects'
 import { syncTasks, listTasks, buildAgents, describeBuildTimes, allHeartbeats, summarize, timeline, daySummary } from '../core/engine'
 import type { SkillsTally } from '../core/skills'
 import { scanMediaAsync, hashPending } from '../core/media'
@@ -85,6 +86,8 @@ export class Service extends EventEmitter {
   private pushTimer?: NodeJS.Timeout
   private activityTimer?: NodeJS.Timeout
   private busy = new Set<string>()
+  /** EV169: projects removed while the app runs: a gallery scan that was half-way through one must not bring it back. */
+  private removed = new Set<string>()
   activity: Record<string, AccountActivity> = {}
   /** EV133: skills per project (main/index.ts › tallySkills), kept in skills-tally.json so the board has them at once. */
   skillsTally: Record<string, SkillsTally> = (() => { try { return JSON.parse(readFileSync(join(paths.root(), 'skills-tally.json'), 'utf8')) } catch { return {} } })()
@@ -96,7 +99,7 @@ export class Service extends EventEmitter {
     let restored: string | undefined
     try { restored = applyPendingRestore(paths.root(), paths.db()) } catch { /* the current database stays */ }
     this.db = openDb()
-    if (restored) addEvent(this.db, { at: Date.now(), kind: 'aviso', title: `Restaurada la copia de la base de datos ${restored.split(/[\\/]/).pop()}`, source: 'Mission Control' })
+    if (restored) addEvent(this.db, { at: Date.now(), kind: 'aviso', title: t('Restaurada la copia de la base de datos {v0}', { v0: restored.split(/[\\/]/).pop() }), source: 'Mission Control' })
     const firstRun = !this.db.prepare("SELECT 1 FROM settings WHERE key = 'accounts'").get()
     this.accounts = getSetting(this.db, 'accounts', DEFAULT_ACCOUNTS)
     // EV97: the first time, every Claude Code folder of this PC with a sign-in is an account (here: .claude-quinta and
@@ -145,18 +148,18 @@ export class Service extends EventEmitter {
     const id = `claude${n}` as AccountId
     const slug = a.alias.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || String(n)
     const configDir = a.configDir?.trim() || join(home(), `.claude-${slug}`)
-    if (this.accounts.some((x) => (x.configDir || '').toLowerCase() === configDir.toLowerCase())) throw new Error('Esa carpeta ya es de otra cuenta')
+    if (this.accounts.some((x) => (x.configDir || '').toLowerCase() === configDir.toLowerCase())) throw new Error(t('Esa carpeta ya es de otra cuenta'))
     mkdirSync(configDir, { recursive: true })
     const palette = ['#FF9F0A', '#0A84FF', '#BF5AF2', '#30D158', '#FF375F', '#64D2FF', '#FFD60A', '#AC8E68', '#5E5CE6', '#FF6B8B']
     const acc: AccountConfig = { id, alias: a.alias.trim() || `Cuenta ${n}`, configDir, emailExpected: a.emailExpected?.trim() || undefined, color: a.color || palette[(n - 1) % palette.length] }
     this.saveAccounts([...this.accounts, acc])
-    addEvent(this.db, { at: Date.now(), account: id, kind: 'cuenta', title: `Cuenta añadida: Claude ${n} (${acc.alias})`, detail: configDir, source: 'Mission Control' })
+    addEvent(this.db, { at: Date.now(), account: id, kind: 'cuenta', title: t('Cuenta añadida: Claude {n} ({alias})', { n: n, alias: acc.alias }), detail: configDir, source: 'Mission Control' })
     return acc
   }
 
   updateAccount(id: AccountId, patch: Partial<AccountConfig>): AccountConfig {
     const cur = this.accounts.find((a) => a.id === id)
-    if (!cur) throw new Error('Cuenta desconocida')
+    if (!cur) throw new Error(t('Cuenta desconocida'))
     const next = { ...cur, ...patch, id: cur.id }
     this.saveAccounts(this.accounts.map((a) => (a.id === id ? next : a)))
     return next
@@ -164,10 +167,10 @@ export class Service extends EventEmitter {
 
   /** Takes the account out of Mission Control. Its folder, login and conversations stay where they are. */
   removeAccount(id: AccountId): void {
-    if (!this.accounts.some((a) => a.id === id)) throw new Error('Cuenta desconocida')
-    if (this.accounts.length <= 1) throw new Error('Tiene que quedar al menos una cuenta')
+    if (!this.accounts.some((a) => a.id === id)) throw new Error(t('Cuenta desconocida'))
+    if (this.accounts.length <= 1) throw new Error(t('Tiene que quedar al menos una cuenta'))
     this.saveAccounts(this.accounts.filter((a) => a.id !== id))
-    addEvent(this.db, { at: Date.now(), account: id, kind: 'cuenta', title: `Cuenta quitada de Mission Control: Claude ${id.slice(6)}`, source: 'Mission Control' })
+    addEvent(this.db, { at: Date.now(), account: id, kind: 'cuenta', title: t('Cuenta quitada de Mission Control: Claude {v0}', { v0: id.slice(6) }), source: 'Mission Control' })
   }
 
   /** Re-reads the activity files (hooks append to them on every tool), at most every 1,5 s. */
@@ -213,6 +216,7 @@ export class Service extends EventEmitter {
     this.installCli(cliSource)
     this.projects = loadProjects(this.db)
     if (!this.projects.length) await this.seedProjects()
+    try { const n = dropOrphanAssets(this.db); if (n) this.log(`galería: ${n} piezas de proyectos que ya no están, quitadas`) } catch (e) { this.log(`galería: ${(e as Error).message}`) }
     try { seedAssignments(this.db) } catch (e) { this.log(`encargos: ${(e as Error).message}`) }
     try { for (const p of this.projects) linkRecentCorrections(this.db, p.id) } catch (e) { this.log(`notas: ${(e as Error).message}`) }
     for (const p of this.projects) {
@@ -281,12 +285,13 @@ export class Service extends EventEmitter {
   }
 
   async addProject(root: string, name?: string): Promise<ProjectConfig> {
-    if (!existsSync(root)) throw new Error('La carpeta no existe')
+    if (!existsSync(root)) throw new Error(t('La carpeta no existe'))
     const p = await detectProject(root, name)
     if (this.projects.some((x) => x.id === p.id)) p.id = `${p.id}-${Date.now().toString(36).slice(-4)}`
+    this.removed.delete(p.id)
     saveProject(this.db, p)
     this.projects = loadProjects(this.db)
-    addEvent(this.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: `Proyecto añadido: ${p.name}`, source: 'Mission Control' })
+    addEvent(this.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: t('Proyecto añadido: {name}', { name: p.name }), source: 'Mission Control' })
     this.syncDocs(true)
     void this.scanAllMedia()
     void this.refreshGit()
@@ -295,12 +300,29 @@ export class Service extends EventEmitter {
 
   updateProject(id: string, patch: Partial<ProjectConfig>): ProjectConfig {
     const p = this.project(id)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const next = { ...p, ...patch, id: p.id }
     saveProject(this.db, next)
     this.projects = loadProjects(this.db)
     this.push()
     return next
+  }
+
+  /**
+   * EV169: Mission Control forgets the project: everything it kept about it and every setting that named it. A copy of
+   * the database goes first (Ajustes › Copias brings it back). The folder stays where it is: the caller may bin it.
+   */
+  removeProject(id: string): { name: string; root: string; backup: string } {
+    const p = this.project(id)
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    const backup = backupDb(this.db)
+    this.removed.add(id)
+    forgetProject(this.db, id)
+    this.projects = loadProjects(this.db)
+    for (const m of [this.docMtimes, this.tasks, this.copies, this.commits, this.commitsToday]) m.delete(id)
+    addEvent(this.db, { at: Date.now(), kind: 'proyecto', title: t('Proyecto quitado de Mission Control: {name}', { name: p.name }), detail: p.root, source: 'Mission Control' })
+    this.setSettings(settingsWithoutProject(this.settings, id, p.root))
+    return { name: p.name, root: p.root, backup }
   }
 
   private dailyBackup(): void {
@@ -396,7 +418,7 @@ export class Service extends EventEmitter {
           if (!a.sessions.some((s) => s.projectId && isSessionWorking(s))) continue
           const progress = (this.db.prepare("SELECT at FROM events WHERE account = ? AND kind IN ('archivo', 'reserva') AND at > ?").all(a.id, now - STALL_MS) as { at: number }[]).map((r) => r.at)
           const stuck = isStalled(a.usage.history, progress, now)
-          if (stuck) addEvent(this.db, { projectId: a.sessions[0]?.projectId, at: now, account: a.id, kind: 'aviso', title: `Claude ${a.id.slice(6)} ha gastado ${stuck.points} puntos de sus 5 horas en ${stuck.minutes} min sin escribir ni reservar nada: mira si está atascado`, source: 'Mission Control', dedupe: `stall:${a.id}:${Math.floor(now / STALL_MS)}` })
+          if (stuck) addEvent(this.db, { projectId: a.sessions[0]?.projectId, at: now, account: a.id, kind: 'aviso', title: t('Claude {v0} ha gastado {points} puntos de sus 5 horas en {minutes} min sin escribir ni reservar nada: mira si está atascado', { v0: a.id.slice(6), points: stuck.points, minutes: stuck.minutes }), source: 'Mission Control', dedupe: `stall:${a.id}:${Math.floor(now / STALL_MS)}` })
         }
       } catch { /* a notice, never a failure */ }
       // What the user said about an account goes before anything read from it: it is not offered, launched or counted on.
@@ -429,7 +451,7 @@ export class Service extends EventEmitter {
     if (!fit) return
     const { advice } = fit
     this.setSettings(fit.patch)
-    addEvent(this.db, { at: Date.now(), kind: 'aviso', title: `${advice.title}: la app lo ha puesto así sola (se cambia en Relevos › Cómo trabajan los Claude)`, detail: advice.why, source: 'Mission Control' })
+    addEvent(this.db, { at: Date.now(), kind: 'aviso', title: t('{title}: la app lo ha puesto así sola (se cambia en Relevos › Cómo trabajan los Claude)', { title: advice.title }), detail: advice.why, source: 'Mission Control' })
     this.log(`forma de trabajar puesta por la app: ${advice.title}`)
   }
 
@@ -479,7 +501,7 @@ export class Service extends EventEmitter {
       const p = this.project(x.projectId)
       if (!p) continue
       this.updateProject(p.id, { mediaDirs: [...p.mediaDirs, x.dir] })
-      addEvent(this.db, { projectId: p.id, at: now, kind: 'proyecto', title: `Galería: añadida la carpeta de Astra «${x.dir.split(/[\\/]/).pop()}» (${x.why})`, detail: x.dir, source: 'Mission Control' })
+      addEvent(this.db, { projectId: p.id, at: now, kind: 'proyecto', title: t('Galería: añadida la carpeta de Astra «{v0}» ({why})', { v0: x.dir.split(/[\\/]/).pop(), why: x.why }), detail: x.dir, source: 'Mission Control' })
     }
   }
 
@@ -489,6 +511,7 @@ export class Service extends EventEmitter {
     try { this.placeAstra() } catch (e) { this.log(`astra: ${(e as Error).message}`) }
     try {
       for (const p of this.projects) {
+        if (this.removed.has(p.id)) continue
         try {
           // A worktree that appeared, or a new folder of Astra's cited in the notes, comes in by itself.
           try { Object.assign(p, await refreshProjectCopies(this.db, p)) } catch { /* keep what we had */ }
@@ -498,6 +521,8 @@ export class Service extends EventEmitter {
         } catch (e) {
           this.log(`media ${p.id}: ${(e as Error).message}`)
         }
+        // EV169 (14-11: a removed project's photos came back): removed while it was being scanned, what the scan wrote goes too.
+        if (this.removed.has(p.id)) forgetProject(this.db, p.id)
       }
       this.refreshedAt.media = Date.now()
       this.push()
@@ -528,18 +553,18 @@ export class Service extends EventEmitter {
         const { project, copy } = projectForPath(this.projects, e.cwd ?? '')
         const who = `Claude ${String(e.account).slice(6)}`
         const base = { projectId: project?.id, at: e.at, account: e.account, source: `hook ${e.event}`, ref: e.sessionId }
-        if (e.event === 'SessionStart') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: `${who} ${e.source === 'resume' ? 'retomó' : e.source === 'compact' ? 'siguió tras compactar' : 'abrió'} una sesión${copy ? ' en ' + copy : ''}`, dedupe: `ss:${e.sessionId}:${e.at}` }))
-        else if (e.event === 'StopFailure') { this.emit('stop-failure', e, project); added += Number(addEvent(this.db, { ...base, kind: 'limite', title: `${who} se ha parado: ${e.error ?? 'error'}`, detail: e.message, dedupe: `sf:${e.sessionId}:${e.at}` })) }
+        if (e.event === 'SessionStart') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} {v0} una sesión{v1}', { who: who, v0: e.source === 'resume' ? 'retomó' : e.source === 'compact' ? 'siguió tras compactar' : 'abrió', v1: copy ? ' en ' + copy : '' }), dedupe: `ss:${e.sessionId}:${e.at}` }))
+        else if (e.event === 'StopFailure') { this.emit('stop-failure', e, project); added += Number(addEvent(this.db, { ...base, kind: 'limite', title: t('{who} se ha parado: {v0}', { who: who, v0: e.error ?? 'error' }), detail: e.message, dedupe: `sf:${e.sessionId}:${e.at}` })) }
         else if (e.event === 'Stop') this.emit('stop', e, project)
-        else if (e.event === 'PreCompact') added += Number(addEvent(this.db, { ...base, kind: 'compacta', title: `${who} compactó su conversación (${e.source ?? 'auto'})`, dedupe: `pc:${e.sessionId}:${e.at}` }))
-        else if (e.event === 'SessionEnd') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: `${who} cerró una sesión${copy ? ' en ' + copy : ''}`, dedupe: `se:${e.sessionId}:${e.at}` }))
+        else if (e.event === 'PreCompact') added += Number(addEvent(this.db, { ...base, kind: 'compacta', title: t('{who} compactó su conversación ({v0})', { who: who, v0: e.source ?? 'auto' }), dedupe: `pc:${e.sessionId}:${e.at}` }))
+        else if (e.event === 'SessionEnd') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} cerró una sesión{v0}', { who: who, v0: copy ? ' en ' + copy : '' }), dedupe: `se:${e.sessionId}:${e.at}` }))
         else if (e.event === 'PostToolUse' && e.file) {
           const winPath = String(e.file).split('/').join(BS)
           const rel = project && winPath.toLowerCase().startsWith(project.root.toLowerCase() + BS) ? winPath.slice(project.root.length + 1) : winPath
           // The file's own project goes first: a window opened in one project that edits another (claude1, 12-11) was
           // counted as working in its window's, and its hand-off was opened there.
           const owner = projectForPath(this.projects, winPath).project ?? project
-          added += Number(addEvent(this.db, { ...base, projectId: owner?.id, kind: 'archivo', title: `${who} escribió ${rel}`, detail: winPath, dedupe: `pt:${e.sessionId}:${winPath}:${Math.floor(e.at / 600_000)}` }))
+          added += Number(addEvent(this.db, { ...base, projectId: owner?.id, kind: 'archivo', title: t('{who} escribió {rel}', { who: who, rel: rel }), detail: winPath, dedupe: `pt:${e.sessionId}:${winPath}:${Math.floor(e.at / 600_000)}` }))
           if (project) this.db.prepare('UPDATE assets SET account = ? WHERE project_id = ? AND lower(path) = lower(?)').run(e.account, project.id, winPath)
         }
       }

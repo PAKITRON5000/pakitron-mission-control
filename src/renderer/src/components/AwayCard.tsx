@@ -1,3 +1,4 @@
+import { locale, t } from '../../../core/i18n'
 import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { Moon, Check, ChevronRight, Gavel } from 'lucide-react'
@@ -44,7 +45,7 @@ export function AwayCard() {
   useEffect(() => { if (since) void api<Away>('away', since).then(setData, () => undefined) }, [since])
   if (!since || !data) return null
   const hours = Math.max(1, Math.round((data.to - data.from) / 3600_000))
-  const fromText = new Date(data.from).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  const fromText = new Date(data.from).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' })
   const close = () => { write(Date.now()); setSince(undefined); setData(undefined) }
   return (
     <motion.div className="card p-5 mb-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={SPRING}
@@ -52,20 +53,20 @@ export function AwayCard() {
       <div className="flex items-center gap-3 mb-4">
         <span className="icon-sq icon-sq-lg" style={{ background: 'var(--indigo)' }}><Moon size={16} /></span>
         <div className="min-w-0 flex-1">
-          <div className="t-title">Mientras no estabas</div>
-          <div className="t-small c3">Desde el {fromText} ({hours} h){data.asked ? ` · ${data.asked} ${data.asked === 1 ? 'pregunta espera' : 'preguntas esperan'} tu respuesta` : ''}</div>
+          <div className="t-title">{t('Mientras no estabas')}</div>
+          <div className="t-small c3">{t('Desde el {fromText} ({hours} h){v0}', { fromText: fromText, hours: hours, v0: data.asked ? t(' · {asked} {v0} tu respuesta', { asked: data.asked, v0: data.asked === 1 ? t('pregunta espera') : t('preguntas esperan') }) : '' })}</div>
         </div>
-        {data.asked > 0 && <button className="btn btn-sm" style={{ color: 'var(--red)' }} onClick={() => go('decisiones')}><Gavel size={13} /> Contestar</button>}
-        <button className="btn btn-sm btn-primary" onClick={close}><Check size={13} /> Visto</button>
+        {data.asked > 0 && <button className="btn btn-sm" style={{ color: 'var(--red)' }} onClick={() => go('decisiones')}><Gavel size={13} /> {t('Contestar')}</button>}
+        <button className="btn btn-sm btn-primary" onClick={close}><Check size={13} /> {t('Visto')}</button>
       </div>
-      {data.accounts.length === 0 && <div className="t-body c2">Ningún Claude ha hecho nada en este tiempo.</div>}
+      {data.accounts.length === 0 && <div className="t-body c2">{t('Ningún Claude ha hecho nada en este tiempo.')}</div>}
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
         {data.accounts.map((a) => (
           <div key={a.id} className="rounded-xl p-3.5 flex flex-col gap-2" style={{ background: 'var(--fill)' }}>
             <div className="flex items-center gap-2.5">
               <Avatar id={a.id as any} size={30} />
               <b className="t-head flex-1 truncate">{accName(a.id)}</b>
-              {a.spentWeek != null && <span className="t-small c3 num">gastó {a.spentWeek} % de su semana</span>}
+              {a.spentWeek != null && <span className="t-small c3 num">{t('gastó {spentWeek} % de su semana', { spentWeek: a.spentWeek })}</span>}
             </div>
             <div className="t-small c2" style={{ lineHeight: 1.45 }}>{nameify(a.text.replace(/^Mientras no estabas \([^)]*\), /, '')).replace(/^./, (x) => x.toUpperCase())}</div>
             {a.rows.map((r, i) => (
@@ -80,7 +81,7 @@ export function AwayCard() {
       </div>
       {data.photos.length > 0 && (
         <div className="mt-4">
-          <div className="t-micro c3 mb-2">Imágenes nuevas</div>
+          <div className="t-micro c3 mb-2">{t('Imágenes nuevas')}</div>
           <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
             {data.photos.map((p) => (
               <button key={p.id} className="relative flex-none border-0 p-0 rounded-lg overflow-hidden" style={{ width: 128, aspectRatio: '4 / 3', background: 'var(--fill)' }} title={p.name}

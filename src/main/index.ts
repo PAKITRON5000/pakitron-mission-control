@@ -13,6 +13,7 @@ import { AnswerWatch } from '../core/answerWatch'
 import { createRemote } from './remote'
 import { bringToFront, fontLine, fontPrefix, readScreen, typeKey, typeText } from './consoleTyper'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
+import { t, pickLang, setLang } from '../core/i18n'
 import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
 import { readChat } from '../core/chats'
 import { paths } from '../core/paths'
@@ -23,7 +24,7 @@ import { installStatusLine, uninstallStatusLine, statusLineState } from '../core
 import { claudeInstalled, envFor, findClaude, findTranscript, projectsDir, projectsDirs, encodeCwd } from '../core/sessions'
 import { nodeRunner } from '../core/shim'
 import { addAppTask } from '../core/engine'
-import { detectProject, integration, isInside, newestDoc, taskDiff } from '../core/projects'
+import { binnable, detectProject, integration, isInside, newestDoc, taskDiff } from '../core/projects'
 import { queryAssets, assetFacets, assetFolder, galleryHome, type AssetQuery } from '../core/gallery'
 import { detectAccounts } from '../core/accounts'
 import { claudeJsonOf, ensureTrusted, projectFolders, trustEverywhere } from '../core/trust'
@@ -46,6 +47,7 @@ import { effortArgs, modelArgs } from '../core/models'
 import { pickSuccessor, relayPrompt, shouldRelay, STATUS_LABEL } from '../core/relay'
 import { backMessage, goMessage, heavyProjects, heavyTurns, relayModeOf, shouldCallBack, waitMessage, type Waiting } from '../core/turns'
 import { addInstruction as addIns } from '../core/review'
+import { improveOnAdd, improveText } from '../core/improve'
 import { metrics } from '../core/metrics'
 import { checkReadings, checkTools, type Check } from '../core/health'
 import { readUsageHistory } from '../core/accounts'
@@ -275,14 +277,14 @@ function launcherFor(id: AccountId): string | undefined {
 
 function openTerminal(account: AccountId, cwd: string, args: string[], title: string): void {
   const acc = service.accounts.find((a) => a.id === account)
-  if (!acc) throw new Error('Cuenta desconocida')
-  if (!existsSync(cwd)) throw new Error('La carpeta no existe')
+  if (!acc) throw new Error(t('Cuenta desconocida'))
+  if (!existsSync(cwd)) throw new Error(t('La carpeta no existe'))
   const safe = args.map((a) => (/^[\w.:/\\-]+$/.test(a) ? a : `"${a.replace(/"/g, '')}"`))
   // EV103: Claude Code would stop at «Is this a project you trust?» (with «No, exit» chosen) in a folder this account
   // has not trusted yet: marked here, before the window opens.
-  const t = ensureTrusted(claudeJsonOf(acc), [cwd])
-  if (t.added.length) service.log(`confianza: ${account} ya confía en ${t.added.join(', ')}`)
-  else if (t.skipped) service.log(`confianza: ${account} en ${cwd}: ${t.skipped}`)
+  const trust = ensureTrusted(claudeJsonOf(acc), [cwd])
+  if (trust.added.length) service.log(`confianza: ${account} ya confía en ${trust.added.join(', ')}`)
+  else if (trust.skipped) service.log(`confianza: ${account} en ${cwd}: ${trust.skipped}`)
   const launcher = launcherFor(account)
   const cmdline = launcher ? [launcher, ...safe].join(' ') : [`"${findClaude()}"`, ...safe].join(' ')
   // EV151 (the user, 14-11 04:50: «no puedo ver los cmd bien… me gusta ver los cmd si quiero e interactuar con ellos»):
@@ -309,7 +311,7 @@ function trustSweep(): void {
     const added = out.filter((r) => r.added.length)
     if (!added.length) return
     service.log(`confianza: ${added.map((r) => `${r.account} → ${r.added.join(', ')}`).join('; ')}`)
-    addEvent(service.db, { projectId: service.projects[0]?.id ?? '', at: Date.now(), kind: 'relevo-app', title: 'Carpetas de confianza puestas solas', detail: `Para que ninguna ventana se pare a preguntar si confías en la carpeta: ${added.map((r) => `Claude ${r.account.slice(6)}: ${r.added.join(', ')}`).join(' · ')}`, source: 'Mission Control' })
+    addEvent(service.db, { projectId: service.projects[0]?.id ?? '', at: Date.now(), kind: 'relevo-app', title: t('Carpetas de confianza puestas solas'), detail: t('Para que ninguna ventana se pare a preguntar si confías en la carpeta: {v0}', { v0: added.map((r) => `Claude ${r.account.slice(6)}: ${r.added.join(', ')}`).join(' · ') }), source: 'Mission Control' })
   } catch (e) {
     service.log(`confianza: ${(e as Error).message}`)
   }
@@ -337,7 +339,7 @@ function hooksSweep(): void {
       const r = installHooks(acc, service.nodeExe, service.pmcPath)
       service.setSettings({ hooksAt: { ...(service.settings.hooksAt ?? {}), [acc.id]: now } })
       service.log(`ganchos ${st.installed ? 'puestos al día' : 'puestos'} solos en ${acc.id} (copia: ${r.backup ?? 'sin archivo previo'})`)
-      addEvent(service.db, { projectId: service.projects[0]?.id ?? '', at: now, account: acc.id, kind: 'relevo-app', title: `La app ha ${st.installed ? 'puesto al día' : 'puesto'} sola los ganchos de Claude ${acc.id.slice(6)}: ya se ve lo que hace y recibe los relevos (en las ventanas que abra desde ahora)`, detail: r.backup ? `Copia de su configuración anterior: ${r.backup}` : undefined, source: 'Mission Control' })
+      addEvent(service.db, { projectId: service.projects[0]?.id ?? '', at: now, account: acc.id, kind: 'relevo-app', title: t('La app ha {v0} sola los ganchos de Claude {v1}: ya se ve lo que hace y recibe los relevos (en las ventanas que abra desde ahora)', { v0: st.installed ? 'puesto al día' : 'puesto', v1: acc.id.slice(6) }), detail: r.backup ? t('Copia de su configuración anterior: {backup}', { backup: r.backup }) : undefined, source: 'Mission Control' })
       service.push()
     } catch (e) {
       service.log(`ganchos de ${acc.id}: ${(e as Error).message}`)
@@ -379,15 +381,15 @@ async function autoOpen(o: { account: AccountId; project: ProjectConfig; reason:
   if (d.action === 'abrir') {
     openTerminal(o.account, o.cwd, o.args, o.title)
     lastOpened[o.account] = now
-    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: `${label}: Mission Control ha abierto a ${who} en ${o.project.name}`, detail: d.why, source: 'Mission Control' })
+    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: t('{label}: Mission Control ha abierto a {who} en {name}', { label: label, who: who, name: o.project.name }), detail: d.why, source: 'Mission Control' })
   } else if (d.action === 'avisar') {
     // An idle window with the old hooks would stop again after this message: reopened with it instead (12-11).
     const stale = ((api.staleWindows() as { sessionId: string }[]) ?? []).some((x) => x.sessionId === d.sessionId)
     if (stale) await api.reopenWindow(o.account, d.sessionId, o.message)
     else await typeText(d.pid, o.message)
-    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: `${label}: se le ha escrito a ${who} en su ventana abierta`, detail: d.why, source: 'Mission Control', dedupe: `av:${o.account}:${o.project.id}:${Math.floor(now / 600_000)}` })
+    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: t('{label}: se le ha escrito a {who} en su ventana abierta', { label: label, who: who }), detail: d.why, source: 'Mission Control', dedupe: `av:${o.account}:${o.project.id}:${Math.floor(now / 600_000)}` })
   } else {
-    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: `${label} no hecho: ${d.why}`, source: 'Mission Control', dedupe: `no:${o.account}:${o.project.id}:${Math.floor(now / 1800_000)}` })
+    addEvent(service.db, { projectId: o.project.id, at: now, account: o.account, kind: 'relevo-app', title: t('{label} no hecho: {why}', { label: label, why: d.why }), source: 'Mission Control', dedupe: `no:${o.account}:${o.project.id}:${Math.floor(now / 1800_000)}` })
   }
   service.push()
   return d
@@ -496,7 +498,7 @@ async function awayTick(): Promise<void> {
     if (answer === 'aceptar' && (seen ? !seen.key : !pend)) {
       if (!permissionUnsure.has(s.sessionId)) {
         permissionUnsure.add(s.sessionId)
-        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: `${a.id} espera algo que la app no contesta sola: mira su ventana`, detail: seen && !seen.key ? seen.why : 'no se ve qué pide', source: 'Mission Control' })
+        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: t('{id} espera algo que la app no contesta sola: mira su ventana', { id: a.id }), detail: seen && !seen.key ? seen.why : t('no se ve qué pide'), source: 'Mission Control' })
         service.push()
       }
       continue
@@ -510,13 +512,13 @@ async function awayTick(): Promise<void> {
         const again = after != null ? yesOnScreen(after) : undefined
         const before = seen?.key ? seen : undefined
         const still = Boolean(before && again?.key && again.question === before.question && pendingToolUse(chatFile(s.cwd, s.sessionId)))
-        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: `${still ? 'Pulsado 1, pero la pregunta sigue en pantalla' : 'Aceptado solo'} (nadie contestó en ${Math.round(wait / 60_000)} min): ${what}`, detail: before ? `En pantalla: «${before.question ?? '1. Yes'}»` : undefined, source: 'Mission Control' })
+        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: t('{v0} (nadie contestó en {v1} min): {what}', { v0: still ? 'Pulsado 1, pero la pregunta sigue en pantalla' : 'Aceptado solo', v1: Math.round(wait / 60_000), what: what }), detail: before ? t('En pantalla: «{v0}»', { v0: before.question ?? '1. Yes' }) : undefined, source: 'Mission Control' })
       } else if (answer === 'rechazar') {
         await typeKey(s.pid, 'esc')
         await new Promise((r) => setTimeout(r, 800))
         await typeText(s.pid, `Mission Control: el usuario no está y esta orden es de las que quiere confirmar él (${risk.why}). No la hagas ahora; sigue con otra tarea. Se la he dejado en Decidir.`)
-        if (s.projectId) addDecision(service.db, { projectId: s.projectId, title: `¿Dejo hacer esto a ${a.id}?`, question: `Mientras no estabas, ${a.id} pidió permiso para ${what}. Es de lo que quieres confirmar tú (${risk.why}), así que no se ha hecho.`, options: ['Sí, que lo haga', 'No'], askedBy: a.id } as any)
-        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: `Rechazado (${risk.why}), te espera en Decidir: ${what}`, source: 'Mission Control' })
+        if (s.projectId) addDecision(service.db, { projectId: s.projectId, title: t('¿Dejo hacer esto a {id}?', { id: a.id }), question: t('Mientras no estabas, {id} pidió permiso para {what}. Es de lo que quieres confirmar tú ({why}), así que no se ha hecho.', { id: a.id, what: what, why: risk.why }), options: ['Sí, que lo haga', 'No'], askedBy: a.id } as any)
+        addEvent(service.db, { projectId: s.projectId, at: now, account: a.id, kind: 'aviso', title: t('Rechazado ({why}), te espera en Decidir: {what}', { why: risk.why, what: what }), source: 'Mission Control' })
       }
     } catch (err) { console.error('respuesta sola:', (err as Error).message) }
     permissionSeen.delete(s.sessionId)
@@ -548,7 +550,7 @@ async function refreshAgentsEverywhere(): Promise<void> {
       const done = refreshMarkedAgents(copy, detectProfile(copy).agents)
       const ms = performance.now() - t0
       if (ms > 80) service.log(`lento: subagentes (${p.id}) ${Math.round(ms)} ms`)
-      if (done.length) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: `Ayudantes de los Claude puestos al día con la versión ${version}: ${done.map((f) => f.replace(/^\.claude\/agents\/|\.md$/g, '')).join(', ')}`, detail: `En ${copy}. Quien trabaje allí lo guarda en su próximo commit.`, source: 'Mission Control' })
+      if (done.length) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: t('Ayudantes de los Claude puestos al día con la versión {version}: {v0}', { version: version, v0: done.map((f) => f.replace(/^\.claude\/agents\/|\.md$/g, '')).join(', ') }), detail: t('En {copy}. Quien trabaje allí lo guarda en su próximo commit.', { copy: copy }), source: 'Mission Control' })
     } catch (e) { service.log(`subagentes de ${p.name}: ${(e as Error).message}`) }
   }
   service.setSettings({ agentsVersion: version })
@@ -737,7 +739,7 @@ function autoRelay(e: { at: number; account: AccountId; error?: string; event?: 
     // up again in its window when its usage is back (autoWake). Whoever was waiting for its heavy work is told now.
     if (relayModeOf(service.settings) === 'proyecto') {
       const back = service.agents.find((a) => a.id === e.account)?.usage.activeLimit?.resetsAt
-      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: `Claude ${e.account.slice(6)} se ha quedado sin uso en ${project.name}: cada una en su proyecto, nadie toma su trabajo; lo retoma ella en su ventana al volver${back && back > now ? ` (${new Date(back).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })})` : ''}`, source: 'Mission Control' })
+      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: t('Claude {v0} se ha quedado sin uso en {name}: cada una en su proyecto, nadie toma su trabajo; lo retoma ella en su ventana al volver{v1}', { v0: e.account.slice(6), name: project.name, v1: back && back > now ? ` (${new Date(back).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })})` : '' }), source: 'Mission Control' })
       service.push()
       void turnTick()
       return
@@ -762,18 +764,18 @@ function autoRelay(e: { at: number; account: AccountId; error?: string; event?: 
     if (soon && better) {
       const at = soon.usage.activeLimit!.resetsAt + 2 * 60_000
       void (api.scheduleStart(project.id, soon.id, at, { fable: wantsFable, prompt: relayPrompt(e.account, project.name, wantsFable, wantsFable) }) as Promise<unknown>).catch((err: Error) => console.error('relevo en espera:', err.message))
-      addEvent(service.db, { projectId: project.id, at: now, account: soon.id, kind: 'relevo-app', title: `Relevo automático en espera: ${who} se ha quedado sin uso y sigue Claude ${soon.id.slice(6)} cuando recupere el suyo (${new Date(at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })})`, source: 'Mission Control' })
+      addEvent(service.db, { projectId: project.id, at: now, account: soon.id, kind: 'relevo-app', title: t('Relevo automático en espera: {who} se ha quedado sin uso y sigue Claude {v0} cuando recupere el suyo ({v1})', { who: who, v0: soon.id.slice(6), v1: new Date(at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
       service.push()
       return
     }
     if (!choice.to) {
-      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: `${who} se ha quedado sin uso y nadie puede seguir: ${choice.why}`, source: 'Mission Control' })
+      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: t('{who} se ha quedado sin uso y nadie puede seguir: {why}', { who: who, why: choice.why }), source: 'Mission Control' })
       service.push()
       return
     }
     const copy = workCopy(project)
     const args = ['--permission-mode', 'auto', ...(choice.fable ? ['--model', 'fable'] : []), relayPrompt(e.account, project.name, choice.fable, wantsFable)]
-    void autoOpen({ account: choice.to, project, reason: 'relevo', cwd: copy?.path ?? project.root, args, title: `${choice.to} · relevo de ${e.account} · ${project.name}`, message: relayPrompt(e.account, project.name, choice.fable, wantsFable) })
+    void autoOpen({ account: choice.to, project, reason: 'relevo', cwd: copy?.path ?? project.root, args, title: t('{to} · relevo de {account} · {name}', { to: choice.to, account: e.account, name: project.name }), message: relayPrompt(e.account, project.name, choice.fable, wantsFable) })
   } catch (err) {
     console.error('relevo automático:', (err as Error).message)
   }
@@ -788,9 +790,9 @@ function autoRelay(e: { at: number; account: AccountId; error?: string; event?: 
 function staffPlanFor(p: ProjectConfig, c: { now: number; busyNow: ReturnType<typeof detectBusy>; held: string[]; taken: Set<string> }): { why: string; plan?: ReturnType<typeof planFronts> } {
   const s = service.settings
   const now = c.now
-  if (wheel?.governs(p.id)) return { why: 'tiene la rueda de relevos encendida: ella decide quién sigue' }
+  if (wheel?.governs(p.id)) return { why: t('tiene la rueda de relevos encendida: ella decide quién sigue') }
   // IV1: a project kept for a backup account is opened only by reserveTick, and only with that account.
-  if (reservedFor(s.reserves, p.id)) return { why: `es de la cuenta de reserva (Claude ${reservedFor(s.reserves, p.id)!.slice(6)})` }
+  if (reservedFor(s.reserves, p.id)) return { why: t('es de la cuenta de reserva (Claude {v0})', { v0: reservedFor(s.reserves, p.id)!.slice(6) }) }
   const lastActivityAt = (service.db.prepare("SELECT max(at) AS at FROM events WHERE project_id = ? AND kind IN ('archivo', 'sesion', 'reserva')").get(p.id) as { at?: number } | undefined)?.at ?? undefined
   const lastLaunchAt = (service.db.prepare("SELECT max(at) AS at FROM events WHERE project_id = ? AND source = 'Mission Control' AND kind IN ('sesion', 'relevo-app')").get(p.id) as { at?: number } | undefined)?.at ?? undefined
   const launches = (service.db.prepare("SELECT count(*) AS n FROM events WHERE project_id = ? AND source = 'Mission Control' AND kind IN ('sesion', 'relevo-app') AND at > ? AND (title LIKE 'Reparto automático%' OR title LIKE 'Relevo automático%')").get(p.id, now - 6 * 3600_000) as { n: number }).n
@@ -804,7 +806,7 @@ function staffPlanFor(p: ProjectConfig, c: { now: number; busyNow: ReturnType<ty
   const open = new Set(rows.map((r) => r.ext_id).filter(Boolean))
   const tasks = rows.filter((r) => !taskTags(`${r.title} ${r.detail ?? ''}`).after.some((id) => id !== r.ext_id && open.has(id)))
     .map((r) => ({ key: r.key, extId: r.ext_id ?? undefined, title: r.title, detail: r.detail, section: r.section, priority: r.priority, status: r.st }))
-  if (!tasks.length) return { why: 'no quedan tareas libres' }
+  if (!tasks.length) return { why: t('no quedan tareas libres') }
   const order = s.nextOrderBy?.[p.id] ?? s.nextOrder ?? []
   const place = (id: string) => { const n = order.indexOf(id); return n < 0 ? 1e6 : n }
   const accounts = service.agents
@@ -813,7 +815,7 @@ function staffPlanFor(p: ProjectConfig, c: { now: number; busyNow: ReturnType<ty
     .filter((x) => (x.weekFree == null || x.weekFree >= 5) && (x.fiveFree == null || x.fiveFree >= 5))
     .sort((x, y) => place(x.a.id) - place(y.a.id) || (y.weekFree ?? 50) - (x.weekFree ?? 50))
     .map((x) => ({ id: x.a.id, weekFree: x.weekFree, hasFable: !(s.noFable ?? []).includes(x.a.id) }))
-  if (!accounts.length) return { why: 'ninguna cuenta libre tiene uso ahora' }
+  if (!accounts.length) return { why: t('ninguna cuenta libre tiene uso ahora') }
   // The copy where the project is being worked on goes first; another front needs another copy with nobody in it.
   const main = workCopy(p)
   const inUse = new Set(service.agents.flatMap((a) => a.sessions.filter((x) => x.projectId === p.id && isSessionWorking(x)).map((x) => (x.worktree ?? '').toLowerCase())))
@@ -840,7 +842,7 @@ function autoStaff(): void {
         const fable = Boolean(f.model && /fable/.test(f.model) && !/sonnet|opus|haiku/.test(f.model))
         try {
           taken.add(f.account)
-          void autoOpen({ account: f.account, project: p, reason: 'reparto', cwd: copy?.path ?? p.root, args: ['--permission-mode', 'auto', ...(fable ? ['--model', 'fable'] : []), 'sigue'], title: `${f.account} · ${p.name} · ${f.copy} (reparto automático)`, message: `Mission Control (reparto automático): quedan tareas en ${p.name} y nadie trabaja en ellas. Sigue con ${f.task} y las siguientes (pmc parte).` })
+          void autoOpen({ account: f.account, project: p, reason: 'reparto', cwd: copy?.path ?? p.root, args: ['--permission-mode', 'auto', ...(fable ? ['--model', 'fable'] : []), 'sigue'], title: t('{account} · {name} · {copy} (reparto automático)', { account: f.account, name: p.name, copy: f.copy }), message: t('Mission Control (reparto automático): quedan tareas en {name} y nadie trabaja en ellas. Sigue con {task} y las siguientes (pmc parte).', { name: p.name, task: f.task }) })
         } catch (err) { console.error('reparto automático:', (err as Error).message) }
       }
       if (plan.fronts.length) service.push()
@@ -869,14 +871,14 @@ function autoWake(e: { at: number; account: AccountId; error?: string }, project
     // the old one knew): no new one. At the reset it is called back in it, unless it got going by itself.
     const anyWindow = windowsNow().find((x) => x.account === e.account && x.pid)
     if (anyWindow && anyWindow.projectId !== project.id) {
-      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: `Claude ${e.account.slice(6)} se ha quedado sin uso; tiene su ventana en otro proyecto: no se programa ningún arranque`, source: 'Mission Control' })
+      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: t('Claude {v0} se ha quedado sin uso; tiene su ventana en otro proyecto: no se programa ningún arranque', { v0: e.account.slice(6) }), source: 'Mission Control' })
       service.push()
       return
     }
     if (openWindow(e.account, project.id)) {
       const target = project
       setTimeout(() => void callBack(e.account, target, e.at), Math.max(0, back + 3 * 60_000 - now)).unref?.()
-      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: `Claude ${e.account.slice(6)} seguirá en su misma ventana al volver (${new Date(back + 3 * 60_000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })})`, source: 'Mission Control' })
+      addEvent(service.db, { projectId: project.id, at: now, account: e.account, kind: 'relevo-app', title: t('Claude {v0} seguirá en su misma ventana al volver ({v1})', { v0: e.account.slice(6), v1: new Date(back + 3 * 60_000).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
       service.push()
       return
     }
@@ -914,7 +916,7 @@ async function callBack(account: AccountId, project: ProjectConfig, stoppedAt: n
     if (stale) await api.reopenWindow(account, w.sessionId)
     else await typeText(w.pid, backMessage(project.name))
     resumed.set(account, Date.now())
-    addEvent(service.db, { projectId: project.id, at: Date.now(), account, kind: 'relevo-app', title: `Claude ${account.slice(6)} ha vuelto: sigue en su misma ${stale ? 'conversación (ventana reabierta con la coordinación nueva)' : 'ventana'}`, source: 'Mission Control' })
+    addEvent(service.db, { projectId: project.id, at: Date.now(), account, kind: 'relevo-app', title: t('Claude {v0} ha vuelto: sigue en su misma {v1}', { v0: account.slice(6), v1: stale ? 'conversación (ventana reabierta con la coordinación nueva)' : 'ventana' }), source: 'Mission Control' })
     service.push()
     void turnTick()
   } catch (err) {
@@ -953,9 +955,9 @@ function allOutCheck(now: number): void {
   // EV128: and whether anything has to be done then (with one account this is its own limit).
   const goesOn = service.settings.autonomous || relayModeOf(service.settings) === 'proyecto'
   const body = `Nadie puede trabajar ahora.${when ? ` La primera vuelve el ${when}.` : ''} ${goesOn ? 'Seguirá sola donde lo dejó: no tienes que hacer nada.' : 'Ábrela cuando vuelva, o en Relevos elige que siga sola.'}`
-  addEvent(service.db, { at: now, kind: 'aviso', title: `Todas las cuentas se han quedado sin uso. ${body}`, source: 'Mission Control' })
+  addEvent(service.db, { at: now, kind: 'aviso', title: t('Todas las cuentas se han quedado sin uso. {body}', { body: body }), source: 'Mission Control' })
   void remote.push(usable.length === 1 ? 'Tu Claude se ha quedado sin uso' : 'Todas las cuentas sin uso', body, 'inicio').catch(() => undefined)
-  if (!process.env.PMC_SHOT_DIR) try { if (Notification.isSupported()) new Notification({ title: usable.length === 1 ? 'Tu Claude se ha quedado sin uso' : 'Todas las cuentas sin uso', body, silent: true }).show() } catch { /* no notifications */ }
+  if (!process.env.PMC_SHOT_DIR) try { if (Notification.isSupported()) new Notification({ title: usable.length === 1 ? t('Tu Claude se ha quedado sin uso') : t('Todas las cuentas sin uso'), body, silent: true }).show() } catch { /* no notifications */ }
 }
 
 /**
@@ -975,6 +977,17 @@ function reserveWork(r: { account: AccountId; projectId: string }): { openTasks:
   try { toRead = pendingInstructions(service.db, r.projectId, r.account).length } catch { /* none */ }
   return { openTasks, toRead }
 }
+/** EV166: when each backup was told to wrap up (in this run of the app), to close its windows once it has. */
+const wrapTold = new Map<string, number>()
+/** EV166: a backup still at work in its project while it should be leaving (the wheel waits for it). */
+function reserveBusy(): { account: AccountId; project: string } | undefined {
+  for (const r of service.settings.reserves ?? []) {
+    if (!r.on || onlyTaskOf(r.account)) continue
+    const a = service.agents.find((x) => x.id === r.account)
+    if (a?.sessions.some((x) => x.projectId === r.projectId && isSessionWorking(x))) return { account: r.account, project: service.project(r.projectId)?.name ?? r.projectId }
+  }
+  return undefined
+}
 async function reserveTick(now: number): Promise<void> {
   for (const r of service.settings.reserves ?? []) {
     const p = service.project(r.projectId)
@@ -987,14 +1000,25 @@ async function reserveTick(now: number): Promise<void> {
     const mine = service.agents.find((a) => a.id === r.account)?.sessions.filter((x) => x.projectId === r.projectId && (x.pid || isSessionWorking(x))) ?? []
     // EV159: opened by the user for one task: it finishes that and closes by itself; nobody tells it to stop before.
     const wrap = mine.length && !onlyTaskOf(r.account) ? reserveWrapUp(r, service.agents, service.settings.accountStatus ?? {}, now) : undefined
+    // EV166: told to wrap up a while ago and nothing of it at work there any more: its windows close, so the wheel (which
+    // waits for this) goes on with the PC free. Only windows the app or its launchers opened.
+    const told = wrapTold.get(r.account)
+    if (wrap && told && readWrapped()[r.account] === wrap.key && now - told > 90_000 && !mine.some((x) => isSessionWorking(x))) {
+      wrapTold.delete(r.account)
+      let closed = 0
+      for (const w of mine.filter((x) => x.pid && x.kind !== 'background')) { if (await closeIdleWindow(w.pid!, true)) closed++ }
+      addEvent(service.db, { projectId: p.id, at: now, account: r.account, kind: 'relevo-app', title: t('Cuenta de reserva: Claude {v0} ha dejado {name} a salvo{v1}; la rueda sigue', { v0: r.account.slice(6), name: p.name, v1: closed ? ` y se ${closed === 1 ? 'ha cerrado su ventana' : `han cerrado sus ${closed} ventanas`}` : '' }), source: 'Mission Control' })
+      setTimeout(() => void service.refreshAgents(), 2500)
+    }
     if (wrap && readWrapped()[r.account] !== wrap.key) {
       writeWrapped(r.account, wrap.key)
+      wrapTold.set(r.account, now)
       const text = wrapUpText(p.name, wrap.why)
       const wins = mine.filter((x) => x.pid && x.kind !== 'background')
       let typed = 0
       for (const w of wins) { try { await typeText(w.pid!, text); typed++ } catch { /* the notice below */ } }
       if (!typed) addNotice(r.account, text, [p.root, ...p.copies.map((c) => c.path)], now)
-      addEvent(service.db, { projectId: p.id, at: now, account: r.account, kind: 'relevo-app', title: `Cuenta de reserva: ${wrap.why}; se le pide a Claude ${r.account.slice(6)} que deje ${p.name} a salvo y cierre`, detail: typed ? `Escrito en ${typed === 1 ? 'su ventana' : `sus ${typed} ventanas`}.` : 'Por aviso, en su próximo paso.', source: 'Mission Control' })
+      addEvent(service.db, { projectId: p.id, at: now, account: r.account, kind: 'relevo-app', title: t('Cuenta de reserva: {why}; se le pide a Claude {v0} que deje {name} a salvo y cierre', { why: wrap.why, v0: r.account.slice(6), name: p.name }), detail: typed ? t('Escrito en {v0}.', { v0: typed === 1 ? 'su ventana' : `sus ${typed} ventanas` }) : t('Por aviso, en su próximo paso.'), source: 'Mission Control' })
     }
     const v = reserveDue(r, service.agents, service.settings.accountStatus ?? {}, now, reserveWork(r))
     const key = `${r.account}:${r.projectId}`
@@ -1002,7 +1026,7 @@ async function reserveTick(now: number): Promise<void> {
     // Already at work there: nothing to do and nothing to write (13-11: «Cuenta de reserva no hecho: ya está trabajando»
     // every half hour in the timeline while Claude 5 worked from 05:58 to 08:57).
     if (service.agents.find((a) => a.id === r.account)?.sessions.some((x) => x.projectId === r.projectId && isSessionWorking(x))) continue
-    const d = await autoOpen({ account: r.account, project: p, reason: 'reserva', cwd: p.root, args: ['--permission-mode', 'auto', reservePrompt(p.name)], title: `${r.account} · ${p.name} (cuenta de reserva)`, message: reservePrompt(p.name) })
+    const d = await autoOpen({ account: r.account, project: p, reason: 'reserva', cwd: p.root, args: ['--permission-mode', 'auto', reservePrompt(p.name, r.note)], title: t('{account} · {name} (cuenta de reserva)', { account: r.account, name: p.name }), message: reservePrompt(p.name, r.note) })
     if (d.action !== 'nada' && reserveSaid.get(key) !== d.action) {
       reserveSaid.set(key, d.action)
       void remote.push(`Claude ${r.account.slice(6)} trabaja en ${p.name}`, `Cuenta de reserva: ${v.why}.`, 'inicio').catch(() => undefined)
@@ -1024,25 +1048,35 @@ async function routeNote(id: number, open: boolean): Promise<NoteRoute | undefin
     try {
       await typeText(route.pid, typedNoteText(p.name, id, row.body))
       markTyped(service.db, id, route.account)
-      addEvent(service.db, { projectId: p.id, at: Date.now(), account: route.account, kind: 'entrega', title: `Tu nota se ha escrito en la ventana de Claude ${route.account.slice(6)}: «${row.body.slice(0, 100)}»`, source: 'Mission Control', ref: `ins:${id}` })
+      addEvent(service.db, { projectId: p.id, at: Date.now(), account: route.account, kind: 'entrega', title: t('Tu nota se ha escrito en la ventana de Claude {v0}: «{v1}»', { v0: route.account.slice(6), v1: row.body.slice(0, 100) }), source: 'Mission Control', ref: `ins:${id}` })
       return route
     } catch (e) {
       service.log(`nota ${id}: no se pudo escribir en la ventana de ${route.account}: ${(e as Error).message}`)
-      return { kind: 'espera', why: 'no se pudo escribir en su ventana; la leerá en su próximo paso' }
+      return { kind: 'espera', why: t('no se pudo escribir en su ventana; la leerá en su próximo paso') }
     }
   }
   if (route.kind === 'abrir') {
-    if (!open) return { kind: 'espera', why: 'la leerá el primer Claude que trabaje aquí' }
+    if (!open) return { kind: 'espera', why: t('la leerá el primer Claude que trabaje aquí') }
     try {
       await api.putToWork(p.id, route.account)
       markOpening(service.db, id, route.account)
-      addEvent(service.db, { projectId: p.id, at: Date.now(), account: route.account, kind: 'entrega', title: `Se abre Claude ${route.account.slice(6)} en ${p.name} con tu nota: «${row.body.slice(0, 100)}»`, source: 'Mission Control', ref: `ins:${id}` })
+      addEvent(service.db, { projectId: p.id, at: Date.now(), account: route.account, kind: 'entrega', title: t('Se abre Claude {v0} en {name} con tu nota: «{v1}»', { v0: route.account.slice(6), name: p.name, v1: row.body.slice(0, 100) }), source: 'Mission Control', ref: `ins:${id}` })
       return route
     } catch (e) {
       return { kind: 'espera', why: (e as Error).message }
     }
   }
   return route
+}
+
+/** EV171: a project added that already had work in it is gone over and improved by itself (once a week at most). */
+async function improveAdded(projectId: string): Promise<void> {
+  const p = service.project(projectId)
+  if (!p) return
+  let hasWork = false
+  try { hasWork = looksLikeProject(p.root) } catch { /* unreadable: leave it */ }
+  if (!improveOnAdd({ hasWork, lastAskedAt: service.settings.improveAsked?.[projectId], now: Date.now() })) return
+  try { await api.improveProject(projectId) } catch (e) { service.log(`mejorar ${projectId}: ${(e as Error).message}`) }
 }
 
 /** Notes still waiting (sent while every Claude was busy, or nobody was in): to a window that is now free. */
@@ -1075,7 +1109,7 @@ function followAnswer(decisionId: number): boolean {
   const now = Date.now()
   setOnlyTask(account, { projectId: p.id, taskKey: c.taskKey, label: c.label, at: now, decisionId })
   openTerminal(account, copy?.path ?? p.root, ['--permission-mode', 'auto', answerPrompt({ projectName: p.name, label: c.label, title: d.title, decisionId })], `${account} · ${p.name} · tu respuesta a #${decisionId}`)
-  addEvent(service.db, { projectId: p.id, at: now, account, kind: 'sesion', title: `Has contestado a Claude ${account.slice(6)} (#${decisionId}): se vuelve a abrir para hacerlo y se cerrará al terminar`, source: 'Mission Control' })
+  addEvent(service.db, { projectId: p.id, at: now, account, kind: 'sesion', title: t('Has contestado a Claude {v0} (#{decisionId}): se vuelve a abrir para hacerlo y se cerrará al terminar', { v0: account.slice(6), decisionId: decisionId }), source: 'Mission Control' })
   setTimeout(() => void service.refreshAgents(), 4000)
   return true
 }
@@ -1086,23 +1120,24 @@ function followAnswer(decisionId: number): boolean {
  */
 function onlyTaskTick(now: number): void {
   if (process.env.PMC_SHOT_DIR) return
-  for (const [acc, t] of Object.entries(readOnlyTasks(now))) {
+  for (const [acc, only] of Object.entries(readOnlyTasks(now))) {
     const account = acc as AccountId
     const a = service.agents.find((x) => x.id === account)
-    const here = (a?.sessions ?? []).filter((s) => s.projectId === t.projectId)
+    const here = (a?.sessions ?? []).filter((s) => s.projectId === only.projectId)
     if (!here.length) {
       // Two minutes to show up after the launch; afterwards, no session there means it was closed.
-      if (now - t.at > 4 * 60_000) setOnlyTask(account, undefined)
+      if (now - only.at > 4 * 60_000) setOnlyTask(account, undefined)
       continue
     }
     // EV160: opened again for an answer, it is done when it ends a turn after that; for a task, when it hands it in.
-    const finished = t.decisionId ? endedTurnSince(readActivity(account, 40).recent, t.at) : onlyTaskFinished(service.db, account, t)
+    const finished = only.decisionId ? endedTurnSince(readActivity(account, 40).recent, only.at) : onlyTaskFinished(service.db, account, only)
     if (!finished || here.some((s) => isSessionWorking(s))) continue
     for (const s of here) if (s.pid && s.kind !== 'background') closeClaudeWindow(s.pid)
     setOnlyTask(account, undefined)
-    rememberClosed(account, t, now)
-    addEvent(service.db, { projectId: t.projectId, at: now, account, kind: 'sesion', title: `Claude ${account.slice(6)} ha terminado ${t.label}, la tarea para la que la abriste, y se ha cerrado`, source: 'Mission Control' })
-    void remote.push(`Claude ${account.slice(6)} ha terminado ${t.label}`, 'Era su única tarea: su ventana se ha cerrado.', 'inicio').catch(() => undefined)
+    rememberClosed(account, only, now)
+    const what = only.decisionId ? `lo que le contestaste en #${only.decisionId} (${only.label})` : `${only.label}, la tarea para la que la abriste,`
+    addEvent(service.db, { projectId: only.projectId, at: now, account, kind: 'sesion', title: t('Claude {v0} ha hecho {what} y se ha cerrado', { v0: account.slice(6), what: what }), source: 'Mission Control' })
+    void remote.push(`Claude ${account.slice(6)} ha terminado`, only.decisionId ? `Ha hecho lo que le contestaste en #${only.decisionId}: su ventana se ha cerrado.` : `Era su única tarea (${only.label}): su ventana se ha cerrado.`, 'inicio').catch(() => undefined)
     setTimeout(() => void service.refreshAgents(), 2500)
     service.push()
   }
@@ -1162,11 +1197,11 @@ async function turnTick(): Promise<void> {
         await typeText(w.pid, waitMessage(act.holder, holderProject))
         waitingTurn[act.account] = { since: now, holder: act.holder, projectId: act.projectId }
         resumed.delete(act.account)
-        addEvent(service.db, { projectId: act.projectId, at: now, account: act.account, kind: 'relevo-app', title: `Claude ${act.account.slice(6)} espera su turno de trabajo pesado: Claude ${act.holder.slice(6)} está con Unity o Blender en ${holderProject}`, source: 'Mission Control' })
+        addEvent(service.db, { projectId: act.projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Claude {v0} espera su turno de trabajo pesado: Claude {v1} está con Unity o Blender en {holderProject}', { v0: act.account.slice(6), v1: act.holder.slice(6), holderProject: holderProject }), source: 'Mission Control' })
       } else {
         await typeText(w.pid, goMessage(act.holder, project.name))
         delete waitingTurn[act.account]
-        addEvent(service.db, { projectId: act.projectId, at: now, account: act.account, kind: 'relevo-app', title: `Le toca a Claude ${act.account.slice(6)}: Claude ${act.holder.slice(6)} ha soltado lo pesado o se ha quedado sin uso`, source: 'Mission Control' })
+        addEvent(service.db, { projectId: act.projectId, at: now, account: act.account, kind: 'relevo-app', title: t('Le toca a Claude {v0}: Claude {v1} ha soltado lo pesado o se ha quedado sin uso', { v0: act.account.slice(6), v1: act.holder.slice(6) }), source: 'Mission Control' })
       }
       service.push()
     }
@@ -1190,7 +1225,7 @@ const TASK_FOLDER = '\\PakitronMC\\'
  */
 async function cancelSchedule(account: AccountId): Promise<void> {
   const ps = `$t = Get-ScheduledTask -TaskPath '${TASK_FOLDER}' -TaskName 'Arrancar ${account}' -ErrorAction SilentlyContinue; if ($t) { Unregister-ScheduledTask -InputObject $t -Confirm:$false -ErrorAction Stop }; exit 0`
-  await new Promise<void>((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 30000 }, (err, _o, e) => (err ? reject(new Error(`Windows no ha dejado quitar el arranque: ${String(e || err.message).split('\n')[0]}`)) : resolve())))
+  await new Promise<void>((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 30000 }, (err, _o, e) => (err ? reject(new Error(t('Windows no ha dejado quitar el arranque: {v0}', { v0: String(e || err.message).split('\n')[0] }))) : resolve())))
   const schedules = { ...(service.settings.schedules ?? {}) }
   delete schedules[account]
   service.setSettings({ schedules })
@@ -1199,8 +1234,8 @@ async function cancelSchedule(account: AccountId): Promise<void> {
 /** «Que lo haga ya» cannot be promised for nobody, or for an account without usage: the note is not saved as if it could. */
 function refuseNow(a: { target?: AccountId | null; now?: boolean }): void {
   if (!a.now) return
-  if (!a.target) throw new Error('Elige un Claude para mandárselo ya')
-  if (service.agents.find((x) => x.id === a.target)?.state === 'sin-uso') throw new Error(`Claude ${a.target.slice(6)} no tiene uso ahora: déjalo en su cola o elige a otro`)
+  if (!a.target) throw new Error(t('Elige un Claude para mandárselo ya'))
+  if (service.agents.find((x) => x.id === a.target)?.state === 'sin-uso') throw new Error(t('Claude {v0} no tiene uso ahora: déjalo en su cola o elige a otro', { v0: a.target.slice(6) }))
 }
 
 /** With the note saved: if it is for now, an account at work reads it in its next step; one that is not, gets launched with it. */
@@ -1249,16 +1284,28 @@ const api: Record<string, Handler> = {
   /** Ajustes › Galería: one more folder to index, anywhere on the PC. */
   addMediaFolder: async (projectId: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
-    const r = await dialog.showOpenDialog(win!, { title: 'Carpeta que quieres ver en la galería', properties: ['openDirectory'] })
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    const r = await dialog.showOpenDialog(win!, { title: t('Carpeta que quieres ver en la galería'), properties: ['openDirectory'] })
     if (r.canceled || !r.filePaths[0]) return undefined
     const next = service.updateProject(projectId, { mediaDirs: [...new Set([...p.mediaDirs, r.filePaths[0]])], mediaExcluded: (p.mediaExcluded ?? []).filter((d) => d !== r.filePaths[0]) })
     void service.scanAllMedia()
     return next
   },
+  /** EV169: takes the project out of Mission Control and, if asked, sends its folder to the bin (never the app's own or a drive). */
+  removeProject: async (projectId: string, toBin?: boolean) => {
+    const r = service.removeProject(projectId)
+    if (!toBin) return { ...r, binned: false }
+    if (!binnable(r.root, process.cwd())) return { ...r, binned: false, error: 'esa carpeta no se manda a la papelera desde aquí' }
+    try {
+      await shell.trashItem(r.root)
+      return { ...r, binned: true }
+    } catch (e) {
+      return { ...r, binned: false, error: (e as Error).message }
+    }
+  },
   removeMediaFolder: (projectId: string, dir: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const next = service.updateProject(projectId, { mediaDirs: p.mediaDirs.filter((d) => d !== dir), mediaExcluded: [...new Set([...(p.mediaExcluded ?? []), dir])] })
     void service.scanAllMedia()
     return next
@@ -1322,7 +1369,7 @@ const api: Record<string, Handler> = {
   decisions: (projectId: string) => listDecisions(service.db, projectId),
   answerDecision: (projectId: string, id: number, a: { choice?: string; note?: string; status?: 'decidida' | 'descartada'; reactions?: Record<number, 'si' | 'no'> }) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const r = answerDecision(service.db, p, id, a)
     // EV160: its Claude had closed after its one task: it comes back to do what was answered.
     try { followAnswer(id) } catch (e) { service.log(`respuesta ${id}: ${(e as Error).message}`) }
@@ -1344,16 +1391,16 @@ const api: Record<string, Handler> = {
   },
   // ---- priorities ----
   setTaskPriority: (projectId: string, id: number, priority: number) => {
-    const t = service.db.prepare('SELECT key, ext_id, title, priority FROM tasks WHERE id = ? AND project_id = ?').get(id, projectId) as any
-    if (!t) throw new Error('La tarea no existe')
+    const task = service.db.prepare('SELECT key, ext_id, title, priority FROM tasks WHERE id = ? AND project_id = ?').get(id, projectId) as any
+    if (!task) throw new Error(t('La tarea no existe'))
     const prio = Math.max(0, Math.min(3, Math.round(priority)))
     service.db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(prio, id)
     const label = ['urgente', 'alta', 'normal', 'baja'][prio]
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'prioridad', title: `Prioridad ${label}: ${t.ext_id ? t.ext_id + ' · ' : ''}${t.title}`, source: 'Mission Control', ref: t.key })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'prioridad', title: `Prioridad ${label}: ${task.ext_id ? task.ext_id + ' · ' : ''}${task.title}`, source: 'Mission Control', ref: task.key })
     // Raised: the first Claude at work hears it (and takes it if nobody has it); every new session sees the list.
-    if (prio <= 1 && prio < t.priority) {
-      const name = t.ext_id ?? t.title.slice(0, 50)
-      addIns(service.db, { projectId, kind: 'prioridad', body: `${name} · ${t.title} pasa a prioridad ${label}. Si nadie la tiene reservada, resérvala (pmc claim ${name}) y hazla antes que lo tuyo en cuanto cierres el paso en el que estás; si ya la tiene otra cuenta, sigue con lo tuyo.` })
+    if (prio <= 1 && prio < task.priority) {
+      const name = task.ext_id ?? task.title.slice(0, 50)
+      addIns(service.db, { projectId, kind: 'prioridad', body: t('{name} · {title} pasa a prioridad {label}. Si nadie la tiene reservada, resérvala (pmc claim {v0}) y hazla antes que lo tuyo en cuanto cierres el paso en el que estás; si ya la tiene otra cuenta, sigue con lo tuyo.', { name: name, title: task.title, label: label, v0: name }) })
     }
     service.tasks.set(projectId, listTasks(service.db, projectId))
     service.push()
@@ -1393,7 +1440,7 @@ const api: Record<string, Handler> = {
     const roots = service.projects.flatMap((p) => [p.root, ...p.copies.map((c) => c.path)])
     if (mode === 'pedir') {
       addNotice(account, 'Mission Control: el usuario te pide que cierres esta sesión. Termina el paso en curso sin dejar nada roto (no cortes una compilación ni una captura a medias), deja docs/RELEVO.md al día, libera tus reservas con pmc release y para. No empieces nada nuevo.', roots)
-      addEvent(service.db, { at: Date.now(), account, kind: 'sesion', title: `Has pedido a Claude ${account.slice(6)} que cierre`, source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account, kind: 'sesion', title: t('Has pedido a Claude {v0} que cierre', { v0: account.slice(6) }), source: 'Mission Control' })
       return { asked: true }
     }
     const a = service.agents.find((x) => x.id === account)
@@ -1401,7 +1448,7 @@ const api: Record<string, Handler> = {
     for (const pid of pids) {
       closeClaudeWindow(pid)
     }
-    addEvent(service.db, { at: Date.now(), account, kind: 'sesion', title: `Has cerrado ${pids.length === 1 ? 'la sesión' : `${pids.length} sesiones`} de Claude ${account.slice(6)}`, source: 'Mission Control' })
+    addEvent(service.db, { at: Date.now(), account, kind: 'sesion', title: t('Has cerrado {v0} de Claude {v1}', { v0: pids.length === 1 ? 'la sesión' : `${pids.length} sesiones`, v1: account.slice(6) }), source: 'Mission Control' })
     setTimeout(() => void service.refreshAgents(), 2500)
     return { closed: pids.length }
   },
@@ -1409,6 +1456,21 @@ const api: Record<string, Handler> = {
    * A quick note from the dock: kept as a note for the team to file where it belongs (never as a stop-everything), and
    * (EV154) taken straight to a Claude: see routeNote.
    */
+  /**
+   * EV171 «Mejorar mi proyecto»: the request to go over the whole project and improve it, as a note taken straight to a
+   * Claude (routeNote: typed into a free window, or a free account is opened for it; with nobody, the first one that works
+   * there reads it). Also asked by itself when a project that already had work is added (see addProject).
+   */
+  improveProject: async (projectId: string) => {
+    const p = service.project(projectId)
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    const r = addIns(service.db, { projectId, kind: 'general', body: improveText(p.name) })
+    service.setSettings({ improveAsked: { ...(service.settings.improveAsked ?? {}), [projectId]: Date.now() } })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Mejorar {name}: encargado a los Claude', { name: p.name }), source: 'Mission Control', ref: `ins:${r.id}` })
+    const route = await routeNote(r.id, true).catch(() => undefined)
+    service.push()
+    return { ...r, route }
+  },
   quickNote: async (projectId: string, body: string, target?: AccountId) => {
     const r = addIns(service.db, { projectId, kind: 'general', body: body.trim(), target })
     const route = await routeNote(r.id, true).catch(() => undefined)
@@ -1426,7 +1488,7 @@ const api: Record<string, Handler> = {
   /** EV154: a sent note nobody has read yet can be taken back. */
   cancelNote: (id: number) => {
     const r = service.db.prepare("UPDATE instructions SET status = 'anulada', updated_at = ? WHERE id = ? AND status IN ('guardada', 'pendiente-entrega')").run(Date.now(), id)
-    if (!Number(r.changes)) throw new Error('Ya le ha llegado a un Claude: no se puede anular')
+    if (!Number(r.changes)) throw new Error(t('Ya le ha llegado a un Claude: no se puede anular'))
     service.push()
     return true
   },
@@ -1438,7 +1500,7 @@ const api: Record<string, Handler> = {
   scheduleStart: async (projectId: string, account: AccountId, at: number, opts?: { fable?: boolean; prompt?: string }) => {
     const p = service.project(projectId)
     const acc = service.accounts.find((a) => a.id === account)
-    if (!p || !acc) throw new Error('Cuenta o proyecto desconocido')
+    if (!p || !acc) throw new Error(t('Cuenta o proyecto desconocido'))
     const cwd = workCopy(p)?.path ?? p.root
     const dir = join(paths.root(), 'scheduled')
     mkdirSync(dir, { recursive: true })
@@ -1460,7 +1522,7 @@ const api: Record<string, Handler> = {
     await new Promise<void>((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, timeout: 30000 }, (err, _o, e) => (err ? reject(new Error(String(e || err.message).split('\n')[0])) : resolve())))
     const schedules = { ...(service.settings.schedules ?? {}), [account]: { at, projectId } }
     service.setSettings({ schedules })
-    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: `Arranque programado de Claude ${account.slice(6)}: ${d.toLocaleString('es-ES')}`, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: t('Arranque programado de Claude {v0}: {v1}', { v0: account.slice(6), v1: d.toLocaleString('es-ES') }), source: 'Mission Control' })
     return { at, cwd }
   },
   unscheduleStart: async (account: AccountId) => {
@@ -1481,14 +1543,14 @@ const api: Record<string, Handler> = {
   },
   deliverInstruction: (projectId: string, id: number) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const r = deliverToBuzon(service.db, p, id)
     service.push()
     return r
   },
   copyInstruction: (projectId: string, id: number) => {
     const r = listInstructions(service.db, projectId).find((x) => x.id === id)
-    if (!r) throw new Error('No existe')
+    if (!r) throw new Error(t('No existe'))
     clipboard.writeText(buzonLine(r).replace(/^- /, ''))
     return true
   },
@@ -1524,7 +1586,7 @@ const api: Record<string, Handler> = {
     const p = service.project(projectId)
     if (!w?.pid) return { typed: false }
     await typeText(w.pid, `Mission Control: el usuario te ha contestado o te ha escrito en ${p?.name ?? projectId} y no lo has recibido. Ejecuta pmc respuestas, léelo y hazlo antes de seguir con lo tuyo.`)
-    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'relevo-app', title: `Se le ha escrito a Claude ${account.slice(6)} que lea lo que tiene pendiente del usuario`, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'relevo-app', title: t('Se le ha escrito a Claude {v0} que lea lo que tiene pendiente del usuario', { v0: account.slice(6) }), source: 'Mission Control' })
     return { typed: true }
   },
   /** The assistant (EV85): an answer from the app's data; «Enviar» for a request; «Pregúntale a Claude» (spends usage). */
@@ -1570,19 +1632,19 @@ const api: Record<string, Handler> = {
    */
   startOn: async (projectId: string, account: AccountId) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const copy = workCopy(p)
     const d = await autoOpen({
       account, project: p, reason: 'reparto', cwd: copy?.path ?? p.root, args: ['--permission-mode', 'auto', 'sigue'],
-      title: `${account} · ${p.name} · encargo del usuario`,
-      message: `Mission Control: el usuario te ha dejado un encargo en ${p.name}; te llega con tu próximo paso. Hazlo antes que lo tuyo.`
+      title: t('{account} · {name} · encargo del usuario', { account: account, name: p.name }),
+      message: t('Mission Control: el usuario te ha dejado un encargo en {name}; te llega con tu próximo paso. Hazlo antes que lo tuyo.', { name: p.name })
     })
     return { action: d.action, why: d.why }
   },
   /** Routines of a project (EV44): what applies now, the defaults, and the last runs. */
   routines: (projectId: string) => {
     const p = routineProjects().find((x) => x.id === projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const defaults = routineDefaults(p)
     const chosen = service.settings.routines?.[projectId] ?? {}
     const last = service.db.prepare("SELECT at, kind, title FROM events WHERE project_id = ? AND source = 'Rutina' ORDER BY at DESC LIMIT 3").all(projectId) as { at: number; kind: string; title: string }[]
@@ -1618,20 +1680,20 @@ const api: Record<string, Handler> = {
    */
   relocateProject: async (id: string) => {
     const p = service.project(id)
-    if (!p) throw new Error('Proyecto desconocido')
-    const r = await dialog.showOpenDialog(win!, { title: `¿Dónde está ahora ${p.name}?`, properties: ['openDirectory'] })
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    const r = await dialog.showOpenDialog(win!, { title: t('¿Dónde está ahora {name}?', { name: p.name }), properties: ['openDirectory'] })
     if (r.canceled || !r.filePaths[0]) return undefined
     const root = r.filePaths[0]
     const same = basename(root).toLowerCase() === basename(p.root).toLowerCase() || existsSync(join(root, 'docs', 'TASKS.md')) || existsSync(join(root, 'pmc.json'))
     if (!same) {
-      const ok = await dialog.showMessageBox(win!, { type: 'question', buttons: ['Sí, es esta', 'Cancelar'], defaultId: 1, cancelId: 1, noLink: true, message: `Esa carpeta no se llama como antes ni tiene docs/TASKS.md. ¿Seguro que es ${p.name}?` })
+      const ok = await dialog.showMessageBox(win!, { type: 'question', buttons: ['Sí, es esta', 'Cancelar'], defaultId: 1, cancelId: 1, noLink: true, message: t('Esa carpeta no se llama como antes ni tiene docs/TASKS.md. ¿Seguro que es {name}?', { name: p.name }) })
       if (ok.response !== 0) return undefined
     }
     const fresh = await detectProject(root, p.name)
     const old = p.root.toLowerCase()
     const mediaDirs = [...new Set([...p.mediaDirs.map((d) => (d.toLowerCase().startsWith(old) ? root + d.slice(p.root.length) : d)), ...fresh.mediaDirs])]
     const next = service.updateProject(id, { root: fresh.root, copies: fresh.copies, mediaDirs })
-    addEvent(service.db, { projectId: id, at: Date.now(), kind: 'proyecto', title: `${p.name} está ahora en ${fresh.root} (antes en ${p.root})`, source: 'Mission Control' })
+    addEvent(service.db, { projectId: id, at: Date.now(), kind: 'proyecto', title: t('{name} está ahora en {root} (antes en {v0})', { name: p.name, root: fresh.root, v0: p.root }), source: 'Mission Control' })
     service.syncDocs(true)
     void service.refreshGit()
     return next
@@ -1676,11 +1738,11 @@ const api: Record<string, Handler> = {
   /** EV145: an account skill taken to the one project that uses it (every work copy), or back to the accounts. */
   skillToProject: (name: string, projectId: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const dirs = [...new Set(service.accounts.map((a) => join(envFor(a).CLAUDE_CONFIG_DIR ?? (a.configDir || join(homedir(), '.claude')), 'skills')))]
     const m = takeSkillToProject({ name, projectId, accountSkillDirs: dirs, copies: [p.root, ...p.copies.map((c) => c.path)], gitExclude: gitExcludeOf(p.root) })
     service.log(`skills: ${name} llevada a ${p.name} (${m.placed.length} copias)`)
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: `Skill ${name} llevada a ${p.name}: ya no pesa en las sesiones de los demás proyectos`, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Skill {name} llevada a {v0}: ya no pesa en las sesiones de los demás proyectos', { name: name, v0: p.name }), source: 'Mission Control' })
     return m
   },
   skillReturn: (name: string) => {
@@ -1694,7 +1756,7 @@ const api: Record<string, Handler> = {
       ...service.accounts.map((a) => envFor(a).CLAUDE_CONFIG_DIR ?? (a.configDir || join(homedir(), '.claude'))),
       ...service.projects.flatMap((p) => [p.root, ...p.copies.map((c) => c.path)].map((r) => join(r, '.claude')))
     ].map(norm)
-    if (!bases.includes(norm(dirname(dirname(dir))))) throw new Error('Esa carpeta no es de ninguna cuenta ni proyecto')
+    if (!bases.includes(norm(dirname(dirname(dir))))) throw new Error(t('Esa carpeta no es de ninguna cuenta ni proyecto'))
     const to = back ? bringBack(dir) : setAside(dir)
     service.log(`skills: ${back ? 'devuelta' : 'apartada'} ${dir} → ${to}`)
     return to
@@ -1739,6 +1801,8 @@ const api: Record<string, Handler> = {
     if (patch && !('workModeBy' in patch) && ['autonomous', 'autoRelay', 'relayMode', 'heavyTurns'].some((k) => k in patch)) patch = { ...patch, workModeBy: 'usuario' }
     const s = service.setSettings(patch)
     applyTheme()
+    // EV161: the main process speaks the same language (statuses it sends, notices).
+    setLang(pickLang(s.lang, app.getLocale()))
     return s
   },
   /** The size the app is shown at now (the chosen one, or the default for this screen). */
@@ -1788,11 +1852,12 @@ const api: Record<string, Handler> = {
     return out
   },
   addProject: async () => {
-    const r = await dialog.showOpenDialog(win!, { title: 'Carpeta del proyecto', properties: ['openDirectory'] })
+    const r = await dialog.showOpenDialog(win!, { title: t('Carpeta del proyecto'), properties: ['openDirectory'] })
     if (r.canceled || !r.filePaths[0]) return undefined
     const p = await service.addProject(r.filePaths[0])
-    try { const made = prepareProject(detectProfile(workCopy(p)?.path ?? p.root)); if (made.length) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: `Proyecto preparado al añadirlo: ${made.join(', ')}`, source: 'Mission Control' }) } catch { /* the project is added anyway */ }
+    try { const made = prepareProject(detectProfile(workCopy(p)?.path ?? p.root)); if (made.length) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: t('Proyecto preparado al añadirlo: {v0}', { v0: made.join(', ') }), source: 'Mission Control' }) } catch { /* the project is added anyway */ }
     service.setSettings({ activeProjectId: p.id })
+    void improveAdded(p.id)
     return p
   },
   updateProject: (id: string, patch: any) => service.updateProject(id, patch),
@@ -1822,12 +1887,13 @@ const api: Record<string, Handler> = {
     const p = await service.addProject(root)
     try { prepareProject(detectProfile(workCopy(p)?.path ?? p.root)) } catch { /* added anyway */ }
     service.push()
+    void improveAdded(p.id)
     return p
   },
   /** What the app understands of a project (core/profile.ts): kind, gallery, checks, coordination, skills, subagents. */
   projectProfile: (id: string) => {
     const p = service.project(id)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const copy = workCopy(p)?.path ?? p.root
     const prof = detectProfile(copy)
     // EV32: how often each one was really called in the last week, by any account in any copy. Counted in the background
@@ -1858,10 +1924,10 @@ const api: Record<string, Handler> = {
   /** Creates what the project lacks to be worked on by several accounts (never overwrites), in the copy being worked on. */
   prepareProject: async (id: string) => {
     const p = service.project(id)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const copy = workCopy(p)?.path ?? p.root
     const made = prepareProject(detectProfile(copy), { refreshAgents: true })
-    if (made.length) addEvent(service.db, { projectId: id, at: Date.now(), kind: 'proyecto', title: `Proyecto preparado: ${made.join(', ')}`, source: 'Mission Control' })
+    if (made.length) addEvent(service.db, { projectId: id, at: Date.now(), kind: 'proyecto', title: t('Proyecto preparado: {v0}', { v0: made.join(', ') }), source: 'Mission Control' })
     service.syncDocs(true)
     service.push()
     return made
@@ -1872,35 +1938,35 @@ const api: Record<string, Handler> = {
    */
   createProject: async (o: { name: string; description: string; account?: AccountId; template?: string }) => {
     const name = o.name.trim()
-    if (!name || /[<>:"/\\|?*]/.test(name)) throw new Error('Pon un nombre sin caracteres raros')
-    const r = await dialog.showOpenDialog(win!, { title: '¿Dónde lo creo? (se hará una carpeta con su nombre)', properties: ['openDirectory', 'createDirectory'] })
+    if (!name || /[<>:"/\\|?*]/.test(name)) throw new Error(t('Pon un nombre sin caracteres raros'))
+    const r = await dialog.showOpenDialog(win!, { title: t('¿Dónde lo creo? (se hará una carpeta con su nombre)'), properties: ['openDirectory', 'createDirectory'] })
     if (r.canceled || !r.filePaths[0]) return undefined
     const root = join(r.filePaths[0], name)
-    if (existsSync(root) && readdirSync(root).length) throw new Error(`Ya existe ${root} y no está vacía: añádela con «Añadir proyecto»`)
+    if (existsSync(root) && readdirSync(root).length) throw new Error(t('Ya existe {root} y no está vacía: añádela con «Añadir proyecto»', { root: root }))
     mkdirSync(root, { recursive: true })
     await new Promise<void>((resolve) => execFile('git', ['init', '-q'], { cwd: root, windowsHide: true }, () => resolve()))
     // EV45: the kind the user chose frames the project from the start: rules, first tasks and the helpers that fit.
-    const t = templateOf(o.template)
-    writeFileSync(join(root, 'CLAUDE.md'), templateClaudeMd(t, name, o.description))
+    const tpl = templateOf(o.template)
+    writeFileSync(join(root, 'CLAUDE.md'), templateClaudeMd(tpl, name, o.description))
     mkdirSync(join(root, 'docs'), { recursive: true })
-    writeFileSync(join(root, 'docs', 'TASKS.md'), templateTasks(t, name))
-    prepareProject(profileAs(root, t.kinds, t.heavy))
+    writeFileSync(join(root, 'docs', 'TASKS.md'), templateTasks(tpl, name))
+    prepareProject(profileAs(root, tpl.kinds, tpl.heavy))
     const p = await service.addProject(root, name)
     service.setSettings({ activeProjectId: p.id })
     const who = o.account ?? service.agents.filter((a) => !service.settings.accountStatus?.[a.id] && a.state !== 'sin-uso' && a.state !== 'desconectado').sort((a, b) => (b.usage.snapshot?.sevenDay ? 100 - b.usage.snapshot.sevenDay.usedPct : 50) - (a.usage.snapshot?.sevenDay ? 100 - a.usage.snapshot.sevenDay.usedPct : 50))[0]?.id
     if (who) {
-      const first = `Proyecto nuevo (${t.label.toLowerCase()}), creado desde Mission Control. Lo que quiere el usuario: ${o.description.replace(/\s+/g, ' ').trim()} ${t.first} Ya tienes CLAUDE.md con cómo es el proyecto, las primeras tareas en docs/TASKS.md y los ayudantes en .claude/agents. Empieza por P1 (pmc claim P1): el plan, que le enseñas al usuario con pmc decide antes de construir; mientras contesta, sigue con lo que no dependa de su respuesta. Completa pmc.json con cómo se comprueba en cuanto haya código.`
+      const first = `Proyecto nuevo (${tpl.label.toLowerCase()}), creado desde Mission Control. Lo que quiere el usuario: ${o.description.replace(/\s+/g, ' ').trim()} ${tpl.first} Ya tienes CLAUDE.md con cómo es el proyecto, las primeras tareas en docs/TASKS.md y los ayudantes en .claude/agents. Empieza por P1 (pmc claim P1): el plan, que le enseñas al usuario con pmc decide antes de construir; mientras contesta, sigue con lo que no dependa de su respuesta. Completa pmc.json con cómo se comprueba en cuanto haya código.`
       openTerminal(who, root, ['--permission-mode', 'auto', first], `${who} · ${name} (proyecto nuevo)`)
     }
-    addEvent(service.db, { projectId: p.id, at: Date.now(), account: who, kind: 'proyecto', title: `Proyecto creado: ${name}${who ? ` · empieza Claude ${who.slice(6)}` : ''}`, detail: o.description, source: 'Mission Control' })
+    addEvent(service.db, { projectId: p.id, at: Date.now(), account: who, kind: 'proyecto', title: t('Proyecto creado: {name}{v0}', { name: name, v0: who ? ` · empieza Claude ${who.slice(6)}` : '' }), detail: o.description, source: 'Mission Control' })
     service.push()
     return { project: p, account: who }
   },
   statusLineInstall: (account: AccountId) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
-    if (!service.nodeExe) throw new Error('No se encuentra Node.js en este equipo')
-    if (!existsSync(service.pmcPath)) throw new Error('Falta el programa pmc.mjs')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
+    if (!service.nodeExe) throw new Error(t('No se encuentra Node.js en este equipo'))
+    if (!existsSync(service.pmcPath)) throw new Error(t('Falta el programa pmc.mjs'))
     const r = installStatusLine(acc, service.nodeExe, service.pmcPath)
     service.log(`statusLine instalada en ${account} (copia: ${r.backup ?? 'sin archivo previo'})`)
     service.push()
@@ -1908,7 +1974,7 @@ const api: Record<string, Handler> = {
   },
   statusLineUninstall: (account: AccountId) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
     const r = uninstallStatusLine(acc)
     service.push()
     return { ...r, state: statusLineState(acc) }
@@ -1921,7 +1987,7 @@ const api: Record<string, Handler> = {
    */
   handoff: (projectId: string, from: AccountId, to: AccountId) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const { assignment, created } = addAssignment(service.db, projectId, from, to)
     const tasks = assignedTasks(service.db, projectId, assignment)
     if (!created) return { assignment, created, tasks: tasks.length }
@@ -1940,7 +2006,7 @@ const api: Record<string, Handler> = {
     // and leaves the rest to the other (the user, 4-11).
     const names = tasks.map((t) => t.extId ?? t.title.slice(0, 40)).slice(0, 12).join(', ')
     addNotice(from, `Mission Control: el usuario ha pasado tus tareas a ${to}${names ? ` (${names})` : ''}. Termina bien lo que tengas a medias ahora mismo, deja docs/RELEVO.md al día y no empieces ninguna de esas tareas: son de ${to}.`, [p.root, ...p.copies.map((c) => c.path)])
-    addEvent(service.db, { projectId, at: Date.now(), account: to, kind: 'relevo-app', title: `Encargo: Claude ${to.slice(6)} hará primero las ${tasks.length} tareas de Claude ${from.slice(6)}`, detail: body, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), account: to, kind: 'relevo-app', title: t('Encargo: Claude {v0} hará primero las {length} tareas de Claude {v1}', { v0: to.slice(6), length: tasks.length, v1: from.slice(6) }), detail: body, source: 'Mission Control' })
     service.rebuildAgents()
     return { assignment, created, tasks: tasks.length }
   },
@@ -1958,10 +2024,10 @@ const api: Record<string, Handler> = {
    */
   projectHooksInstall: (projectId: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
-    if (!service.nodeExe) throw new Error('No se encuentra Node.js en este equipo')
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    if (!service.nodeExe) throw new Error(t('No se encuentra Node.js en este equipo'))
     const done = [p.root, ...p.copies.map((c) => c.path)].filter((d) => existsSync(d)).map((d) => installProjectHooks(d, service.nodeExe!, service.pmcPath))
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: `Ganchos de Mission Control puestos en el proyecto (${done.length} ${done.length === 1 ? 'copia' : 'copias'}): cualquier cuenta que trabaje aquí se ve`, detail: done.map((d) => d.file + (d.backup ? ` (copia previa: ${d.backup})` : '')).join('\n'), source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Ganchos de Mission Control puestos en el proyecto ({length} {v0}): cualquier cuenta que trabaje aquí se ve', { length: done.length, v0: done.length === 1 ? 'copia' : 'copias' }), detail: done.map((d) => d.file + (d.backup ? ` (copia previa: ${d.backup})` : '')).join('\n'), source: 'Mission Control' })
     return done.length
   },
   /** EV126: whether this PC has Claude Code (Primeros pasos offers to install it when not). */
@@ -1981,10 +2047,10 @@ const api: Record<string, Handler> = {
    */
   attachBackground: (account: AccountId, shortId: string) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
-    if (!/^[0-9a-f]{6,12}$/i.test(shortId)) throw new Error('Id de sesión raro')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
+    if (!/^[0-9a-f]{6,12}$/i.test(shortId)) throw new Error(t('Id de sesión raro'))
     const exe = claudeInstalled()
-    if (!exe) throw new Error('Primero hay que instalar Claude Code')
+    if (!exe) throw new Error(t('Primero hay que instalar Claude Code'))
     const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "Claude ${account.slice(6)} · sesión de fondo ${shortId}" conhost.exe cmd.exe /k ${fontPrefix()}"${exe}" attach ${shortId}`], { cwd: homedir(), env: envFor(acc), detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' })
     child.unref()
     return true
@@ -1992,30 +2058,30 @@ const api: Record<string, Handler> = {
   /** EV126: the login of an account in a window of its own (`claude auth login`, with the account's folder). */
   claudeLogin: (account: AccountId) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
     const exe = claudeInstalled()
-    if (!exe) throw new Error('Primero hay que instalar Claude Code')
+    if (!exe) throw new Error(t('Primero hay que instalar Claude Code'))
     const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "Iniciar sesión · Claude ${account.slice(6)}" cmd.exe /k ""${exe}" auth login"`], { cwd: homedir(), env: envFor(acc), detached: true, windowsHide: false, windowsVerbatimArguments: true, stdio: 'ignore' })
     child.unref()
     // EV146: a sign-in that leaves no credentials file (Console, a key) is only known by asking; every 30 s for 5 minutes.
     let tries = 0
-    const t = setInterval(() => {
-      if (++tries > 10) { clearInterval(t); return }
+    const timer = setInterval(() => {
+      if (++tries > 10) { clearInterval(timer); return }
       void authStatus(acc).then((s) => {
         if (!s?.loggedIn) return
-        clearInterval(t)
+        clearInterval(timer)
         logins[acc.id] = s
         try { writeFileSync(paths.logins(), JSON.stringify(logins, null, 1)) } catch { /* next round */ }
         service.rebuildAgents()
       })
     }, 30_000)
-    t.unref()
+    timer.unref()
     return true
   },
   hooksInstall: (account: AccountId) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
-    if (!service.nodeExe) throw new Error('No se encuentra Node.js en este equipo')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
+    if (!service.nodeExe) throw new Error(t('No se encuentra Node.js en este equipo'))
     const r = installHooks(acc, service.nodeExe, service.pmcPath)
     service.log(`hooks instalados en ${account} (copia: ${r.backup ?? 'sin archivo previo'})`)
     service.setSettings({ hooksAt: { ...(service.settings.hooksAt ?? {}), [account]: Date.now() } })
@@ -2049,13 +2115,13 @@ const api: Record<string, Handler> = {
   requests: (projectId: string, days = 3) => recentRequests(days).filter((r) => r.projectId === projectId),
   requestNote: (projectId: string, hash: string) => {
     const r = allRequests(7).find((x) => x.hash === hash)
-    if (!r) throw new Error('Esa petición ya no está')
+    if (!r) throw new Error(t('Esa petición ya no está'))
     requestsMemo = undefined
     const when = new Date(r.at).toLocaleString('es-ES', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })
-    const t = addAppTask(service.db, projectId, { title: r.text.replace(/\s+/g, ' ').slice(0, 110), detail: `Lo pidió el usuario (${when}, en la ventana de ${r.account}) y no estaba apuntado: «${r.text}»`, status: 'pendiente' })
+    const task = addAppTask(service.db, projectId, { title: r.text.replace(/\s+/g, ' ').slice(0, 110), detail: t('Lo pidió el usuario ({when}, en la ventana de {account}) y no estaba apuntado: «{text}»', { when: when, account: r.account, text: r.text }), status: 'pendiente' })
     service.tasks.set(projectId, listTasks(service.db, projectId))
     service.push()
-    return t
+    return task
   },
   requestClose: (hash: string) => { service.setSettings({ requestsClosed: [...new Set([...(service.settings.requestsClosed ?? []), hash])].slice(-500) }); return true },
   /** The project's memory (EV63): what every session reads first, and the user's changes to it. */
@@ -2107,7 +2173,7 @@ const api: Record<string, Handler> = {
   /** Looks on skills.sh for what fits the project (one search per term; a minute or two). */
   skillsSearch: async (projectId: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const terms = termsFor(profileOf(p.root).kinds)
     const found: FoundSkill[] = []
     for (const t of terms) {
@@ -2129,19 +2195,19 @@ const api: Record<string, Handler> = {
   },
   /** Installs a skill: in the project (every account sees it) or for every account in use. */
   skillInstall: async (projectId: string, id: string, scope: 'proyecto' | 'todas') => {
-    if (!/^[\w.-]+\/[\w.-]+@[\w.:-]+$/.test(id)) throw new Error('Nombre de skill no válido')
+    if (!/^[\w.-]+\/[\w.-]+@[\w.:-]+$/.test(id)) throw new Error(t('Nombre de skill no válido'))
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const skill = id.split('@')[1]
     if (scope === 'proyecto') {
       const cwd = workCopy(p)?.path ?? p.root
       const out = await runNpx(`npx -y skills add ${id} -a claude-code -y --copy`, cwd, 240_000)
-      if (!existsSync(join(cwd, '.claude', 'skills', skill, 'SKILL.md'))) throw new Error(`No se ha instalado: ${out.slice(-300)}`)
-      addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: `Skill instalada en ${p.name}: ${skill}`, detail: id, source: 'Mission Control' })
+      if (!existsSync(join(cwd, '.claude', 'skills', skill, 'SKILL.md'))) throw new Error(t('No se ha instalado: {v0}', { v0: out.slice(-300) }))
+      addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: t('Skill instalada en {name}: {skill}', { name: p.name, skill: skill }), detail: id, source: 'Mission Control' })
     } else {
       const out = await runNpx(`npx -y skills add ${id} -g -a claude-code -y --copy`, tmpdir(), 240_000)
       const src = join(homedir(), '.claude', 'skills', skill)
-      if (!existsSync(join(src, 'SKILL.md'))) throw new Error(`No se ha instalado: ${out.slice(-300)}`)
+      if (!existsSync(join(src, 'SKILL.md'))) throw new Error(t('No se ha instalado: {v0}', { v0: out.slice(-300) }))
       // The CLI writes to ~/.claude (claude1); the other accounts get the same folder in theirs.
       for (const a of service.accounts.filter((x) => !service.settings.accountStatus?.[x.id])) {
         const dir = envFor(a).CLAUDE_CONFIG_DIR
@@ -2149,14 +2215,14 @@ const api: Record<string, Handler> = {
         const dest = join(dir, 'skills', skill)
         if (!existsSync(dest)) { mkdirSync(join(dir, 'skills'), { recursive: true }); cpSync(src, dest, { recursive: true }) }
       }
-      addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: `Skill instalada para todas las cuentas: ${skill}`, detail: id, source: 'Mission Control' })
+      addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: t('Skill instalada para todas las cuentas: {skill}', { skill: skill }), detail: id, source: 'Mission Control' })
     }
     service.push()
     return api.skills(projectId)
   },
   /** Removes a skill folder from the project's copies, or from every account; plugin skills are left to /plugin. */
   skillRemove: (projectId: string, name: string, scope: 'proyecto' | 'cuenta') => {
-    if (!/^[\w.-]+$/.test(name) || name === 'mission-control') throw new Error('Esa skill no se quita desde aquí')
+    if (!/^[\w.-]+$/.test(name) || name === 'mission-control') throw new Error(t('Esa skill no se quita desde aquí'))
     const p = service.project(projectId)
     const dirs = scope === 'proyecto'
       ? (p ? [p.root, ...p.copies.map((c) => c.path)] : []).map((r) => join(r, '.claude', 'skills', name))
@@ -2188,19 +2254,19 @@ const api: Record<string, Handler> = {
   reopenWindow: async (account: AccountId, sessionId: string, prompt?: string) => {
     const a = service.agents.find((x) => x.id === account)
     const s = a?.sessions.find((x) => x.sessionId === sessionId)
-    if (!s?.pid) throw new Error('Esa ventana ya no está abierta')
-    if (isSessionWorking(s)) throw new Error(`Claude ${account.slice(6)} está trabajando en ella: espera a que acabe su paso`)
+    if (!s?.pid) throw new Error(t('Esa ventana ya no está abierta'))
+    if (isSessionWorking(s)) throw new Error(t('Claude {v0} está trabajando en ella: espera a que acabe su paso', { v0: account.slice(6) }))
     closeClaudeWindow(s.pid)
     await new Promise((r) => setTimeout(r, 1500))
     const p = s.projectId ? service.project(s.projectId) : undefined
     openTerminal(account, s.cwd, ['--resume', sessionId, '--permission-mode', 'auto', (prompt ?? 'sigue').replace(/\s*\r?\n\s*/g, ' ')], `${account} · ${p?.name ?? 'retomada'} (coordinación nueva)`)
-    addEvent(service.db, { projectId: s.projectId, at: Date.now(), account, kind: 'sesion', title: `Reabierta la ventana de Claude ${account.slice(6)} con la coordinación nueva (misma conversación)`, source: 'Mission Control' })
+    addEvent(service.db, { projectId: s.projectId, at: Date.now(), account, kind: 'sesion', title: t('Reabierta la ventana de Claude {v0} con la coordinación nueva (misma conversación)', { v0: account.slice(6) }), source: 'Mission Control' })
     setTimeout(() => void service.refreshAgents(), 2500)
     return true
   },
   hooksUninstall: (account: AccountId) => {
     const acc = service.accounts.find((a) => a.id === account)
-    if (!acc) throw new Error('Cuenta desconocida')
+    if (!acc) throw new Error(t('Cuenta desconocida'))
     const r = uninstallHooks(acc)
     service.push()
     return r
@@ -2241,7 +2307,7 @@ const api: Record<string, Handler> = {
     })
     const past = (service.db.prepare("SELECT at, account, kind, title FROM events WHERE project_id = ? AND at > ? AND (kind = 'relevo-app' OR (kind = 'sesion' AND source = 'Mission Control' AND (title LIKE 'Reparto automático%' OR title LIKE 'Arranque programado%'))) ORDER BY at DESC LIMIT 8").all(projectId, now - 7 * 86400_000) as { at: number; account?: string; kind: string; title: string }[])
     const mode = relayModeOf(s)
-    const shown = mode === 'proyecto' ? next.map((r) => ({ ...r, to: undefined, fable: false, why: 'cada una en su proyecto: nadie toma su trabajo; lo retoma ella en su misma ventana al volver' })) : next
+    const shown = mode === 'proyecto' ? next.map((r) => ({ ...r, to: undefined, fable: false, why: t('cada una en su proyecto: nadie toma su trabajo; lo retoma ella en su misma ventana al volver') })) : next
     const waiting = Object.entries(waitingTurn).filter(([, w]) => w && w.projectId === projectId).map(([account, w]) => ({ account, holder: w!.holder, since: w!.since }))
     return { next: shown, past, auto: Boolean(s.autoRelay), autonomous: Boolean(s.autonomous), mode, heavyTurns: Boolean(s.heavyTurns), waiting }
   },
@@ -2274,7 +2340,7 @@ const api: Record<string, Handler> = {
   },
   freeResource: (name: string, account: AccountId) => {
     const ok = freeResource(service.db, name, account)
-    if (ok) addEvent(service.db, { at: Date.now(), account, kind: 'reserva', title: `Has soltado «${name}», que tenía Claude ${account.slice(6)}`, source: 'Mission Control' })
+    if (ok) addEvent(service.db, { at: Date.now(), account, kind: 'reserva', title: t('Has soltado «{name}», que tenía Claude {v0}', { name: name, v0: account.slice(6) }), source: 'Mission Control' })
     service.push()
     return ok
   },
@@ -2305,33 +2371,33 @@ const api: Record<string, Handler> = {
    */
   onlyTask: async (projectId: string, taskKey: string, account: AccountId) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const agent = service.agents.find((a) => a.id === account)
-    if (!agent) throw new Error('Cuenta desconocida')
-    if (service.settings.accountStatus?.[account] === 'baja') throw new Error(`Claude ${account.slice(6)} está de baja`)
-    if (agent.state === 'sin-uso') throw new Error(`Claude ${account.slice(6)} no tiene uso ahora`)
-    if (agent.sessions.some((s) => s.projectId === projectId && isSessionWorking(s))) throw new Error(`Claude ${account.slice(6)} ya está trabajando en ${p.name}: espera a que acabe o ciérrala antes`)
-    const t = (service.tasks.get(projectId) ?? listTasks(service.db, projectId)).find((x) => x.key === taskKey || x.extId === taskKey)
-    if (!t) throw new Error('Esa tarea ya no está')
-    const label = t.extId ?? t.key
+    if (!agent) throw new Error(t('Cuenta desconocida'))
+    if (service.settings.accountStatus?.[account] === 'baja') throw new Error(t('Claude {v0} está de baja', { v0: account.slice(6) }))
+    if (agent.state === 'sin-uso') throw new Error(t('Claude {v0} no tiene uso ahora', { v0: account.slice(6) }))
+    if (agent.sessions.some((s) => s.projectId === projectId && isSessionWorking(s))) throw new Error(t('Claude {v0} ya está trabajando en {name}: espera a que acabe o ciérrala antes', { v0: account.slice(6), name: p.name }))
+    const task = (service.tasks.get(projectId) ?? listTasks(service.db, projectId)).find((x) => x.key === taskKey || x.extId === taskKey)
+    if (!task) throw new Error(t('Esa tarea ya no está'))
+    const label = task.extId ?? task.key
     const copy = workCopy(p)
     const cwd = copy?.path ?? p.root
-    const model = modelArgs(t.model, (service.settings.noFable ?? []).includes(account))
-    setOnlyTask(account, { projectId, taskKey: t.key, label, at: Date.now() })
+    const model = modelArgs(task.model, (service.settings.noFable ?? []).includes(account))
+    setOnlyTask(account, { projectId, taskKey: task.key, label, at: Date.now() })
     // Reserved for it now, so no other account takes it meanwhile.
-    try { claimTask(service.db, projectId, t.key, account, { note: 'solo esta tarea' }) } catch { /* it reserves it itself */ }
-    openTerminal(account, cwd, ['--permission-mode', 'auto', ...model, onlyTaskPrompt({ label, title: t.title, projectName: p.name })], `${account} · ${p.name} · solo ${label}`)
-    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: `Has abierto a Claude ${account.slice(6)} solo para ${label}: al terminarla se cerrará`, source: 'Mission Control' })
+    try { claimTask(service.db, projectId, task.key, account, { note: 'solo esta tarea' }) } catch { /* it reserves it itself */ }
+    openTerminal(account, cwd, ['--permission-mode', 'auto', ...model, onlyTaskPrompt({ label, title: task.title, projectName: p.name })], `${account} · ${p.name} · solo ${label}`)
+    addEvent(service.db, { projectId, at: Date.now(), account, kind: 'sesion', title: t('Has abierto a Claude {v0} solo para {label}: al terminarla se cerrará', { v0: account.slice(6), label: label }), source: 'Mission Control' })
     service.push()
     setTimeout(() => void service.refreshAgents(), 4000)
     return { label, cwd }
   },
   putToWork: async (projectId: string, account: AccountId, anyway = false) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const agent = service.agents.find((a) => a.id === account)
     const status = service.settings.accountStatus?.[account]
-    if (status) throw new Error(`Claude ${account.slice(6)} está ${STATUS_LABEL[status]}. Cámbialo en Ajustes › Cuentas si quieres usarla`)
+    if (status) throw new Error(t('Claude {v0} está {v1}. Cámbialo en Ajustes › Cuentas si quieres usarla', { v0: account.slice(6), v1: STATUS_LABEL[status] }))
     const refusal = agent && launchRefusal(agent, projectId, anyway)
     if (refusal) throw new Error(refusal)
     const copy = workCopy(p)
@@ -2357,11 +2423,11 @@ const api: Record<string, Handler> = {
     return { cwd, copy: copy?.label, schedule, scheduledAt: sched?.at, otherProject, scheduleError }
   },
   resumeSession: (account: AccountId, cwd: string, sessionId: string) => {
-    if (!/^[0-9a-f-]{8,36}$/i.test(sessionId)) throw new Error('Sesión no válida')
+    if (!/^[0-9a-f-]{8,36}$/i.test(sessionId)) throw new Error(t('Sesión no válida'))
     openTerminal(account, cwd, ['--resume', sessionId], `${account} · retomar ${sessionId.slice(0, 8)}`)
   },
   attachSession: (account: AccountId, cwd: string, shortId: string) => {
-    if (!/^[0-9a-f]{8}$/i.test(shortId)) throw new Error('Sesión no válida')
+    if (!/^[0-9a-f]{8}$/i.test(shortId)) throw new Error(t('Sesión no válida'))
     const acc = service.accounts.find((a) => a.id === account)!
     const child = spawn('cmd.exe', ['/d', '/s', '/c', `start "${account} · ${shortId}" conhost.exe cmd.exe /k ${fontPrefix()}"${findClaude()}" attach ${shortId}`], {
       cwd, env: envFor(acc), detached: true, windowsVerbatimArguments: true, stdio: 'ignore'
@@ -2370,31 +2436,31 @@ const api: Record<string, Handler> = {
   },
   frameUrl: (path: string) => {
     // Frames live in Mission Control's own folder; only those are served back.
-    if (!path.startsWith(join(paths.root(), 'frames'))) throw new Error('Ruta no permitida')
+    if (!path.startsWith(join(paths.root(), 'frames'))) throw new Error(t('Ruta no permitida'))
     return nativeImage.createFromPath(path).toDataURL()
   },
   asset: (id: number) => service.db.prepare('SELECT * FROM assets WHERE id = ?').get(id),
   /** A task for people: what it is, what to look at, and everything that shows it. */
   taskInfo: (projectId: string, taskId: number) => {
-    const t = service.db.prepare('SELECT ext_id, title, detail, owner FROM tasks WHERE id = ?').get(taskId) as { ext_id?: string; title: string; detail: string; owner?: string } | undefined
-    if (!t) return undefined
-    const card = t.ext_id ? getTaskCard(service.db, projectId, t.ext_id) : undefined
-    return { simple: card?.simple ?? simpleText(t.title, t.detail), ask: card?.ask, written: Boolean(card?.simple), responsible: responsibleFor(service.db, projectId, t.owner ?? undefined), media: taskMedia(service.db, projectId, { extId: t.ext_id ?? undefined, title: t.title, detail: t.detail }) }
+    const task = service.db.prepare('SELECT ext_id, title, detail, owner FROM tasks WHERE id = ?').get(taskId) as { ext_id?: string; title: string; detail: string; owner?: string } | undefined
+    if (!task) return undefined
+    const card = task.ext_id ? getTaskCard(service.db, projectId, task.ext_id) : undefined
+    return { simple: card?.simple ?? simpleText(task.title, task.detail), ask: card?.ask, written: Boolean(card?.simple), responsible: responsibleFor(service.db, projectId, task.owner ?? undefined), media: taskMedia(service.db, projectId, { extId: task.ext_id ?? undefined, title: task.title, detail: task.detail }) }
   },
   taskCovers: (projectId: string) => taskCovers(service.db, projectId),
   /** EV138: the code a task changed, commit by commit (read from git only when the user opens it). */
   taskDiff: async (projectId: string, taskId: number) => {
-    const t = service.db.prepare('SELECT ext_id FROM tasks WHERE id = ? AND project_id = ?').get(taskId, projectId) as { ext_id?: string } | undefined
+    const task = service.db.prepare('SELECT ext_id FROM tasks WHERE id = ? AND project_id = ?').get(taskId, projectId) as { ext_id?: string } | undefined
     const p = service.project(projectId)
-    if (!t?.ext_id || !p) return []
-    return taskDiff(p.root, t.ext_id)
+    if (!task?.ext_id || !p) return []
+    return taskDiff(p.root, task.ext_id)
   },
   /** The user's answer to a review: into the account's queue, or, with `now`, for it to do right away. */
   askTaskChange: async (projectId: string, taskId: number, a: { note: string; target?: AccountId; now?: boolean }) => {
     refuseNow(a)
-    const t = service.db.prepare('SELECT key FROM tasks WHERE id = ? AND project_id = ?').get(taskId, projectId) as { key: string } | undefined
-    if (!t) throw new Error('La tarea no existe')
-    const change = askChange(service.db, { projectId, taskKey: t.key, note: a.note, target: a.target, urgent: a.now })
+    const task = service.db.prepare('SELECT key FROM tasks WHERE id = ? AND project_id = ?').get(taskId, projectId) as { key: string } | undefined
+    if (!task) throw new Error(t('La tarea no existe'))
+    const change = askChange(service.db, { projectId, taskKey: task.key, note: a.note, target: a.target, urgent: a.now })
     return { change, ...(await afterChange(projectId, a)) }
   },
   updateTaskChange: async (projectId: string, id: number, a: { note?: string; target?: AccountId | null; now?: boolean }) => {
@@ -2413,21 +2479,21 @@ const api: Record<string, Handler> = {
   /** .blend → GLB with Blender in the background (no window), into Mission Control's own folder; the original is untouched. */
   convertModel: async (id: number) => {
     const row = service.db.prepare('SELECT path, mtime FROM assets WHERE id = ?').get(id) as { path: string; mtime: number } | undefined
-    if (!row) throw new Error('El archivo no existe')
+    if (!row) throw new Error(t('El archivo no existe'))
     const dir = join(paths.root(), 'converted')
     mkdirSync(dir, { recursive: true })
     const out = join(dir, `${id}-${row.mtime}.glb`)
     if (existsSync(out)) return true
     const blender = ['C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe', 'C:\\Program Files\\Blender Foundation\\Blender 5.1\\blender.exe', 'C:\\Program Files\\Blender Foundation\\Blender 5.0\\blender.exe', 'C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe']
       .find((p) => existsSync(p))
-    if (!blender) throw new Error('No se encuentra Blender en este equipo')
+    if (!blender) throw new Error(t('No se encuentra Blender en este equipo'))
     const script = join(dir, 'export_glb.py')
     writeFileSync(script, "import bpy, sys\nout = sys.argv[sys.argv.index('--') + 1]\nbpy.ops.export_scene.gltf(filepath=out, export_format='GLB', export_apply=True)\n")
     await new Promise<void>((resolve, reject) => {
-      const child = execFile(blender, ['-b', row.path, '--python', script, '--', out], { timeout: 240_000, windowsHide: true, maxBuffer: 16 << 20 }, (err) => (err && !existsSync(out) ? reject(new Error('Blender no pudo exportarlo')) : resolve()))
+      const child = execFile(blender, ['-b', row.path, '--python', script, '--', out], { timeout: 240_000, windowsHide: true, maxBuffer: 16 << 20 }, (err) => (err && !existsSync(out) ? reject(new Error(t('Blender no pudo exportarlo'))) : resolve()))
       if (child.pid) try { setPriority(child.pid, osConstants.priority.PRIORITY_BELOW_NORMAL) } catch { /* it still works, just less politely */ }
     })
-    if (!existsSync(out)) throw new Error('Blender no pudo exportarlo')
+    if (!existsSync(out)) throw new Error(t('Blender no pudo exportarlo'))
     return true
   },
   /** A gallery tile of a model has no picture: queue one, unless it failed before or it would take running Blender. */
@@ -2513,7 +2579,7 @@ const api: Record<string, Handler> = {
   },
   /** A capture from the phone, kept in Downloads where the user can find it too. */
   chatUpload: (name: string, dataUrl: string) => {
-    if (!/^data:image\/[a-z+]+;base64,/.test(dataUrl)) throw new Error('Eso no es una imagen')
+    if (!/^data:image\/[a-z+]+;base64,/.test(dataUrl)) throw new Error(t('Eso no es una imagen'))
     const day = new Date().toISOString().slice(0, 10)
     const dir = join(app.getPath('downloads'), 'Capturas del móvil', day)
     mkdirSync(dir, { recursive: true })
@@ -2525,20 +2591,20 @@ const api: Record<string, Handler> = {
   /** EV151: «Traer delante» the window of an open session (one with a window; a background one opens with «Ver»). */
   frontSession: async (sessionId: string) => {
     const live = liveSession(sessionId)
-    if (!live?.pid || live.kind === 'background') throw new Error('Esta sesión no tiene ventana abierta')
+    if (!live?.pid || live.kind === 'background') throw new Error(t('Esta sesión no tiene ventana abierta'))
     await bringToFront(live.pid)
     return true
   },
   chatKey: async (sessionId: string, key: string) => {
-    if (!/^(esc|enter|[1-9])$/.test(key)) throw new Error('Tecla no válida')
+    if (!/^(esc|enter|[1-9])$/.test(key)) throw new Error(t('Tecla no válida'))
     const live = liveSession(sessionId)
-    if (!live?.pid) throw new Error('Este chat ya no está abierto')
+    if (!live?.pid) throw new Error(t('Este chat ya no está abierto'))
     await typeKey(live.pid, key)
     return true
   },
   chatNew: (account: AccountId, projectId: string, text: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     openTerminal(account, p.root, [text.replace(/\s*\r?\n\s*/g, ' ')], `${account} · desde el móvil`)
     return true
   },
@@ -2567,11 +2633,11 @@ const api: Record<string, Handler> = {
     const seen = new Map<string, string>()
     const add = (what: string, file: string, note?: (text: string) => string | undefined): boolean => {
       try {
-        const t = readFileSync(file, 'utf8')
+        const text = readFileSync(file, 'utf8')
         // The same text read twice (12-11: The game project's work copy sits inside the main one, and both CLAUDE.md are read).
-        const twin = seen.get(t.trim())
-        items.push({ what, file, chars: t.length, note: twin ? `el mismo texto que «${twin}»: se lee dos veces` : note?.(t) })
-        if (!twin) seen.set(t.trim(), what)
+        const twin = seen.get(text.trim())
+        items.push({ what, file, chars: text.length, note: twin ? `el mismo texto que «${twin}»: se lee dos veces` : note?.(text) })
+        if (!twin) seen.set(text.trim(), what)
         return true
       } catch { return false }
     }
@@ -2589,7 +2655,7 @@ const api: Record<string, Handler> = {
     const acc = service.accounts.find((a) => !service.settings.accountStatus?.[a.id])
     const conf = acc ? envFor(acc).CLAUDE_CONFIG_DIR || acc.configDir || join(homedir(), '.claude') : undefined
     if (conf) add(`CLAUDE.md de la cuenta (${acc!.id}; cada cuenta tiene el suyo)`, join(conf, 'CLAUDE.md'))
-    const lines = (t: string) => { const n = t.split(/\r?\n/).length; return n > 150 ? `${n} líneas: Claude Code solo lee las 200 primeras` : `${n} líneas` }
+    const lines = (text: string) => { const n = text.split(/\r?\n/).length; return n > 150 ? t('{n} líneas: Claude Code solo lee las 200 primeras', { n: n }) : t('{n} líneas', { n: n }) }
     // The memory of a work copy inside the project is the project's.
     // The account's own folder first (EV124: Claude 5 keeps its own), then the shared one.
     const memBases = [...new Set([...(conf ? [join(conf, 'projects')] : []), projectsDir()])]
@@ -2601,12 +2667,12 @@ const api: Record<string, Handler> = {
   /** «No leerlo dos veces» (EV24): a CLAUDE.md above the work copy with the same text as its own is left out for it. */
   excludeTwin: (projectId: string, file: string) => {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const cwd = workCopy(p)?.path ?? p.root
     const own = readFileSync(join(cwd, 'CLAUDE.md'), 'utf8').trim()
-    if (!file.toLowerCase().startsWith(dirname(cwd).toLowerCase()) || readFileSync(file, 'utf8').trim() !== own) throw new Error('Ese CLAUDE.md no es una repetición del del proyecto')
+    if (!file.toLowerCase().startsWith(dirname(cwd).toLowerCase()) || readFileSync(file, 'utf8').trim() !== own) throw new Error(t('Ese CLAUDE.md no es una repetición del del proyecto'))
     const r = excludeClaudeMd(cwd, file)
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: `Las sesiones de ${p.name} ya no leen dos veces el CLAUDE.md (${file})`, detail: r.backup, source: 'Mission Control' })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Las sesiones de {name} ya no leen dos veces el CLAUDE.md ({file})', { name: p.name, file: file }), detail: r.backup, source: 'Mission Control' })
     return r
   },
   memory: (projectId: string) => {
@@ -2654,12 +2720,12 @@ const api: Record<string, Handler> = {
    */
   restoreBackup: async (name: string) => {
     const b = listBackups().find((x) => x.name === name)
-    if (!b) throw new Error('No encuentro esa copia')
+    if (!b) throw new Error(t('No encuentro esa copia'))
     const when = new Date(b.at).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
     const r = await dialog.showMessageBox(win!, {
       type: 'warning', buttons: ['Restaurar y reiniciar', 'Cancelar'], defaultId: 1, cancelId: 1, noLink: true,
-      title: 'Restaurar una copia', message: `¿Volver a cómo estaba Mission Control el ${when}?`,
-      detail: 'Se pierde lo que la app apuntó desde entonces (decisiones, notas, reservas, historial). Antes se guarda una copia de cómo está ahora, que podrás restaurar igual si te arrepientes. Tus proyectos y sus archivos no se tocan.'
+      title: t('Restaurar una copia'), message: t('¿Volver a cómo estaba Mission Control el {when}?', { when: when }),
+      detail: t('Se pierde lo que la app apuntó desde entonces (decisiones, notas, reservas, historial). Antes se guarda una copia de cómo está ahora, que podrás restaurar igual si te arrepientes. Tus proyectos y sus archivos no se tocan.')
     })
     if (r.response !== 0) return { restored: false }
     service.backupNow()
@@ -2683,7 +2749,7 @@ function toggleFloating(): boolean {
   floating = new BrowserWindow({
     width: 380, height: 560, x: area.x + area.width - 400, y: area.y + area.height - 590,
     minWidth: 300, minHeight: 220, alwaysOnTop: true, frame: false, resizable: true, skipTaskbar: false,
-    title: 'Claudes · Mission Control', backgroundColor: dark ? '#141418' : '#f5f5f7',
+    title: t('Claudes · Mission Control'), backgroundColor: dark ? '#141418' : '#f5f5f7',
     icon: join(here, '../../build/icon.png'),
     webPreferences: { preload: join(here, '../preload/index.cjs'), sandbox: false, contextIsolation: true, nodeIntegration: false, zoomFactor: uiScale() }
   })
@@ -2756,7 +2822,7 @@ async function callUser(): Promise<void> {
   win.once('focus', () => win?.flashFrame(false))
   if (await isPlaying()) return
   win.webContents.send('pmc:ding')
-  const notice = new Notification({ title: 'Tienes cosas que mirar', body, silent: true })
+  const notice = new Notification({ title: t('Tienes cosas que mirar'), body, silent: true })
   notice.on('click', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus() } })
   notice.show()
   // In front, without taking the keyboard from whatever the user is typing in.
@@ -2793,7 +2859,7 @@ const remote = createRemote({
   rootDir: join(here, '../renderer'),
   call: async (method, args) => {
     const fn = api[method]
-    if (!fn) throw new Error(`Método desconocido: ${method}`)
+    if (!fn) throw new Error(t('Método desconocido: {method}', { method: method }))
     return await fn(...args)
   },
   media: servePmc
@@ -2940,7 +3006,7 @@ function createWindow(): void {
     if (quitting || !tray || !Object.values(service?.settings.relayChains ?? {}).some((c) => c?.on)) return
     e.preventDefault()
     win?.hide()
-    if (!toldTray && Notification.isSupported()) new Notification({ title: 'Mission Control sigue en la bandeja', body: 'Hay una rueda de relevos encendida: la app sigue pasando el turno. Para cerrarla del todo, «Salir» en el icono de la bandeja.' }).show()
+    if (!toldTray && Notification.isSupported()) new Notification({ title: t('Mission Control sigue en la bandeja'), body: t('Hay una rueda de relevos encendida: la app sigue pasando el turno. Para cerrarla del todo, «Salir» en el icono de la bandeja.') }).show()
     toldTray = true
   })
   win.on('closed', () => { modelThumbs.stop(); attention.stop() })
@@ -3065,11 +3131,11 @@ function updateTray(): void {
     ...WORK_MODES.map((m) => ({ label: m.label, type: 'radio' as const, checked: mode === m.id, click: () => setMode(m.id) })),
     { type: 'separator' },
     {
-      label: 'Pedir a todos que paren', enabled: working.length > 0,
+      label: t('Pedir a todos que paren'), enabled: working.length > 0,
       click: () => { for (const a of working) void api.stopClaude(a.id, 'pedir') }
     },
-    { label: 'Abrir Mission Control', click: show },
-    { label: 'Salir', click: () => app.quit() }
+    { label: t('Abrir Mission Control'), click: show },
+    { label: t('Salir'), click: () => app.quit() }
   ]))
 }
 
@@ -3144,7 +3210,7 @@ function routineTick(): void {
       : outcome === 'aplazada' ? `Rutina ${label} de ${p.name}, aplazada: ${last!.summary.slice(0, 160)}`
       : `Rutina ${label}: ${p.name} pasa sus comprobaciones (${last!.summary.slice(0, 120)})`
     addEvent(service.db, { projectId: p.id, at: Date.now(), kind: outcome === 'falla' ? 'aviso' : 'rutina', title, detail: out.slice(-2000), source: 'Rutina' })
-    if (outcome === 'falla' && Notification.isSupported()) new Notification({ title: `${p.name}: fallan las comprobaciones`, body: last!.summary.slice(0, 200) }).show()
+    if (outcome === 'falla' && Notification.isSupported()) new Notification({ title: t('{name}: fallan las comprobaciones', { name: p.name }), body: last!.summary.slice(0, 200) }).show()
     // And on the phone (EV53): the phone view already gets notices by web push.
     if (outcome === 'falla') void remote.push(`${p.name}: fallan las comprobaciones`, last!.summary.slice(0, 160), 'inicio').catch(() => undefined)
     service.push()
@@ -3154,18 +3220,20 @@ function routineTick(): void {
 app.whenReady().then(async () => {
   app.setAppUserModelId('es.pakitron.missioncontrol')
   service = new Service()
+  setLang(pickLang(service.settings.lang, app.getLocale()))
   service.on('stop-failure', autoRelay)
   service.on('stop', autoRelay)
   service.on('stop-failure', autoWake)
   wheel = createWheel({
     service, openTerminal, typeText, workCopy, lastOpened,
+    reserveBusy,
     staleWindows: () => (api.staleWindows() as { sessionId: string }[]) ?? [],
     reopenWindow: (account, sessionId, prompt) => api.reopenWindow(account, sessionId, prompt) as Promise<unknown>,
     // EV141: a turn as a background session, with the account's folder (envFor clears the marks of a child session). One
     // already there is stopped first: `--resume` on a live one makes a copy (tried 13-11).
     openBackground: async (account, cwd, args) => {
       const acc = service.accounts.find((a) => a.id === account)
-      if (!acc) throw new Error('Cuenta desconocida')
+      if (!acc) throw new Error(t('Cuenta desconocida'))
       const run = (a: string[]) => new Promise<string>((resolve, reject) => execFile(findClaude(), a, { cwd, env: envFor(acc), windowsHide: true, timeout: 60_000 }, (err, out) => (err ? reject(new Error(String(err.message).split('\n')[0])) : resolve(String(out)))))
       if (args[1] === '--resume') await run(['stop', args[2]]).catch(() => undefined)
       const out = await run(args)
@@ -3173,7 +3241,7 @@ app.whenReady().then(async () => {
     },
     stopBackground: (account, shortId) => {
       const acc = service.accounts.find((a) => a.id === account)
-      if (!acc || !/^[0-9a-f]{6,12}$/i.test(shortId)) return Promise.reject(new Error('Sesión no válida'))
+      if (!acc || !/^[0-9a-f]{6,12}$/i.test(shortId)) return Promise.reject(new Error(t('Sesión no válida')))
       return new Promise<void>((resolve, reject) => execFile(findClaude(), ['stop', shortId], { env: envFor(acc), windowsHide: true, timeout: 60_000 }, (err) => (err ? reject(new Error(String(err.message).split('\n')[0])) : resolve())))
     },
     closeIdleWindow
@@ -3245,7 +3313,7 @@ app.whenReady().then(async () => {
     claude: findClaude,
     back: (id, r) => {
       service.setSettings({ recharged: { ...(service.settings.recharged ?? {}), [id]: Date.now() } })
-      addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: `Claude ${id.slice(6)} vuelve a tener uso (recargada o restablecida; lo ha visto la app sin abrir ventana): ${probeWords(r)}`, source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: t('Claude {v0} vuelve a tener uso (recargada o restablecida; lo ha visto la app sin abrir ventana): {v1}', { v0: id.slice(6), v1: probeWords(r) }), source: 'Mission Control' })
       void service.refreshAgents()
       service.push()
     },
@@ -3254,7 +3322,7 @@ app.whenReady().then(async () => {
     sooner: (id, r, at) => {
       service.setSettings({ recharged: { ...(service.settings.recharged ?? {}), [id]: at - 1 } })
       const when = r.resetsAt ? new Date(r.resetsAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '?'
-      addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: `Claude ${id.slice(6)} vuelve antes de lo que se creía: el ${when} (lo ha dicho Claude Code; ${probeWords(r)})`, source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account: id, kind: 'recarga', title: t('Claude {v0} vuelve antes de lo que se creía: el {when} (lo ha dicho Claude Code; {v1})', { v0: id.slice(6), when: when, v1: probeWords(r) }), source: 'Mission Control' })
       void service.refreshAgents()
       service.push()
     },
@@ -3273,7 +3341,7 @@ app.whenReady().then(async () => {
   registerProtocol()
   ipcMain.handle('pmc', async (_e, method: string, ...args: any[]) => {
     const fn = api[method]
-    if (!fn) throw new Error(`Método desconocido: ${method}`)
+    if (!fn) throw new Error(t('Método desconocido: {method}', { method: method }))
     // The slow reads that change slowly are kept a while (13-11 log: requests ~150 ms, health ~140, away ~130 on every
     // Inicio open, almost half a second with the app stalled); a call that changes what they show clears them at once.
     for (const [m, r] of Object.entries(SLOW_READS)) if (m !== method && r.clearedBy.test(method)) for (const k of readCache.keys()) if (k.startsWith(m + ':')) readCache.delete(k)

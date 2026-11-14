@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The relay wheel («rueda de relevos», the user, 12-11 at 23:40): per project, an order of accounts chosen by the user,
 // for example Claude 3 → Claude 1 → Claude 6 → back to Claude 3. Only the one holding the turn works on the project; when
 // it runs out of usage, the next one in the wheel that has usage takes over exactly where it was left («pmc relevo»),
@@ -96,6 +97,8 @@ export interface ChainMember {
   workingHere: boolean
   /** The project it is at work on, when that is another one. */
   workingElsewhere?: string
+  /** That project's id (EV153: to tell the account there to come). */
+  elsewhereId?: string
   /** When it last did anything (any session); undefined: unknown. */
   lastActiveAt?: number
   /** Minutes left at its pace (an estimate), when known. */
@@ -123,15 +126,23 @@ const usedTop = (m: ChainMember) => Math.max(m.fiveUsed ?? 0, m.weekUsed ?? 0)
 
 /** Why an account cannot take the turn now; undefined when it can. */
 export function cannotTake(m: ChainMember | undefined, chain: Pick<RelayChain, 'paused'>): string | undefined {
-  if (!m) return 'ya no es una cuenta de Mission Control'
-  if (m.status === 'baja') return 'de baja'
-  if (m.status === 'pausada') return 'apartada («No usar»)'
-  if (chain.paused?.includes(m.id)) return 'en pausa en la rueda'
-  if (m.state === 'sin-uso') return 'sin uso'
-  if (!m.hasLogin) return 'sin sesión iniciada en su carpeta'
-  if (usedTop(m) >= CHAIN_FULL_PCT) return `al ${Math.round(usedTop(m))} % de su uso`
-  if (m.workingElsewhere) return `trabajando en otro proyecto (${m.workingElsewhere})`
+  if (!m) return t('ya no es una cuenta de Mission Control')
+  if (m.status === 'baja') return t('de baja')
+  if (m.status === 'pausada') return t('apartada («No usar»)')
+  if (chain.paused?.includes(m.id)) return t('en pausa en la rueda')
+  if (m.state === 'sin-uso') return t('sin uso')
+  if (!m.hasLogin) return t('sin sesión iniciada en su carpeta')
+  if (usedTop(m) >= CHAIN_FULL_PCT) return t('al {v0} % de su uso', { v0: Math.round(usedTop(m)) })
+  if (m.workingElsewhere) return t('trabajando en otro proyecto ({workingElsewhere})', { workingElsewhere: m.workingElsewhere })
   return undefined
+}
+
+/**
+ * EV153: an account that could take the turn but for being at work on another project (where no wheel holds it: an account
+ * is in one wheel only). It can be called to leave that safe and come.
+ */
+export function callable(m: ChainMember | undefined, chain: Pick<RelayChain, 'paused'>): boolean {
+  return Boolean(m?.workingElsewhere) && !cannotTake({ ...m!, workingElsewhere: undefined }, chain)
 }
 
 /** The holder can no longer go on: the turn must pass. */
@@ -166,6 +177,11 @@ export type ChainAction =
   | { kind: 'pareja'; to: AccountId; holder: AccountId }
   /** EV152: the partner stops being one (out of usage, set aside, or it took the turn itself). */
   | { kind: 'fin-pareja'; account: AccountId; why: string }
+  /**
+   * EV153: the holder is running out (or ran out) and the next with usage is at work on another project: it is told there to
+   * leave that safe and come; once free, the wheel gives it the turn as to anybody free.
+   */
+  | { kind: 'llamar'; account: AccountId; holder?: AccountId; elsewhere: string; elsewhereId?: string; why: string }
 
 /**
  * One step of the wheel. Called every minute and when an account stops; it only returns what has to change.
@@ -179,6 +195,11 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
   const actions: ChainAction[] = []
   let current = chain.holder
   const free = (m: ChainMember) => !cannotTake(m, chain)
+  // EV153: the first of the wheel after the holder that is only kept away by work on another project.
+  const call = (why: string) => {
+    const m = rotation(chain.order, chain.holder).map(get).find((x) => x && x.id !== chain.holder && callable(x, chain))
+    if (m) actions.push({ kind: 'llamar', account: m.id, holder: chain.holder, elsewhere: m.workingElsewhere!, elsewhereId: m.elsewhereId, why })
+  }
 
   if (!holder || holderOut(holder, chain)) {
     // One that is already at work here and has usage goes first (it came back by itself): it keeps going, now as holder.
@@ -193,15 +214,20 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
     } else if (chain.phase !== 'espera') {
       const back = inWheel.filter((m) => !m.status && !chain.paused?.includes(m.id) && m.backAt && m.backAt > now)
         .sort((a, b) => a.backAt! - b.backAt! || chain.order.indexOf(a.id) - chain.order.indexOf(b.id))[0]
-      actions.push({ kind: 'esperar', from: chain.holder, firstBack: back?.id, backAt: back?.backAt, why: `nadie de la rueda tiene uso ahora (${inWheel.map((m) => `${who(m.id)} ${cannotTake(m, chain) ?? 'lista'}`).join('; ')})` })
+      actions.push({ kind: 'esperar', from: chain.holder, firstBack: back?.id, backAt: back?.backAt, why: t('nadie de la rueda tiene uso ahora ({v0})', { v0: inWheel.map((m) => `${who(m.id)} ${cannotTake(m, chain) ?? 'lista'}`).join('; ') }) })
       current = undefined
-    } else current = undefined
+      call(`${chain.holder ? `${who(chain.holder)} se ha quedado sin uso` : 'la rueda empieza'} y nadie más de la rueda está libre aquí`)
+    } else {
+      current = undefined
+      call('la rueda espera y nadie más de la rueda está libre aquí')
+    }
   } else if (chain.phase === 'espera') {
     // The holder itself got its usage back first: the turn is its own again.
-    actions.push({ kind: 'pasar', from: chain.holder, to: holder.id, why: `${who(holder.id)} ha recuperado su uso y sigue ella`, adopt: holder.workingHere || undefined })
+    actions.push({ kind: 'pasar', from: chain.holder, to: holder.id, why: t('{v0} ha recuperado su uso y sigue ella', { v0: who(holder.id) }), adopt: holder.workingHere || undefined })
   } else if (chain.overlap !== false && !chain.outgoing && holder.workingHere && overlapDue(holder)) {
     const next = rotation(chain.order, chain.holder).map(get).find((m) => m && m.id !== holder.id && free(m))
     if (next) { actions.push({ kind: 'solapar', from: holder.id, to: next.id }); current = next.id }
+    else call(`${who(holder.id)} está a punto de quedarse sin uso`)
   } else if (!holder.workingHere && holder.state !== 'esperando' && !holder.workingElsewhere && now - Math.max(chain.since ?? 0, holder.lastActiveAt ?? 0) > IDLE_HOLDER_MS) {
     // It has the turn and usage but does nothing: without this, nobody would work until the user noticed.
     actions.push({ kind: 'despertar', account: holder.id })
@@ -217,7 +243,7 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
   if (partner) {
     const pm = get(partner)
     const why = !chain.pair ? 'la rueda ya no trabaja de dos en dos' : partner === current ? `${who(partner)} tiene ahora el turno` : pm ? cannotTake(pm, chain) : 'ya no es una cuenta de Mission Control'
-    if (why || !current) { actions.push({ kind: 'fin-pareja', account: partner, why: why ?? 'la rueda espera' }); partner = undefined }
+    if (why || !current) { actions.push({ kind: 'fin-pareja', account: partner, why: why ?? t('la rueda espera') }); partner = undefined }
   }
   if (chain.pair && current && !partner && !outgoing) {
     const mate = rotation(chain.order, current).map(get).find((m) => m && m.id !== current && free(m))
@@ -233,19 +259,19 @@ export function chainStep(chain: RelayChain, members: ChainMember[], now = Date.
 export function memberViews(chain: RelayChain, members: ChainMember[], now = Date.now()): MemberView[] {
   return chain.order.map((id) => {
     const m = members.find((x) => x.id === id)
-    if (!m) return { id, status: 'fuera' as const, text: 'Ya no es una cuenta de Mission Control' }
+    if (!m) return { id, status: 'fuera' as const, text: t('Ya no es una cuenta de Mission Control') }
     const isHolder = chain.holder === id
     const back = m.backAt && m.backAt > now ? m.backAt : undefined
-    if (m.status) return { id, status: 'fuera', text: m.status === 'baja' ? 'De baja: se salta' : 'Apartada («No usar»): se salta' }
-    if (chain.paused?.includes(id)) return { id, status: 'pausa', text: 'En pausa: se salta hasta que la reactives', backAt: back }
-    if (m.state === 'sin-uso') return { id, status: 'sin-uso', text: isHolder ? 'Tenía el turno y se ha quedado sin uso' : 'Sin uso', backAt: back }
-    if (isHolder && chain.on) return { id, status: 'turno', text: m.workingHere ? 'Tiene el turno y está trabajando' : 'Tiene el turno' }
+    if (m.status) return { id, status: 'fuera', text: m.status === 'baja' ? t('De baja: se salta') : t('Apartada («No usar»): se salta') }
+    if (chain.paused?.includes(id)) return { id, status: 'pausa', text: t('En pausa: se salta hasta que la reactives'), backAt: back }
+    if (m.state === 'sin-uso') return { id, status: 'sin-uso', text: isHolder ? t('Tenía el turno y se ha quedado sin uso') : t('Sin uso'), backAt: back }
+    if (isHolder && chain.on) return { id, status: 'turno', text: m.workingHere ? t('Tiene el turno y está trabajando') : t('Tiene el turno') }
     // EV152: the partner works at the same time, on what needs no shared resource.
-    if (chain.on && chain.pair && chain.partner === id) return { id, status: 'turno', text: 'Trabaja a la vez (sin Unity ni la gráfica)' }
-    if (m.workingElsewhere) return { id, status: 'ocupada', text: `Trabajando en otro proyecto (${m.workingElsewhere})` }
+    if (chain.on && chain.pair && chain.partner === id) return { id, status: 'turno', text: t('Trabaja a la vez (sin Unity ni la gráfica)') }
+    if (m.workingElsewhere) return { id, status: 'ocupada', text: t('Trabajando en otro proyecto ({workingElsewhere})', { workingElsewhere: m.workingElsewhere }) }
     const why = cannotTake(m, chain)
     if (why) return { id, status: 'sin-uso', text: why[0].toUpperCase() + why.slice(1), backAt: back }
-    return { id, status: 'lista', text: chain.on ? 'Con uso: espera su turno' : 'Con uso' }
+    return { id, status: 'lista', text: chain.on ? t('Con uso: espera su turno') : t('Con uso') }
   })
 }
 
@@ -291,19 +317,27 @@ export function turnFor(file: TurnFile | undefined, account: AccountId, cwd: str
 
 /** What a session told to wait reads (in its window, in the PreToolUse refusal and at SessionStart). */
 export function waitTurnText(account: AccountId, holder: AccountId, project: string): string {
-  return `Mission Control · rueda de relevos de ${project}: ahora tiene el turno ${who(holder)}, y ${who(account)} espera el suyo para no pisarse. Si has cambiado algo, guárdalo (pmc guarda «qué queda») y termina tu turno sin empezar nada nuevo: te escribiré en este chat cuando te toque. Si el usuario te ha pedido algo expresamente, dile que puede darte el turno en Mission Control › Relevos.`
+  return t('Mission Control · rueda de relevos de {project}: ahora tiene el turno {v0}, y {v1} espera el suyo para no pisarse. Si has cambiado algo, guárdalo (pmc guarda «qué queda») y termina tu turno sin empezar nada nuevo: te escribiré en este chat cuando te toque. Si el usuario te ha pedido algo expresamente, dile que puede darte el turno en Mission Control › Relevos.', { project: project, v0: who(holder), v1: who(account) })
 }
 
 /** EV152: what the partner reads when it starts working at the same time as the holder. */
 export function partnerText(a: { to: AccountId; holder: AccountId; project: string }): string {
-  return `Mission Control · rueda de relevos de ${a.project}: trabajas a la vez que ${who(a.holder)}, que tiene el turno y se queda con lo pesado (Unity, la gráfica, compilar el juego). Tú coge las tareas que no lo necesiten (código, pruebas, documentos, guiones), en archivos distintos de los suyos (mira git status y pmc claims), reserva cada una con pmc claim y no lances nada pesado sin pmc recurso. Ejecuta pmc parte y trabaja sin parar hasta que te quedes sin uso; guarda con pmc guarda al cerrar cada bloque.`
+  return t('Mission Control · rueda de relevos de {project}: trabajas a la vez que {v0}, que tiene el turno y se queda con lo pesado (Unity, la gráfica, compilar el juego). Tú coge las tareas que no lo necesiten (código, pruebas, documentos, guiones), en archivos distintos de los suyos (mira git status y pmc claims), reserva cada una con pmc claim y no lances nada pesado sin pmc recurso. Ejecuta pmc parte y trabaja sin parar hasta que te quedes sin uso; guarda con pmc guarda al cerrar cada bloque.', { project: a.project, v0: who(a.holder) })
+}
+
+/**
+ * EV153: what an account of the wheel at work on another project reads there when the holder is running out (or ran out)
+ * and it is the next with usage.
+ */
+export function callText(a: { account: AccountId; holder?: AccountId; project: string; elsewhere: string; why: string }): string {
+  return t('Mission Control · rueda de relevos de {project}: {why}, y eres la siguiente de la rueda con uso. Deja {elsewhere} a salvo: termina el paso en el que estás, guarda (pmc guarda «qué queda») y suelta tus reservas de allí (pmc release <ID>); después termina tu turno en esta sesión sin empezar nada nuevo. En cuanto quedes libre, la rueda te da el turno de {v0} y te escribe allí. Si el usuario te ha pedido expresamente seguir en {v1}, sigue y díselo: puede sacarte de la rueda en Mission Control › Relevos.', { project: a.project, why: a.why, elsewhere: a.elsewhere, v0: a.project, v1: a.elsewhere })
 }
 
 /** What the account given the turn reads. */
 export function takeTurnText(a: { from?: AccountId; to: AccountId; project: string; after?: AccountId; fableLost?: boolean }): string {
   const tail = `Trabaja sin parar hasta que te quedes sin uso${a.after && a.after !== a.to ? `; entonces seguirá ${who(a.after)}` : ''}. Pon al día el relevo al cerrar cada bloque (pmc guarda).`
-  if (!a.from) return `Mission Control · rueda de relevos de ${a.project}: te toca empezar. Ejecuta pmc parte y sigue con lo pendiente, primero lo que otras cuentas dejaron a medias (pmc relevo <cuenta>). ${tail}`
-  if (a.from === a.to) return `Mission Control · rueda de relevos de ${a.project}: ya tienes uso otra vez y el turno vuelve a ser tuyo. Sigue tu trabajo donde lo dejaste, sin repetir lo hecho (pmc parte). ${tail}`
+  if (!a.from) return t('Mission Control · rueda de relevos de {project}: te toca empezar. Ejecuta pmc parte y sigue con lo pendiente, primero lo que otras cuentas dejaron a medias (pmc relevo <cuenta>). {tail}', { project: a.project, tail: tail })
+  if (a.from === a.to) return t('Mission Control · rueda de relevos de {project}: ya tienes uso otra vez y el turno vuelve a ser tuyo. Sigue tu trabajo donde lo dejaste, sin repetir lo hecho (pmc parte). {tail}', { project: a.project, tail: tail })
   return [
     `Mission Control · rueda de relevos de ${a.project}: ${who(a.from)} se ha quedado sin uso y te toca a ti.`,
     `Ejecuta pmc relevo ${a.from} y pmc parte, y sigue su trabajo exactamente donde lo dejó, sin repetir lo hecho, hasta cerrar sus tareas pendientes; luego las tuyas.`,

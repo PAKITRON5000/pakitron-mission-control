@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // Colour themes (EV87; the user, 13-11: «con una gran variedad de temas si es posible», «deja una interfaz chula»).
 // A theme is a palette over any of the six looks (looks.css: shape, depth and type) and over light or dark, so the user
 // can mix them. One list is the source of everything: the CSS below is made from it and Ajustes draws its swatches from it.
@@ -17,31 +18,31 @@ export interface Palette {
 }
 
 export const PALETTES: Palette[] = [
-  { id: 'clasico', name: 'Clásico', accent: '#0a84ff', tint: '#0a84ff', tint2: '#5e5ce6', mood: 'El de siempre: neutro y azul' },
-  { id: 'oceano', name: 'Océano', accent: '#1e9bff', tint: '#0077b6', tint2: '#00b4d8', mood: 'Azules profundos y turquesa' },
-  { id: 'bosque', name: 'Bosque', accent: '#34c759', tint: '#1f7a3f', tint2: '#5c9e31', mood: 'Verdes tranquilos' },
-  { id: 'atardecer', name: 'Atardecer', accent: '#ff7a45', tint: '#ff4f6d', tint2: '#ffb020', mood: 'Naranja, rosa y oro' },
-  { id: 'lavanda', name: 'Lavanda', accent: '#a78bfa', tint: '#7c5cff', tint2: '#d58bff', mood: 'Lilas suaves' },
-  { id: 'cereza', name: 'Cereza', accent: '#ff375f', tint: '#c2185b', tint2: '#ff6b8b', mood: 'Rojo cereza con fuerza' },
-  { id: 'oro', name: 'Oro', accent: '#f5b301', tint: '#b8860b', tint2: '#ffd60a', onAccent: '#2a1d00', mood: 'Dorado, de campeón' },
-  { id: 'menta', name: 'Menta', accent: '#2dd4bf', tint: '#0f9f8f', tint2: '#7ee8c8', onAccent: '#032b26', mood: 'Fresco y limpio' },
-  { id: 'aurora', name: 'Aurora', accent: '#34d399', tint: '#8b5cf6', tint2: '#22d3ee', onAccent: '#04281b', mood: 'Verde y violeta del norte' },
-  { id: 'medianoche', name: 'Medianoche', accent: '#6366f1', tint: '#1e3a8a', tint2: '#4338ca', mood: 'Azul noche, para trabajar tarde' },
-  { id: 'fuego', name: 'Fuego', accent: '#ff453a', tint: '#ff6a00', tint2: '#ffb300', mood: 'Rojo y naranja encendidos' },
-  { id: 'chicle', name: 'Chicle', accent: '#ff6ad5', tint: '#8a5cff', tint2: '#26c6da', mood: 'Rosa, violeta y cian, años 80' },
-  { id: 'hielo', name: 'Hielo', accent: '#64d2ff', tint: '#5ac8fa', tint2: '#c7f0ff', onAccent: '#032433', mood: 'Celeste helado' },
-  { id: 'lima', name: 'Lima', accent: '#a3e635', tint: '#65a30d', tint2: '#facc15', onAccent: '#1a2600', mood: 'Verde lima con energía' },
-  { id: 'cafe', name: 'Café', accent: '#d4a373', tint: '#8b5e3c', tint2: '#c08552', onAccent: '#2a1a0c', mood: 'Marrones cálidos' },
-  { id: 'grafito', name: 'Grafito', accent: '#a1a1aa', tint: '#52525b', tint2: '#71717a', onAccent: '#111114', mood: 'Grises, sin color que distraiga' }
+  { id: 'clasico', get name() { return t('Clásico') }, accent: '#0a84ff', tint: '#0a84ff', tint2: '#5e5ce6', get mood() { return t('El de siempre: neutro y azul') } },
+  { id: 'oceano', get name() { return t('Océano') }, accent: '#1e9bff', tint: '#0077b6', tint2: '#00b4d8', get mood() { return t('Azules profundos y turquesa') } },
+  { id: 'bosque', get name() { return t('Bosque') }, accent: '#34c759', tint: '#1f7a3f', tint2: '#5c9e31', get mood() { return t('Verdes tranquilos') } },
+  { id: 'atardecer', get name() { return t('Atardecer') }, accent: '#ff7a45', tint: '#ff4f6d', tint2: '#ffb020', get mood() { return t('Naranja, rosa y oro') } },
+  { id: 'lavanda', get name() { return t('Lavanda') }, accent: '#a78bfa', tint: '#7c5cff', tint2: '#d58bff', get mood() { return t('Lilas suaves') } },
+  { id: 'cereza', get name() { return t('Cereza') }, accent: '#ff375f', tint: '#c2185b', tint2: '#ff6b8b', get mood() { return t('Rojo cereza con fuerza') } },
+  { id: 'oro', get name() { return t('Oro') }, accent: '#f5b301', tint: '#b8860b', tint2: '#ffd60a', onAccent: '#2a1d00', get mood() { return t('Dorado, de campeón') } },
+  { id: 'menta', get name() { return t('Menta') }, accent: '#2dd4bf', tint: '#0f9f8f', tint2: '#7ee8c8', onAccent: '#032b26', get mood() { return t('Fresco y limpio') } },
+  { id: 'aurora', get name() { return t('Aurora') }, accent: '#34d399', tint: '#8b5cf6', tint2: '#22d3ee', onAccent: '#04281b', get mood() { return t('Verde y violeta del norte') } },
+  { id: 'medianoche', get name() { return t('Medianoche') }, accent: '#6366f1', tint: '#1e3a8a', tint2: '#4338ca', get mood() { return t('Azul noche, para trabajar tarde') } },
+  { id: 'fuego', get name() { return t('Fuego') }, accent: '#ff453a', tint: '#ff6a00', tint2: '#ffb300', get mood() { return t('Rojo y naranja encendidos') } },
+  { id: 'chicle', get name() { return t('Chicle') }, accent: '#ff6ad5', tint: '#8a5cff', tint2: '#26c6da', get mood() { return t('Rosa, violeta y cian, años 80') } },
+  { id: 'hielo', get name() { return t('Hielo') }, accent: '#64d2ff', tint: '#5ac8fa', tint2: '#c7f0ff', onAccent: '#032433', get mood() { return t('Celeste helado') } },
+  { id: 'lima', get name() { return t('Lima') }, accent: '#a3e635', tint: '#65a30d', tint2: '#facc15', onAccent: '#1a2600', get mood() { return t('Verde lima con energía') } },
+  { id: 'cafe', get name() { return t('Café') }, accent: '#d4a373', tint: '#8b5e3c', tint2: '#c08552', onAccent: '#2a1a0c', get mood() { return t('Marrones cálidos') } },
+  { id: 'grafito', get name() { return t('Grafito') }, accent: '#a1a1aa', tint: '#52525b', tint2: '#71717a', onAccent: '#111114', get mood() { return t('Grises, sin color que distraiga') } }
 ]
 
 export const LOOK_INFO: { id: 'sobria' | 'viva' | 'ludica' | 'mando' | 'neon' | 'comic'; name: string; mood: string }[] = [
-  { id: 'sobria', name: 'Sobria', mood: 'Limpia y tranquila' },
-  { id: 'viva', name: 'Viva', mood: 'Con luz y tarjetas que se levantan' },
-  { id: 'ludica', name: 'Lúdica', mood: 'Redonda y con relieve, como un juego' },
-  { id: 'mando', name: 'Panel de mando', mood: 'Sala de control, bordes finos' },
-  { id: 'neon', name: 'Neón', mood: 'Brillos de neón sobre oscuro' },
-  { id: 'comic', name: 'Cómic', mood: 'Papel, tinta negra y sombras duras' }
+  { id: 'sobria', get name() { return t('Sobria') }, get mood() { return t('Limpia y tranquila') } },
+  { id: 'viva', get name() { return t('Viva') }, get mood() { return t('Con luz y tarjetas que se levantan') } },
+  { id: 'ludica', get name() { return t('Lúdica') }, get mood() { return t('Redonda y con relieve, como un juego') } },
+  { id: 'mando', get name() { return t('Panel de mando') }, get mood() { return t('Sala de control, bordes finos') } },
+  { id: 'neon', get name() { return t('Neón') }, get mood() { return t('Brillos de neón sobre oscuro') } },
+  { id: 'comic', get name() { return t('Cómic') }, get mood() { return t('Papel, tinta negra y sombras duras') } }
 ]
 
 /**

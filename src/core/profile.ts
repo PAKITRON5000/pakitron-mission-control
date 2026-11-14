@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // What a project is, read from its folder (the user, 12-11: «que la app entienda sola cómo funciona cada proyecto… la
 // colocación de carpetas sin que el usuario tenga que colocar él la galería»). Nothing is asked and nothing is written by
 // `detectProfile`; `prepareProject` only creates what is missing and never overwrites a file.
@@ -365,7 +366,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   const out: AgentSpec[] = [
     {
       name: 'explorador', model: 'haiku', tools: 'Read, Grep, Glob, Bash', maxTurns: 15, memory: 'project',
-      description: 'Úsalo por tu cuenta, sin que te lo pidan, para orientarte sin gastar tu contexto: dónde está algo, qué archivos toca una tarea, qué llama a qué. Devuelve rutas con número de línea y un resumen corto; no cambia nada.',
+      description: t('Úsalo por tu cuenta, sin que te lo pidan, para orientarte sin gastar tu contexto: dónde está algo, qué archivos toca una tarea, qué llama a qué. Devuelve rutas con número de línea y un resumen corto; no cambia nada.'),
       body: [
         'Eres el explorador del proyecto. Te piden encontrar algo; tú buscas y devuelves solo lo útil.',
         `- Empieza por \`${PMC} tarea <ID>\` si te dan una tarea, y por \`graphify query "<pregunta>" --budget 1200\` si existe \`graphify-out/graph.json\`.`,
@@ -377,7 +378,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     },
     {
       name: 'verificador', model: 'haiku', tools: 'Bash, Read, Grep',
-      description: 'Úsalo por tu cuenta, sin que te lo pidan, al terminar una tarea, antes de darla por hecha: pasa las comprobaciones del proyecto y, si fallan, lee el registro y dice en pocas líneas qué falla y dónde. No arregla nada.',
+      description: t('Úsalo por tu cuenta, sin que te lo pidan, al terminar una tarea, antes de darla por hecha: pasa las comprobaciones del proyecto y, si fallan, lee el registro y dice en pocas líneas qué falla y dónde. No arregla nada.'),
       body: [
         'Eres el verificador. Compruebas con pruebas objetivas, nunca con opiniones.',
         `1. Ejecuta \`${PMC} verifica <ID>\` (la tarea que te digan). Si dice «aplazada», devuelve eso y por qué: no es un fallo.`,
@@ -389,7 +390,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     },
     {
       name: 'relevo', model: 'haiku', tools: 'Read, Edit, Bash',
-      description: 'Úsalo por tu cuenta, sin que te lo pidan, al cerrar un bloque de trabajo o cuando Mission Control avise de que se acaba el uso: pone al día docs/RELEVO.md y la tarea en docs/TASKS.md y guarda con un commit, para que otra cuenta pueda seguir sin adivinar.',
+      description: t('Úsalo por tu cuenta, sin que te lo pidan, al cerrar un bloque de trabajo o cuando Mission Control avise de que se acaba el uso: pone al día docs/RELEVO.md y la tarea en docs/TASKS.md y guarda con un commit, para que otra cuenta pueda seguir sin adivinar.'),
       body: [
         'Eres quien deja el relevo escrito. Te dicen qué se ha hecho, qué falta y por dónde seguir.',
         '1. En docs/TASKS.md: marca la tarea (`[x]` hecha, `[~]` a medias) con una nota breve de cómo quedó.',
@@ -401,7 +402,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   ]
   out.push({
     name: 'coordinador', model: 'sonnet', tools: 'Bash, Read, Grep',
-    description: 'Úsalo por tu cuenta, sin que te lo pidan, cuando haya que decidir qué hacer después o quién hace qué: mira el estado del equipo con las órdenes de Mission Control y devuelve la siguiente tarea para ti, qué tienen las demás cuentas y si conviene reservar, soltar o pasar algo.',
+    description: t('Úsalo por tu cuenta, sin que te lo pidan, cuando haya que decidir qué hacer después o quién hace qué: mira el estado del equipo con las órdenes de Mission Control y devuelve la siguiente tarea para ti, qué tienen las demás cuentas y si conviene reservar, soltar o pasar algo.'),
     body: [
       'Eres el coordinador del equipo de cuentas de Claude en este proyecto. No programas: decides con datos y devuelves poco.',
       `1. Mira: \`${PMC} parte\` (en curso, último latido, cola, equipo), \`${PMC} plan\` (cuántos frentes caben a la vez), \`${PMC} claims\` (reservas) y \`${PMC} recursos\` (Unity, gráfica, si el usuario juega).`,
@@ -414,7 +415,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   const visual = kinds.some((k) => ['unity', 'unreal', 'godot', 'blender', 'web', 'electron', 'video', 'android', 'flutter', 'swift'].includes(k))
   if (visual) out.push({
     name: 'revisor-visual', model: 'sonnet', tools: 'Read, Glob, Bash',
-    description: 'Úsalo por tu cuenta, sin que te lo pidan, para juzgar capturas, renders o fotogramas antes de enseñárselos al usuario: compara lo que se ve con lo que se pidió y dice qué está mal, con dónde está en la imagen. No aprueba lo que no se ve.',
+    description: t('Úsalo por tu cuenta, sin que te lo pidan, para juzgar capturas, renders o fotogramas antes de enseñárselos al usuario: compara lo que se ve con lo que se pidió y dice qué está mal, con dónde está en la imagen. No aprueba lo que no se ve.'),
     body: [
       'Eres el revisor visual. Miras imágenes de verdad (ábrelas con Read) y comparas con lo pedido.',
       '- Recorta o amplía mentalmente la zona de la que se habla; si la pieza es pequeña en la captura, dilo: hace falta una captura más cerca.',
@@ -425,7 +426,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   })
   if (kinds.includes('unity') || kinds.includes('unreal') || kinds.includes('godot')) out.push({
     name: 'jugabilidad', model: 'sonnet', tools: 'Read, Grep, Glob, Bash',
-    description: 'Úsalo por tu cuenta, sin que te lo pidan, para revisar un cambio de jugabilidad antes de cerrarlo: lee el código tocado y las reglas del proyecto (CLAUDE.md, docs/DESIGN.md) y avisa si rompe una regla, la red, el equilibrio o algo validado por el usuario.',
+    description: t('Úsalo por tu cuenta, sin que te lo pidan, para revisar un cambio de jugabilidad antes de cerrarlo: lee el código tocado y las reglas del proyecto (CLAUDE.md, docs/DESIGN.md) y avisa si rompe una regla, la red, el equilibrio o algo validado por el usuario.'),
     body: [
       'Eres el revisor de jugabilidad. Te dan un cambio (archivos o un diff).',
       '- Lee las reglas del proyecto en CLAUDE.md y, si hace falta, el apartado que toque de docs/DESIGN.md o docs/ARCHITECTURE.md (busca, no leas entero).',
@@ -436,7 +437,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   // EV127: the ones whose work is not code: what a reviewer of numbers and a proofreader catch before the user sees it.
   if (kinds.includes('data')) out.push({
     name: 'revisor-datos', model: 'sonnet', tools: 'Read, Grep, Glob, Bash',
-    description: 'Úsalo por tu cuenta, sin que te lo pidan, antes de dar por buena una cifra, una tabla o un gráfico: vuelve a sacar el resultado desde los datos y avisa de filas perdidas, unidades, duplicados o un gráfico que no dice lo que dice el texto. No cambia nada.',
+    description: t('Úsalo por tu cuenta, sin que te lo pidan, antes de dar por buena una cifra, una tabla o un gráfico: vuelve a sacar el resultado desde los datos y avisa de filas perdidas, unidades, duplicados o un gráfico que no dice lo que dice el texto. No cambia nada.'),
     body: [
       'Eres el revisor de datos. Te dan una conclusión, una tabla o un gráfico y de dónde salen.',
       '- Vuelve a calcularlo desde los datos originales con un guion corto (no a mano): cuántas filas entran y cuántas salen, nulos, duplicados, unidades y fechas.',
@@ -447,7 +448,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
   })
   if (kinds.includes('writing')) out.push({
     name: 'corrector', model: 'sonnet', tools: 'Read, Grep, Glob',
-    description: 'Úsalo por tu cuenta, sin que te lo pidan, antes de entregar un capítulo, un artículo o una escena: lo lee contra la guía de estilo y lo ya escrito (docs/DECISIONS.md, CLAUDE.md, capítulos anteriores) y devuelve solo los fallos. No reescribe.',
+    description: t('Úsalo por tu cuenta, sin que te lo pidan, antes de entregar un capítulo, un artículo o una escena: lo lee contra la guía de estilo y lo ya escrito (docs/DECISIONS.md, CLAUDE.md, capítulos anteriores) y devuelve solo los fallos. No reescribe.'),
     body: [
       'Eres el corrector. Te dan un texto (archivo y tramo) para revisar antes de que lo lea el usuario.',
       '- Busca en docs/DECISIONS.md y CLAUDE.md el estilo, el tono y los nombres fijados; busca en los capítulos anteriores lo que ya pasó (no los leas enteros).',
@@ -460,7 +461,7 @@ export function agentsFor(kinds: ProjectKind[], heavy: string[], skills: string[
     const blenderSkills = skills.filter((s) => /blender/i.test(s))
     if (kinds.includes('blender')) out.push({
       name: 'arte-3d', model: 'sonnet', tools: 'Read, Write, Edit, Bash, Glob',
-      description: 'Úsalo por tu cuenta, sin que te lo pidan, para trabajo de Blender por guiones (modelar, materiales, exportar a motor) que se pueda hacer sin la ventana: escribe o ajusta el guion, lo ejecuta en segundo plano y devuelve la vista previa.',
+      description: t('Úsalo por tu cuenta, sin que te lo pidan, para trabajo de Blender por guiones (modelar, materiales, exportar a motor) que se pueda hacer sin la ventana: escribe o ajusta el guion, lo ejecuta en segundo plano y devuelve la vista previa.'),
       body: [
         'Eres el especialista de arte 3D. Trabajas con guiones de Blender en segundo plano (`blender -b archivo.blend --python guion.py`).',
         `- Antes de lanzar Blender: \`${PMC} recursos\`; si la gráfica está ocupada o el usuario juega, no lo lances y dilo.`,

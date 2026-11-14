@@ -3,6 +3,8 @@
 // writes the heartbeat in docs/RELEVO.md, commits what the account wrote, and keeps its reservations alive for whoever
 // takes over. Pure parts here; git and the database in cli/pmc.ts.
 
+import { ANY_HEARTBEAT, HEARTBEAT, IN_PROGRESS, PREVIOUS_HEARTBEAT, boldStart, docWords } from './docwords'
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 export function heartbeatLine(at: Date, account: string, text: string, t: HandoffTemplate = {}): string {
@@ -13,7 +15,7 @@ export function heartbeatLine(at: Date, account: string, text: string, t: Handof
   if (t.tested) parts.push(`Probado: ${flat(t.tested)}.`)
   if (t.next) parts.push(`Siguiente: ${flat(t.next)}.`)
   if (t.dontRedo) parts.push(`No rehacer: ${flat(t.dontRedo)}.`)
-  return `**Último latido:** ${when} · ${account} · ${parts.join(' ').replace(/\.\./g, '.')}`
+  return `**${docWords().heartbeat}:** ${when} · ${account} · ${parts.join(' ').replace(/\.\./g, '.')}`
 }
 
 /**
@@ -49,18 +51,18 @@ export function parseGuarda(args: string[]): { text: string; tested?: string; ne
 export function withHeartbeat(markdown: string, line: string): string {
   const nl = markdown.includes('\r\n') ? '\r\n' : '\n'
   const lines = markdown.split(/\r?\n/)
-  const i = lines.findIndex((l) => /^\*\*Último latido:?\*\*/i.test(l))
+  const i = lines.findIndex((l) => boldStart(HEARTBEAT + ':?\\*\\*').test(l))
   if (i >= 0) {
-    const previous = lines[i].replace(/^\*\*Último latido:?\*\*:?/i, '**Latido anterior:**')
+    const previous = lines[i].replace(boldStart(HEARTBEAT + ':?\\*\\*:?'), `**${docWords().previous}:**`)
     // An older «Latido anterior» right below (maybe after one blank line) is replaced, not piled up.
     let j = i + 1
-    if (lines[j] === '' && /^\*\*Latido anterior/i.test(lines[j + 1] ?? '')) j++
-    const drop = /^\*\*Latido anterior/i.test(lines[j] ?? '') ? 1 : 0
+    if (lines[j] === '' && boldStart(PREVIOUS_HEARTBEAT).test(lines[j + 1] ?? '')) j++
+    const drop = boldStart(PREVIOUS_HEARTBEAT).test(lines[j] ?? '') ? 1 : 0
     const gap = drop && j > i + 1 ? 1 : 0
     lines.splice(i, 1 + gap + drop, line, '', previous)
     return lines.join(nl)
   }
-  const ec = lines.findIndex((l) => /^\*\*En curso/i.test(l))
+  const ec = lines.findIndex((l) => boldStart(IN_PROGRESS).test(l))
   let at = ec
   if (at >= 0) { while (at + 1 < lines.length && lines[at + 1].trim() !== '') at++ }
   else at = Math.max(0, lines.findIndex((l) => /^# /.test(l)))
@@ -79,7 +81,7 @@ const STALE_MS = 90 * 60_000
 
 /** The «En curso» line of a RELEVO.md (its first line), if any. */
 export function enCursoLine(markdown: string): string | undefined {
-  return markdown.split(/\r?\n/).find((l) => /^\*\*En curso/i.test(l))
+  return markdown.split(/\r?\n/).find((l) => boldStart(IN_PROGRESS).test(l))
 }
 
 /** A reminder when «En curso» is another account's, or has not changed in STALE_SAVES saves or STALE_MS; and the new mark. */
@@ -88,7 +90,7 @@ export function staleEnCurso(line: string | undefined, account: string, prev: En
   let h = 0
   for (let i = 0; i < line.length; i++) h = (h * 31 + line.charCodeAt(i)) | 0
   const hash = String(h)
-  const head = line.match(/^\*\*En curso\s*\(([^)]*)\)/i)?.[1] ?? ''
+  const head = line.match(boldStart(IN_PROGRESS + '\\s*\\(([^)]*)\\)'))?.[1] ?? ''
   // «(claudeN, desde las…)»: whose it is goes first («siguiendo a claude1» later in it is not claude1's).
   if (/^claude\d/i.test(head.trim()) && !head.trim().toLowerCase().startsWith(account.toLowerCase())) return { reminder: `«En curso» de docs/RELEVO.md es de otra cuenta (${head.slice(0, 60)}): pon la tuya, con lo que haces y lo que queda, para quien te siga.`, mark: { hash, since: now, saves: 1 } }
   if (!prev || prev.hash !== hash) return { mark: { hash, since: now, saves: 1 } }
@@ -141,7 +143,7 @@ export function archiveRelevo(markdown: string, now: number, archiveName: string
     // The head: the heartbeats of the last day and always the three newest stay; older ones go. The rest stays as it is.
     const paras: string[][] = [[]]
     for (const l of b.lines) { if (l.trim() === '') paras.push([l]); else paras[paras.length - 1].push(l) }
-    const dateOf = (p: string[]) => { const first = p.find((l) => l.trim() !== '') ?? ''; return /^\*\*(Último latido|Latido)/i.test(first) ? leadingDate(first) : undefined }
+    const dateOf = (p: string[]) => { const first = p.find((l) => l.trim() !== '') ?? ''; return boldStart(ANY_HEARTBEAT).test(first) ? leadingDate(first) : undefined }
     const beats = paras.map((p, i) => ({ i, d: dateOf(p) })).filter((x): x is { i: number; d: number } => x.d !== undefined).sort((x, y) => y.d - x.d)
     const stay = new Set(beats.filter((x, n) => n < 3 || now - x.d <= HEAD_KEEP_MS).map((x) => x.i))
     paras.forEach((p, i) => (dateOf(p) !== undefined && !stay.has(i) ? out : keep).push(...p))

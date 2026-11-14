@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // EV145 (Decidir #149 «A», the user, 13-11): a skill of the accounts that only one project uses is taken to that project.
 // The accounts' skills reach every session of every project (here the six accounts even share one folder): the Unity,
 // Blender and game ones weighed on every Mission Control session without ever being used. Taken to its project, it is
@@ -32,7 +33,7 @@ function exclude(file: string, line: string): void {
 }
 
 export function takeSkillToProject(o: { name: string; projectId: string; accountSkillDirs: string[]; copies: string[]; gitExclude?: string }, file = movedFile(), now = Date.now()): MovedSkill {
-  if (!/^[\w.:-]+$/.test(o.name)) throw new Error(`Nombre de skill raro: ${o.name}`)
+  if (!/^[\w.:-]+$/.test(o.name)) throw new Error(t('Nombre de skill raro: {name}', { name: o.name }))
   // Accounts that share one skills folder (a link to another account's) count once.
   const bySkillsDir = new Map<string, string>()
   for (const d of o.accountSkillDirs) {
@@ -41,7 +42,7 @@ export function takeSkillToProject(o: { name: string; projectId: string; account
     try { const key = realpathSync(d).toLowerCase(); if (!bySkillsDir.has(key)) bySkillsDir.set(key, p) } catch { /* gone */ }
   }
   const sources = [...bySkillsDir.values()]
-  if (!sources.length) throw new Error(`${o.name} no está en las skills de ninguna cuenta`)
+  if (!sources.length) throw new Error(t('{name} no está en las skills de ninguna cuenta', { name: o.name }))
   const content = realpathSync(sources[0])
   const placed: string[] = []
   for (const c of [...new Set(o.copies)]) {
@@ -64,7 +65,7 @@ export function takeSkillToProject(o: { name: string; projectId: string; account
 export function returnSkill(name: string, file = movedFile()): MovedSkill {
   const all = readMoved(file)
   const m = all[name]
-  if (!m) throw new Error(`${name} no se llevó a ningún proyecto`)
+  if (!m) throw new Error(t('{name} no se llevó a ningún proyecto', { name: name }))
   for (const a of m.aside) if (existsSync(a)) bringBack(a)
   for (const p of m.placed) if (existsSync(join(p, 'SKILL.md'))) rmSync(p, { recursive: true, force: true })
   delete all[name]

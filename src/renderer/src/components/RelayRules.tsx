@@ -1,5 +1,6 @@
 // EV140 (Decidir #147 «B»): before the accounts hand over to each other for the first time, what Anthropic's rules say,
 // to read and accept. Once accepted (relayRulesAt), never asked again. The main process refuses it without this too.
+import { t } from '../../../core/i18n'
 import { useRef, useState, type ReactNode } from 'react'
 import { ShieldAlert, ExternalLink } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -28,9 +29,9 @@ export function useRelayRules(): { ask: () => Promise<boolean>; settingsOk: (pat
         <ul className="flex flex-col gap-2 t-body" style={{ paddingLeft: 18, listStyle: 'disc' }}>
           {RELAY_RULES.points.map((p) => <li key={p}>{p}</li>)}
         </ul>
-        <button className="btn btn-sm btn-ghost self-start" onClick={() => void api('openExternal', RELAY_RULES.link)}><ExternalLink size={13} /> Leer las normas de Anthropic</button>
+        <button className="btn btn-sm btn-ghost self-start" onClick={() => void api('openExternal', RELAY_RULES.link)}><ExternalLink size={13} /> {t('Leer las normas de Anthropic')}</button>
         <div className="flex flex-wrap gap-2 justify-end mt-1">
-          <button className="btn btn-sm" onClick={() => void close(false)}>Ahora no</button>
+          <button className="btn btn-sm" onClick={() => void close(false)}>{t('Ahora no')}</button>
           <button className="btn btn-sm btn-primary" onClick={() => void close(true)}>{RELAY_RULES.accept}</button>
         </div>
       </div>

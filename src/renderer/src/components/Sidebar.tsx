@@ -1,4 +1,5 @@
 import { motion } from 'motion/react'
+import { t } from '../../../core/i18n'
 import { LayoutGrid, Users, ListChecks, Images, MessageSquareText, Clock, GitBranch, Brain, Settings, Gavel, CalendarClock, MessageCircle, Repeat, Puzzle, Sparkles } from 'lucide-react'
 import { useStore, type Route } from '../lib/store'
 import { SPRING, ACCOUNT_COLOR, STATE_META, accLabel, accName } from './ui'
@@ -6,22 +7,22 @@ import { SPRING, ACCOUNT_COLOR, STATE_META, accLabel, accName } from './ui'
 // Grouped by what the user comes for (13-11, «que todo fluya mejor»): what waits for him, the Claudes, the project.
 export type NavGroup = 'tuyo' | 'claude' | 'proyecto' | 'ajustes'
 export const NAV: { route: Route; label: string; icon: typeof LayoutGrid; color: string; group: NavGroup }[] = [
-  { route: 'inicio', label: 'Inicio', icon: LayoutGrid, color: 'var(--blue)', group: 'tuyo' },
-  { route: 'decisiones', label: 'Decidir', icon: Gavel, color: 'var(--red)', group: 'tuyo' },
-  { route: 'revisiones', label: 'Revisar', icon: MessageSquareText, color: 'var(--yellow)', group: 'tuyo' },
+  { route: 'inicio', get label() { return t('Inicio') }, icon: LayoutGrid, color: 'var(--blue)', group: 'tuyo' },
+  { route: 'decisiones', get label() { return t('Decidir') }, icon: Gavel, color: 'var(--red)', group: 'tuyo' },
+  { route: 'revisiones', get label() { return t('Revisar') }, icon: MessageSquareText, color: 'var(--yellow)', group: 'tuyo' },
   // EV85: last of «lo tuyo», so Ctrl+1…3 stay where they were.
-  { route: 'asistente', label: 'Asistente', icon: Sparkles, color: 'var(--indigo)', group: 'tuyo' },
-  { route: 'relevos', label: 'Relevos', icon: Repeat, color: 'var(--green)', group: 'claude' },
-  { route: 'proximo', label: 'Próximo', icon: CalendarClock, color: 'var(--indigo)', group: 'claude' },
-  { route: 'chats', label: 'Chats', icon: MessageCircle, color: 'var(--teal)', group: 'claude' },
-  { route: 'agentes', label: 'Cuentas', icon: Users, color: 'var(--purple)', group: 'claude' },
-  { route: 'skills', label: 'Skills', icon: Puzzle, color: 'var(--pink)', group: 'claude' },
-  { route: 'tareas', label: 'Tareas', icon: ListChecks, color: 'var(--orange)', group: 'proyecto' },
-  { route: 'galeria', label: 'Galería', icon: Images, color: 'var(--pink)', group: 'proyecto' },
-  { route: 'cronologia', label: 'Cronología', icon: Clock, color: 'var(--indigo)', group: 'proyecto' },
-  { route: 'integracion', label: 'Ramas', icon: GitBranch, color: 'var(--gray)', group: 'proyecto' },
-  { route: 'memoria', label: 'Memoria', icon: Brain, color: 'var(--teal)', group: 'proyecto' },
-  { route: 'ajustes', label: 'Ajustes', icon: Settings, color: 'var(--gray)', group: 'ajustes' }
+  { route: 'asistente', get label() { return t('Asistente') }, icon: Sparkles, color: 'var(--indigo)', group: 'tuyo' },
+  { route: 'relevos', get label() { return t('Relevos') }, icon: Repeat, color: 'var(--green)', group: 'claude' },
+  { route: 'proximo', get label() { return t('Próximo') }, icon: CalendarClock, color: 'var(--indigo)', group: 'claude' },
+  { route: 'chats', get label() { return t('Chats') }, icon: MessageCircle, color: 'var(--teal)', group: 'claude' },
+  { route: 'agentes', get label() { return t('Cuentas') }, icon: Users, color: 'var(--purple)', group: 'claude' },
+  { route: 'skills', get label() { return t('Skills') }, icon: Puzzle, color: 'var(--pink)', group: 'claude' },
+  { route: 'tareas', get label() { return t('Tareas') }, icon: ListChecks, color: 'var(--orange)', group: 'proyecto' },
+  { route: 'galeria', get label() { return t('Galería') }, icon: Images, color: 'var(--pink)', group: 'proyecto' },
+  { route: 'cronologia', get label() { return t('Cronología') }, icon: Clock, color: 'var(--indigo)', group: 'proyecto' },
+  { route: 'integracion', get label() { return t('Ramas') }, icon: GitBranch, color: 'var(--gray)', group: 'proyecto' },
+  { route: 'memoria', get label() { return t('Memoria') }, icon: Brain, color: 'var(--teal)', group: 'proyecto' },
+  { route: 'ajustes', get label() { return t('Ajustes') }, icon: Settings, color: 'var(--gray)', group: 'ajustes' }
 ]
 
 function Item({ n, on, collapsed, badge, onClick }: { n: (typeof NAV)[number]; on: boolean; collapsed: boolean; badge?: number; onClick: () => void }) {
@@ -54,11 +55,11 @@ export function Sidebar({ width, collapsed }: { width: number; collapsed: boolea
   const allDecisions = Object.values(state?.pending ?? {}).reduce((n, x) => n + x.decisions, 0)
   const badge: Partial<Record<Route, number>> = { tareas: s?.tasks.review || undefined, revisiones: state?.commentsToReview || undefined, decisiones: allDecisions || undefined }
   return (
-    <nav className="sidebar" style={{ width }} aria-label="Navegación">
+    <nav className="sidebar" style={{ width }} aria-label={t('Navegación')}>
       <div className="flex-1 overflow-y-auto pt-2 pb-2">
         {NAV.filter((n) => n.group === 'tuyo').map((n) => <Item key={n.route} n={n} on={route === n.route} collapsed={collapsed} badge={badge[n.route]} onClick={() => go(n.route)} />)}
 
-        {!collapsed ? <div className="side-label">Los Claude</div> : <div className="h-4" />}
+        {!collapsed ? <div className="side-label">{t('Los Claude')}</div> : <div className="h-4" />}
         {NAV.filter((n) => n.group === 'claude').map((n) => <Item key={n.route} n={n} on={route === n.route} collapsed={collapsed} badge={badge[n.route]} onClick={() => go(n.route)} />)}
         <div className="h-1.5" />
         {(state?.agents ?? []).filter((a) => a.state !== 'baja' && a.state !== 'apartada').map((a) => (
@@ -77,7 +78,7 @@ export function Sidebar({ width, collapsed }: { width: number; collapsed: boolea
           </div>
         ))}
 
-        {!collapsed ? <div className="side-label truncate">{state?.projects.find((p) => p.id === state.activeProjectId)?.name ?? 'Proyecto'}</div> : <div className="h-4" />}
+        {!collapsed ? <div className="side-label truncate">{state?.projects.find((p) => p.id === state.activeProjectId)?.name ?? t('Proyecto')}</div> : <div className="h-4" />}
         {NAV.filter((n) => n.group === 'proyecto').map((n) => <Item key={n.route} n={n} on={route === n.route} collapsed={collapsed} badge={badge[n.route]} onClick={() => go(n.route)} />)}
       </div>
       <div className="pb-2 pt-1" style={{ borderTop: '0.5px solid var(--sep)' }}>

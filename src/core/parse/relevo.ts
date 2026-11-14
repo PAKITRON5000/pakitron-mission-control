@@ -1,6 +1,7 @@
 // Reads the heartbeats ("Último latido", "Latido anterior", "## Latido: ...") and the "En curso" line from RELEVO.md.
 import type { AccountId, Heartbeat } from '../types'
 import { stripMd } from './tasks'
+import { IN_PROGRESS } from '../docwords'
 
 const DATE_RE = /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/
 
@@ -18,10 +19,10 @@ export function parseRelevo(markdown: string, file: string): RelevoInfo {
   let enCurso: string | undefined
   for (const raw of markdown.split(/\r?\n/)) {
     if (!enCurso) {
-      const ec = raw.match(/^\*\*En curso[^*]*\*\*:?\s*(.+)$/i)
+      const ec = raw.match(new RegExp(`^\\*\\*${IN_PROGRESS}[^*]*\\*\\*:?\\s*(.+)$`, 'i'))
       if (ec) enCurso = stripMd(ec[1]).slice(0, 400)
     }
-    if (!/latido/i.test(raw)) continue
+    if (!/latido|heartbeat/i.test(raw)) continue
     const d = raw.match(DATE_RE)
     if (!d) continue
     const at = localTime(+d[1], +d[2], +d[3], +d[4], +d[5])

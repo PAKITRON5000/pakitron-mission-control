@@ -1,6 +1,7 @@
 // Interactive 3D viewer (three.js + React Three Fiber). GLB/glTF (Draco and meshopt too), FBX and OBJ are loaded straight
 // from the original file through pmc://, never copied or modified. Lighting is a procedural studio (RoomEnvironment),
 // so nothing is downloaded. Formats it cannot open (.blend) say so instead of pretending.
+import { t } from '../../../core/i18n'
 import { Component, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useLoader, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Html, Grid, useAnimations } from '@react-three/drei'
@@ -174,7 +175,7 @@ function Pin({ p, n, color }: { p: [number, number, number]; n: number; color: s
 function Fallback() {
   return (
     <Html center>
-      <div className="t-small c2 px-3 py-2 rounded-xl" style={{ background: 'var(--chrome)', backdropFilter: 'blur(12px)' }}>Cargando el modelo…</div>
+      <div className="t-small c2 px-3 py-2 rounded-xl" style={{ background: 'var(--chrome)', backdropFilter: 'blur(12px)' }}>{t('Cargando el modelo…')}</div>
     </Html>
   )
 }
@@ -226,8 +227,8 @@ export default function ModelStage({ id, name, picking, comments, draftPoint, on
       <div className="absolute inset-0 flex items-center justify-center p-6">
         <div className="group p-8 max-w-[460px] text-center">
           <Box size={30} className="mx-auto c3" />
-          <div className="t-head mt-3">{converted === 'working' ? 'Preparando el modelo con Blender…' : 'Blender no pudo exportar este archivo'}</div>
-          <div className="t-small c3 mt-1.5">{converted === 'working' ? 'Se hace una copia en GLB en segundo plano, sin abrir Blender ni tocar el original. La primera vez tarda unos segundos; después es instantáneo.' : convertError}</div>
+          <div className="t-head mt-3">{converted === 'working' ? t('Preparando el modelo con Blender…') : t('Blender no pudo exportar este archivo')}</div>
+          <div className="t-small c3 mt-1.5">{converted === 'working' ? t('Se hace una copia en GLB en segundo plano, sin abrir Blender ni tocar el original. La primera vez tarda unos segundos; después es instantáneo.') : convertError}</div>
           {converted === 'working' && <div className="skeleton h-1.5 rounded-full mt-4" />}
         </div>
       </div>
@@ -240,8 +241,8 @@ export default function ModelStage({ id, name, picking, comments, draftPoint, on
       <div className="absolute inset-0 flex items-center justify-center p-6">
         <div className="group p-8 max-w-[460px] text-center">
           <Box size={30} className="mx-auto c3" />
-          <div className="t-head mt-3">{error ? 'No se pudo abrir este modelo' : `Los archivos .${ext} no se ven aquí`}</div>
-          <div className="t-small c3 mt-1.5">{error ? error : ext === 'blend' ? 'Ábrelo en Blender. Para verlo aquí, exporta una copia en GLB; el original no se toca.' : 'Formatos que se ven aquí: GLB, glTF, FBX y OBJ.'}</div>
+          <div className="t-head mt-3">{error ? t('No se pudo abrir este modelo') : t('Los archivos .{ext} no se ven aquí', { ext: ext })}</div>
+          <div className="t-small c3 mt-1.5">{error ? error : ext === 'blend' ? t('Ábrelo en Blender. Para verlo aquí, exporta una copia en GLB; el original no se toca.') : t('Formatos que se ven aquí: GLB, glTF, FBX y OBJ.')}</div>
         </div>
       </div>
     )
@@ -264,21 +265,21 @@ export default function ModelStage({ id, name, picking, comments, draftPoint, on
       </Canvas>
       <div className="absolute left-4 bottom-4 flex flex-wrap items-center gap-2">
         <div className="seg" style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)' }}>
-          {([['solido', 'Sólido'], ['arcilla', 'Arcilla'], ['malla', 'Malla'], ['normales', 'Normales']] as const).map(([m, l]) => (
+          {([['solido', t('Sólido')], ['arcilla', t('Arcilla')], ['malla', t('Malla')], ['normales', t('Normales')]] as const).map(([m, l]) => (
             <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{mode === m && <div className="seg-thumb" />}<span>{l}</span></button>
           ))}
         </div>
-        <button className={`chip ${grid ? 'on' : ''}`} onClick={() => setGrid(!grid)}><Grid3x3 size={13} /> Suelo</button>
-        <button className={`chip ${spin ? 'on' : ''}`} onClick={() => setSpin(!spin)}><RefreshCw size={13} /> Girar</button>
-        {info && info.animations > 0 && <button className={`chip ${animate ? 'on' : ''}`} onClick={() => setAnimate(!animate)}>Animación</button>}
-        <button className="chip" onClick={() => setKey((k) => k + 1)}><RotateCcw size={13} /> Encuadrar</button>
+        <button className={`chip ${grid ? 'on' : ''}`} onClick={() => setGrid(!grid)}><Grid3x3 size={13} /> {t('Suelo')}</button>
+        <button className={`chip ${spin ? 'on' : ''}`} onClick={() => setSpin(!spin)}><RefreshCw size={13} /> {t('Girar')}</button>
+        {info && info.animations > 0 && <button className={`chip ${animate ? 'on' : ''}`} onClick={() => setAnimate(!animate)}>{t('Animación')}</button>}
+        <button className="chip" onClick={() => setKey((k) => k + 1)}><RotateCcw size={13} /> {t('Encuadrar')}</button>
       </div>
       {info && (
         <div className="absolute right-4 bottom-4 t-small c2 px-3 py-1.5 rounded-xl num" style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)' }}>
-          {info.triangles.toLocaleString('es-ES')} triángulos · {info.meshes} mallas · {info.materials} materiales{info.animations ? ` · ${info.animations} animaciones` : ''}
+          {t('{v0} triángulos · {meshes} mallas · {materials} materiales{v1}', { v0: info.triangles.toLocaleString('es-ES'), meshes: info.meshes, materials: info.materials, v1: info.animations ? t(' · {animations} animaciones', { animations: info.animations }) : '' })}
         </div>
       )}
-      {picking && <div className="absolute left-1/2 top-4 -translate-x-1/2 t-small px-3 py-1.5 rounded-xl" style={{ background: 'var(--accent)', color: 'white' }}>Pulsa sobre el modelo donde quieras comentar</div>}
+      {picking && <div className="absolute left-1/2 top-4 -translate-x-1/2 t-small px-3 py-1.5 rounded-xl" style={{ background: 'var(--accent)', color: 'white' }}>{t('Pulsa sobre el modelo donde quieras comentar')}</div>}
     </div>
   )
 }

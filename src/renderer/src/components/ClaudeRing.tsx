@@ -1,3 +1,4 @@
+import { locale, t } from '../../../core/i18n'
 import { useId } from 'react'
 import { motion } from 'motion/react'
 import type { AgentCard } from '../lib/api'
@@ -55,8 +56,8 @@ export function leftColor(left: number | undefined, base: string): string {
 
 export const hhmm = (ms: number, now: number) => {
   const d = new Date(ms)
-  const t = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-  return ms - now < 20 * 3600_000 ? t : `${d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '')} ${t}`
+  const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
+  return ms - now < 20 * 3600_000 ? time : `${d.toLocaleDateString(locale(), { weekday: 'short' }).replace('.', '')} ${time}`
 }
 
 function Arc({ r, stroke, frac, color, gid }: { r: number; stroke: number; frac?: number; color: string; gid: string }) {
@@ -101,8 +102,8 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
   const dot = Math.max(12, Math.round(size * 0.14))
   return (
     <div className="relative flex-none" style={{ width: size, height: size }} role="img"
-      aria-label={`Queda ${five.left != null ? Math.round(five.left) + ' %' : 'sin lectura'} de las 5 horas y ${week.left != null ? Math.round(week.left) + ' %' : 'sin lectura'} de la semana`}
-      title="Anillo de fuera: la semana. Anillo de dentro: las 5 horas. Lo coloreado es lo que queda.">
+      aria-label={t('Queda {v0} de las 5 horas y {v1} de la semana', { v0: five.left != null ? Math.round(five.left) + ' %' : t('sin lectura'), v1: week.left != null ? Math.round(week.left) + ' %' : t('sin lectura') })}
+      title={t('Anillo de fuera: la semana. Anillo de dentro: las 5 horas. Lo coloreado es lo que queda.')}>
       <svg width={size} height={size} viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} style={{ transform: 'rotate(-90deg)', overflow: 'visible' }}>
         <Arc r={r1} stroke={s} frac={week.left != null ? week.left / 100 : undefined} color={leftColor(week.left, base)} gid={`w${uid}`} />
         <Arc r={r2} stroke={s} frac={five.left != null ? five.left / 100 : undefined} color={leftColor(five.left, base)} gid={`f${uid}`} />
@@ -110,7 +111,7 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
         {lim ? (
           <>
-            <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginBottom: 3 }}>vuelve</span>
+            <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginBottom: 3 }}>{t('vuelve')}</span>
             <span className="num" style={{ fontSize: size * (lim.resetsAt - now < 20 * 3600_000 ? 0.2 : 0.14), fontWeight: 760, color: 'var(--red)', letterSpacing: '-0.02em' }}>{hhmm(lim.resetsAt, now)}</span>
           </>
         ) : tight ? (
@@ -119,7 +120,7 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
             {small
               ? <span style={{ fontSize: tiny(0.1), color: 'var(--label-2)', fontWeight: 650, marginTop: 2 }}>{tight.which === 'five' ? '5 h' : 'semana'}</span>
               : <>
-                <span style={{ fontSize: tiny(0.09), color: 'var(--label-2)', fontWeight: 650, marginTop: 1 }}>queda</span>
+                <span style={{ fontSize: tiny(0.09), color: 'var(--label-2)', fontWeight: 650, marginTop: 1 }}>{t('queda')}</span>
                 <span style={{ fontSize: tiny(0.085), color: 'var(--label-2)', fontWeight: 550 }}>{tight.which === 'five' ? '5 horas' : 'semana'}</span>
               </>}
           </>
@@ -128,7 +129,7 @@ export function ClaudeRing({ a, size = 100, now }: { a: AgentCard; size?: number
         )}
       </div>
       {a.state === 'trabajando' && (
-        <span className="absolute live-dot rounded-full" title="Trabajando ahora" style={{ right: -dot * 0.35, top: -dot * 0.35, width: dot, height: dot, background: STATE_META.trabajando.color, color: STATE_META.trabajando.color, boxShadow: '0 0 0 3px var(--bg-elev)' }} />
+        <span className="absolute live-dot rounded-full" title={t('Trabajando ahora')} style={{ right: -dot * 0.35, top: -dot * 0.35, width: dot, height: dot, background: STATE_META.trabajando.color, color: STATE_META.trabajando.color, boxShadow: '0 0 0 3px var(--bg-elev)' }} />
       )}
     </div>
   )
@@ -142,16 +143,16 @@ export function UsageBar({ a, which, now, compact }: { a: AgentCard; which: 'fiv
   const v = usageView(a, which, now)
   const base = ACCOUNT_COLOR[a.id]
   const color = leftColor(v.left, base)
-  const name = which === 'five' ? '5 horas' : 'Semana'
+  const name = which === 'five' ? '5 horas' : t('Semana')
   const fast = v.left != null && v.timeLeft != null && !v.out && v.left / 100 < v.timeLeft - 0.08
   // EV114: with the week used up, what is left of the 5 hours cannot be used: said so, and the bar greyed (13-11: Claude 1
   // showed «queda 21 %» in orange and «a este ritmo se acaba 14:02» with no week left).
   const weekOut = which === 'five' && !v.out && usageView(a, 'week', now).out
   if (weekOut) return (
     <div className="flex flex-col gap-1 min-w-0" style={{ opacity: 0.55 }}>
-      <div className="flex items-baseline gap-2 min-w-0"><span className={compact ? 't-small' : 't-body'} style={{ fontWeight: 600 }}>{name}</span><span className="ml-auto whitespace-nowrap c3" style={{ fontWeight: 650, fontSize: compact ? 13 : 15 }}>no se puede usar</span></div>
+      <div className="flex items-baseline gap-2 min-w-0"><span className={compact ? 't-small' : 't-body'} style={{ fontWeight: 600 }}>{name}</span><span className="ml-auto whitespace-nowrap c3" style={{ fontWeight: 650, fontSize: compact ? 13 : 15 }}>{t('no se puede usar')}</span></div>
       <div style={{ height: compact ? 7 : 9, borderRadius: 99, background: 'var(--fill-2)' }} />
-      <div className="t-small c3 truncate">mientras la semana esté agotada no cuenta lo que quede de las 5 horas</div>
+      <div className="t-small c3 truncate">{t('mientras la semana esté agotada no cuenta lo que quede de las 5 horas')}</div>
     </div>
   )
   return (
@@ -159,10 +160,10 @@ export function UsageBar({ a, which, now, compact }: { a: AgentCard; which: 'fiv
       <div className="flex items-baseline gap-2 min-w-0">
         <span className={compact ? 't-small' : 't-body'} style={{ fontWeight: 600 }}>{name}</span>
         <span className="ml-auto num whitespace-nowrap" style={{ fontWeight: 700, fontSize: compact ? 13 : 15, color: v.left == null ? 'var(--label-3)' : color }}>
-          {v.out ? 'agotada' : v.left == null ? 'sin lectura' : v.renewedAt ? 'entera' : `queda ${Math.round(v.left)} %`}
+          {v.out ? 'agotada' : v.left == null ? t('sin lectura') : v.renewedAt ? 'entera' : t('queda {v0} %', { v0: Math.round(v.left) })}
         </span>
       </div>
-      <div className="relative" style={{ height: compact ? 7 : 9, borderRadius: 99, background: 'var(--fill-2)' }} title={v.timeLeft != null ? 'La raya marca el tiempo que falta hasta que se renueva: si la barra llega más allá de la raya, te dura de sobra' : undefined}>
+      <div className="relative" style={{ height: compact ? 7 : 9, borderRadius: 99, background: 'var(--fill-2)' }} title={v.timeLeft != null ? t('La raya marca el tiempo que falta hasta que se renueva: si la barra llega más allá de la raya, te dura de sobra') : undefined}>
         {v.left != null && v.left > 0 && (
           <motion.i className="block absolute left-0 top-0 bottom-0" style={{ borderRadius: 99, background: `linear-gradient(90deg, color-mix(in srgb, ${color} 72%, white), ${color})` }}
             initial={{ width: 0 }} animate={{ width: `${Math.max(2, v.left)}%` }} transition={{ ...SPRING, duration: 0.8 }} />
@@ -171,12 +172,12 @@ export function UsageBar({ a, which, now, compact }: { a: AgentCard; which: 'fiv
           <span className="absolute" style={{ left: `calc(${v.timeLeft * 100}% - 1px)`, top: -3, bottom: -3, width: 2, borderRadius: 2, background: 'var(--label-2)' }} />
         )}
       </div>
-      <div className="t-small c3 truncate" title={v.resetsAt ? `Se renueva el ${new Date(v.resetsAt).toLocaleString('es-ES')}` : undefined}>
-        {v.out && v.resetsAt ? <>vuelve <b className="c2">{hhmm(v.resetsAt, now)}</b> · en {countdown(v.resetsAt, now)}</>
-          : v.renewedAt ? <>se renovó {hhmm(v.renewedAt, now)} y no ha trabajado desde entonces</>
-          : v.used != null && v.resetsAt ? <>gastado {Math.round(v.used)} % · se renueva <b className="c2">{hhmm(v.resetsAt, now)}</b>{!compact && <> (en {countdown(v.resetsAt, now)})</>}
-            {v.emptyAt ? <span style={{ color: 'var(--orange)' }}> · a este ritmo se acaba {hhmm(v.emptyAt, now)}</span> : fast ? <span style={{ color: 'var(--orange)' }}> · ritmo alto</span> : !compact ? <span style={{ color: 'var(--green)' }}> · te dura de sobra</span> : null}</>
-          : 'llega con la próxima respuesta de esta cuenta'}
+      <div className="t-small c3 truncate" title={v.resetsAt ? t('Se renueva el {v0}', { v0: new Date(v.resetsAt).toLocaleString(locale()) }) : undefined}>
+        {v.out && v.resetsAt ? <>{t('vuelve')} <b className="c2">{hhmm(v.resetsAt, now)}</b> {t('· en {v0}', { v0: countdown(v.resetsAt, now) })}</>
+          : v.renewedAt ? <>{t('se renovó {v0} y no ha trabajado desde entonces', { v0: hhmm(v.renewedAt, now) })}</>
+          : v.used != null && v.resetsAt ? <>{t('gastado {v0} % · se renueva', { v0: Math.round(v.used) })} <b className="c2">{hhmm(v.resetsAt, now)}</b>{!compact && <> {t('(en {v0})', { v0: countdown(v.resetsAt, now) })}</>}
+            {v.emptyAt ? <span style={{ color: 'var(--orange)' }}> {t('· a este ritmo se acaba {v0}', { v0: hhmm(v.emptyAt, now) })}</span> : fast ? <span style={{ color: 'var(--orange)' }}> {t('· ritmo alto')}</span> : !compact ? <span style={{ color: 'var(--green)' }}> {t('· te dura de sobra')}</span> : null}</>
+          : t('llega con la próxima respuesta de esta cuenta')}
       </div>
     </div>
   )
@@ -190,7 +191,7 @@ export function UsageBars({ a, now, compact }: { a: AgentCard; now: number; comp
       <UsageBar a={a} which="week" now={now} compact={compact} />
       {/* EV105: an account that is not working keeps its last reading; say how old it is. */}
       {a.usage.snapshot && now - a.usage.snapshot.capturedAt > 30 * 60_000 && (
-        <span className="t-small c3">Leído hace {countdown(now, a.usage.snapshot.capturedAt)}{compact ? '' : ', la última vez que trabajó'}</span>
+        <span className="t-small c3">{t('Leído hace {v0}{v1}', { v0: countdown(now, a.usage.snapshot.capturedAt), v1: compact ? '' : t(', la última vez que trabajó') })}</span>
       )}
     </div>
   )
@@ -200,7 +201,7 @@ export function UsageBars({ a, now, compact }: { a: AgentCard; now: number; comp
 export function freeLabel(a: AgentCard, now: number): string {
   const five = usageView(a, 'five', now)
   const week = usageView(a, 'week', now)
-  if (five.left == null && week.left == null) return 'Uso sin lectura'
+  if (five.left == null && week.left == null) return t('Uso sin lectura')
   const f = (v: UsageView) => (v.out ? 'agotado' : v.left == null ? '—' : `${Math.round(v.left)} %`)
-  return `Queda ${f(five)} de 5 h · ${f(week)} de la semana`
+  return t('Queda {v0} de 5 h · {v1} de la semana', { v0: f(five), v1: f(week) })
 }

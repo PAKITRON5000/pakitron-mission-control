@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Two small things the hooks and the app share through plain files, so neither costs any usage:
 //   - what each account is doing right now (the last tool it ran, what it said when it stopped), written by `pmc hook`;
 //   - the files the user left a note on, which no Claude may overwrite or delete, and the copy kept of each.
@@ -32,12 +33,12 @@ export function describeHook(data: any): (Activity & { message?: string }) | und
   }
   if (ev === 'Stop') {
     const m = typeof data?.last_assistant_message === 'string' ? data.last_assistant_message.trim() : ''
-    return { ...base, text: 'Ha terminado un turno', message: m ? short(m.replace(/\s+/g, ' '), 700) : undefined }
+    return { ...base, text: t('Ha terminado un turno'), message: m ? short(m.replace(/\s+/g, ' '), 700) : undefined }
   }
-  if (ev === 'SessionStart') return { ...base, text: data?.source === 'resume' ? 'Retoma una sesión' : data?.source === 'compact' ? 'Sigue tras compactar' : 'Empieza una sesión' }
-  if (ev === 'SessionEnd') return { ...base, text: 'Ha cerrado la sesión' }
-  if (ev === 'StopFailure') return { ...base, text: `Se ha parado: ${data?.error ?? 'error'}` }
-  if (ev === 'PreCompact') return { ...base, text: 'Compacta su conversación' }
+  if (ev === 'SessionStart') return { ...base, text: data?.source === 'resume' ? t('Retoma una sesión') : data?.source === 'compact' ? t('Sigue tras compactar') : t('Empieza una sesión') }
+  if (ev === 'SessionEnd') return { ...base, text: t('Ha cerrado la sesión') }
+  if (ev === 'StopFailure') return { ...base, text: t('Se ha parado: {v0}', { v0: data?.error ?? 'error' }) }
+  if (ev === 'PreCompact') return { ...base, text: t('Compacta su conversación') }
   return undefined
 }
 

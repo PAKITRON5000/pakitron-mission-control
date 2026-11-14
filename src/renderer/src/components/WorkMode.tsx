@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { Bot } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { api } from '../lib/api'
@@ -27,21 +28,21 @@ export function WorkModeCard() {
   const fits = modeOf(state.settings) === advice.mode && (advice.fronts === 1 || (state.settings.maxFronts ?? 1) >= advice.fronts)
   return (
       <div className="card p-4 mb-5 flex flex-col gap-3">
-        <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap"><Bot size={15} style={{ color: 'var(--indigo)' }} /><b className="t-body">Cómo trabajan los Claude</b><span className="t-small c3">· en todos los proyectos{wheels.length ? `; en ${wheels.join(' y ')} manda su rueda (abajo)` : ''}</span></div>
+        <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap"><Bot size={15} style={{ color: 'var(--indigo)' }} /><b className="t-body">{t('Cómo trabajan los Claude')}</b><span className="t-small c3">{t('· en todos los proyectos{v0}', { v0: wheels.length ? t('; en {names} manda su rueda (abajo)', { names: wheels.join(', ') }) : '' })}</span></div>
         <div className="rounded-xl p-3 flex items-start gap-3" style={{ background: fits ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'color-mix(in srgb, var(--orange) 14%, transparent)' }}>
-          <span className="min-w-0 flex-1"><b className="t-body block">{advice.title}{fits ? ' · así está' : ''}</b><span className="t-small c2 block mt-0.5">{advice.why}</span>
+          <span className="min-w-0 flex-1"><b className="t-body block">{advice.title}{fits ? t(' · así está') : ''}</b><span className="t-small c2 block mt-0.5">{advice.why}</span>
             {/* EV128: while the user has not picked one, the app keeps it fitting the accounts there are. */}
-            {state.settings.workModeBy === 'app' && <span className="t-small c3 block mt-1">La app lo ajusta sola a las cuentas que tengas {state.settings.relayRulesAt ? ' (si inicias sesión en otra, se pasa a relevos)' : ''} mientras no elijas tú otra forma abajo.</span>}
+            {state.settings.workModeBy === 'app' && <span className="t-small c3 block mt-1">{t('La app lo ajusta sola a las cuentas que tengas {v0} mientras no elijas tú otra forma abajo.', { v0: state.settings.relayRulesAt ? t(' (si inicias sesión en otra, se pasa a relevos)') : '' })}</span>}
           </span>
           {/* «Ponerlo así» takes the advice and leaves the app in charge of keeping it fitting. */}
-          {!fits && <button className="btn btn-sm btn-primary flex-none" onClick={() => void attempt(async () => { if (!(await setS({ ...settingsFor(advice.mode), maxFronts: advice.fronts, workModeBy: 'app' }))) return; await refresh(); toast(advice.title) })}>Ponerlo así</button>}
+          {!fits && <button className="btn btn-sm btn-primary flex-none" onClick={() => void attempt(async () => { if (!(await setS({ ...settingsFor(advice.mode), maxFronts: advice.fronts, workModeBy: 'app' }))) return; await refresh(); toast(advice.title) })}>{t('Ponerlo así')}</button>}
         </div>
         {(() => {
           const current = modeOf(state.settings)
           const info = WORK_MODES.find((m) => m.id === current)
           return (
             <>
-              <div className="grid gap-3" role="radiogroup" aria-label="Cómo trabajan los Claude" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+              <div className="grid gap-3" role="radiogroup" aria-label={t('Cómo trabajan los Claude')} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
                 {WORK_MODES.map((m) => {
                   const on = current === m.id
                   return (
@@ -53,42 +54,42 @@ export function WorkModeCard() {
                   )
                 })}
               </div>
-              <div className="t-small c2">{info ? info.happens : 'Ahora mismo los ajustes finos están puestos a mano y no coinciden con ninguna de las tres formas: elige una para volver a algo claro.'} En cualquier caso, nunca se abre una segunda ventana de la misma cuenta ni una cuenta «No usar» o «De baja» (salvo la cuenta de reserva, en su proyecto, cuando todas las demás están sin uso).</div>
+              <div className="t-small c2">{t('{v0} En cualquier caso, nunca se abre una segunda ventana de la misma cuenta ni una cuenta «No usar» o «De baja» (salvo la cuenta de reserva, en su proyecto, cuando todas las demás están sin uso).', { v0: info ? info.happens : t('Ahora mismo los ajustes finos están puestos a mano y no coinciden con ninguna de las tres formas: elige una para volver a algo claro.') })}</div>
             </>
           )
         })()}
         {/* Always in sight (13-11: folded, the user did not find «Reparto automático»; the configuration is seen, not hidden). */}
         <div className="flex flex-col gap-3 mt-1 pt-3" style={{ borderTop: '1px solid var(--sep)' }}>
-          <div><b className="t-small c2">Ajustes finos, uno a uno</b><span className="t-small c3"> · las tres formas de arriba los ponen solos; aquí cambias cada uno por separado</span></div>
+          <div><b className="t-small c2">{t('Ajustes finos, uno a uno')}</b><span className="t-small c3">{t(' · las tres formas de arriba los ponen solos; aquí cambias cada uno por separado')}</span></div>
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {([
-            ['autonomous', 'Modo autónomo', 'Nadie se queda parado: cada cuenta sigue hasta que el límite la corta y arranca sola cuando se restablece. Sin tareas, piensa qué mejorar en su proyecto y lo apunta; si no hay nada, pasa a otro proyecto. A una ventana concreta la paras escribiéndole «para».'],
-            ['autoRelay', 'Relevo automático', 'Cuando una cuenta se queda sin uso, se abre sola la siguiente del turno y sigue su trabajo.'],
-            ['autoPlan', 'Reparto automático', 'Si en un proyecto en el que se trabajó hoy quedan tareas y nadie está con ellas, se abre sola la siguiente cuenta. Nunca mientras juegas.'],
+            ['autonomous', t('Modo autónomo'), t('Nadie se queda parado: cada cuenta sigue hasta que el límite la corta y arranca sola cuando se restablece. Sin tareas, piensa qué mejorar en su proyecto y lo apunta; si no hay nada, pasa a otro proyecto. A una ventana concreta la paras escribiéndole «para».')],
+            ['autoRelay', t('Relevo automático'), t('Cuando una cuenta se queda sin uso, se abre sola la siguiente del turno y sigue su trabajo.')],
+            ['autoPlan', t('Reparto automático'), t('Si en un proyecto en el que se trabajó hoy quedan tareas y nadie está con ellas, se abre sola la siguiente cuenta. Nunca mientras juegas.')],
             // EV141 (Decidir #148 «A»): off at first; «Ver» in Chats opens any of them in a window, to watch it or write to it.
-            ['bgSessions', 'Sin ventanas (en pruebas)', 'La rueda da cada turno a una sesión de Claude Code que trabaja sin ventana. En Chats, «Ver» abre cualquiera en una ventana para mirarla o escribirle.'],
+            ['bgSessions', t('Sin ventanas (en pruebas)'), t('La rueda da cada turno a una sesión de Claude Code que trabaja sin ventana. En Chats, «Ver» abre cualquiera en una ventana para mirarla o escribirle.')],
             // EV149 (Decidir #150): «usar toda la potencia del pc».
-            ['fullPower', 'Toda la potencia', 'Aunque tengas abierto Premiere u otro editor, los Claude pueden lanzar lo pesado (Unity, Blender, la gráfica). Si estás jugando, siguen esperando.']
+            ['fullPower', t('Toda la potencia'), t('Aunque tengas abierto Premiere u otro editor, los Claude pueden lanzar lo pesado (Unity, Blender, la gráfica). Si estás jugando, siguen esperando.')]
           ] as const).map(([key, label, sub]) => {
             const on = Boolean(state.settings[key])
             return (
               <button key={key} role="switch" aria-checked={on} className="text-left rounded-xl p-3 border-0 flex gap-3 items-start" style={{ background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'var(--fill)' }}
-                onClick={() => void attempt(async () => { if (!(await setS({ [key]: !on }))) return; await refresh(); toast(`${label}: ${on ? 'apagado' : 'encendido'}`) })}>
+                onClick={() => void attempt(async () => { if (!(await setS({ [key]: !on }))) return; await refresh(); toast(t('{label}: {v0}', { label, v0: on ? t('apagado') : t('encendido') })) })}>
                 <span className="flex-none rounded-full mt-0.5" style={{ width: 34, height: 20, background: on ? 'var(--green)' : 'var(--sep)', position: 'relative', transition: 'background 160ms ease' }}>
                   <span className="rounded-full" style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 16, height: 16, background: '#fff', transition: 'left 160ms ease' }} />
                 </span>
-                <span className="min-w-0"><b className="t-body block">{label} <span className="t-small" style={{ color: on ? 'var(--green)' : 'var(--c3, inherit)', fontWeight: 500 }}>· {on ? 'encendido' : 'apagado'}</span></b><span className="t-small c3 block mt-0.5">{sub}</span></span>
+                <span className="min-w-0"><b className="t-body block">{label} <span className="t-small" style={{ color: on ? 'var(--green)' : 'var(--c3, inherit)', fontWeight: 500 }}>· {on ? t('encendido') : t('apagado')}</span></b><span className="t-small c3 block mt-0.5">{sub}</span></span>
               </button>
             )
           })}
         </div>
-        <div className="t-small c2 flex items-center gap-2 flex-wrap">Cuentas a la vez en un mismo proyecto (tope para el relevo y el reparto):
+        <div className="t-small c2 flex items-center gap-2 flex-wrap">{t('Cuentas a la vez en un mismo proyecto (tope para el relevo y el reparto):')}
           <Segmented value={String(state.settings.maxFronts ?? 1)} onChange={(v) => void attempt(async () => { await api('setSettings', { maxFronts: Number(v) }); await refresh() })}
             options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }]} />
         </div>
         <div className="flex flex-col gap-2 mt-1">
-          <b className="t-small c3">Cómo se relevan las cuentas</b>
-          <div className="grid gap-3" role="radiogroup" aria-label="Cómo se relevan las cuentas" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          <b className="t-small c3">{t('Cómo se relevan las cuentas')}</b>
+          <div className="grid gap-3" role="radiogroup" aria-label={t('Cómo se relevan las cuentas')} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
             {RELAY_MODES.map((m) => {
               const on = (state.settings.relayMode ?? 'conjunto') === m.id
               return (
@@ -106,11 +107,11 @@ export function WorkModeCard() {
             const on = Boolean(state.settings.heavyTurns)
             return (
               <button role="switch" aria-checked={on} className="text-left rounded-xl p-3 border-0 flex gap-3 items-start" style={{ background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'var(--fill)' }}
-                onClick={() => void attempt(async () => { await api('setSettings', { heavyTurns: !on }); await refresh(); toast(`Trabajo pesado por turnos: ${on ? 'apagado' : 'encendido'}`) })}>
+                onClick={() => void attempt(async () => { await api('setSettings', { heavyTurns: !on }); await refresh(); toast(t('Trabajo pesado por turnos: {v0}', { v0: on ? t('apagado') : t('encendido') })) })}>
                 <span className="flex-none rounded-full mt-0.5" style={{ width: 34, height: 20, background: on ? 'var(--green)' : 'var(--sep)', position: 'relative', transition: 'background 160ms ease' }}>
                   <span className="rounded-full" style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 16, height: 16, background: '#fff', transition: 'left 160ms ease' }} />
                 </span>
-                <span className="min-w-0"><b className="t-body block">Trabajo pesado por turnos <span className="t-small" style={{ color: on ? 'var(--green)' : 'var(--c3, inherit)', fontWeight: 500 }}>· {on ? 'encendido' : 'apagado'}</span></b><span className="t-small c3 block mt-0.5">Si una vuelve mientras otra está con Unity o Blender en su proyecto, se le avisa en su ventana: sigue con lo ligero o para; cuando la otra suelta lo pesado o se queda sin uso, le escribe «te toca» en su mismo chat. Con tareas ligeras trabajan las dos a la vez.</span></span>
+                <span className="min-w-0"><b className="t-body block">{t('Trabajo pesado por turnos')} <span className="t-small" style={{ color: on ? 'var(--green)' : 'var(--c3, inherit)', fontWeight: 500 }}>· {on ? t('encendido') : t('apagado')}</span></b><span className="t-small c3 block mt-0.5">{t('Si una vuelve mientras otra está con Unity o Blender en su proyecto, se le avisa en su ventana: sigue con lo ligero o para; cuando la otra suelta lo pesado o se queda sin uso, le escribe «te toca» en su mismo chat. Con tareas ligeras trabajan las dos a la vez.')}</span></span>
               </button>
             )
           })()}

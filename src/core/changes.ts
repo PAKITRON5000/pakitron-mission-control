@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // What the user asks to change after reviewing a task (the user, 5-11): the note stays attached to the task, can be edited
 // or taken back, says where it is on its way to the Claude, and moves the task out of «Para revisar» until it is done.
 import type { DB } from './db'
@@ -40,7 +41,7 @@ export function responsibleFor(db: DB, projectId: string, owner?: string): Accou
 
 function bodyFor(extId: string | undefined, title: string, note: string): string {
   const after = extId ? `Cuando esté, enséñaselo con pmc entrega ${extId} --que … --mirar … --foto …: así vuelve a «Para revisar».` : 'Cuando esté, díselo para que lo vuelva a mirar.'
-  return `${REVIEW_PREFIX} de ${extId ?? 'una tarea'} («${title}»): ${note} ${after}`
+  return t('{REVIEW_PREFIX} de {v0} («{title}»): {note} {after}', { REVIEW_PREFIX: REVIEW_PREFIX, v0: extId ?? 'una tarea', title: title, note: note, after: after })
 }
 
 const send = (db: DB, c: { projectId: string; target?: AccountId; urgent: boolean; body: string }) =>
@@ -48,7 +49,7 @@ const send = (db: DB, c: { projectId: string; target?: AccountId; urgent: boolea
 
 function getRow(db: DB, id: number): any {
   const r = db.prepare(`${SELECT} WHERE c.id = ?`).get(id)
-  if (!r) throw new Error('Esa nota ya no existe')
+  if (!r) throw new Error(t('Esa nota ya no existe'))
   return r
 }
 
@@ -118,7 +119,7 @@ export function finishChange(db: DB, projectId: string, extId: string, now = Dat
   for (const r of rows) {
     db.prepare("UPDATE task_changes SET status = 'hecho', done_at = ?, updated_at = ? WHERE id = ?").run(now, now, r.id)
     if (r.instruction_id) db.prepare("UPDATE instructions SET status = 'ejecutada', updated_at = ? WHERE id = ?").run(now, r.instruction_id)
-    addEvent(db, { projectId, at: now, account: r.target ?? undefined, kind: 'tarea', title: `${extId}: cambios hechos, vuelve a «Para revisar»`, source: 'pmc entrega' })
+    addEvent(db, { projectId, at: now, account: r.target ?? undefined, kind: 'tarea', title: t('{extId}: cambios hechos, vuelve a «Para revisar»', { extId: extId }), source: 'pmc entrega' })
   }
   return rows.length
 }

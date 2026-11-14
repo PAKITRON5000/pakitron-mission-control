@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Reads a Claude conversation from its saved file into something a chat screen can show: what the user wrote, what Claude
 // answered, and the steps in between in a few words. Read only, and only the end of the file: these files get very large.
 import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs'
@@ -119,7 +120,7 @@ export function limitInSpanish(text: string): string {
     const day = r[1] && r[2] ? `el ${Number(r[2])} ${MONTHS[r[1].toLowerCase()] ?? r[1]} ` : ''
     when = ` · vuelve ${day}${h === 1 ? 'a la' : 'a las'} ${h}:${r[4] ?? '00'}`
   }
-  return `Se quedó sin uso${what}${when}`
+  return t('Se quedó sin uso{what}{when}', { what: what, when: when })
 }
 
 export function readChat(file: string, limit = 60, bytes = 3 << 20): ChatTail | undefined {

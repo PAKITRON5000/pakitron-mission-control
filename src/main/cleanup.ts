@@ -1,3 +1,4 @@
+import { t } from '../core/i18n'
 // A clean project (EV100), the measuring: in the background and in small steps (the main process must never stall; a
 // game project's copies hold tens of GB), each copy of a project is walked once: the caches and builds that come back by
 // themselves, and the heavy files, each put in its pile by core/cleanup.ts. Nothing is moved or deleted here.
@@ -63,7 +64,7 @@ export function createCleanup(d: { service: Service }) {
 
   async function scan(projectId: string): Promise<CleanView> {
     const p = service.project(projectId)
-    if (!p) throw new Error('Proyecto desconocido')
+    if (!p) throw new Error(t('Proyecto desconocido'))
     const cur = views.get(projectId)
     if (cur?.running) return cur
     const view: CleanView = { at: Date.now(), running: true, items: [], totals: { sobra: 0, dudoso: 0, queda: 0 }, scanned: 0 }
@@ -73,7 +74,7 @@ export function createCleanup(d: { service: Service }) {
     const names = named(projectId)
     const marks = readMarks()
     const working = service.agents.flatMap((a) => a.sessions.filter((s) => isSessionWorking(s)).map((s) => s.cwd.toLowerCase()))
-    const copies = [{ path: p.root, label: 'Copia principal', main: true }, ...p.copies.filter((c) => c.path.toLowerCase() !== p.root.toLowerCase()).map((c) => ({ ...c, main: false }))]
+    const copies = [{ path: p.root, label: t('Copia principal'), main: true }, ...p.copies.filter((c) => c.path.toLowerCase() !== p.root.toLowerCase()).map((c) => ({ ...c, main: false }))]
     try {
       for (const c of copies) {
         // In use: someone works there now, or a Claude wrote a file in it these 7 days (the game project's «rachas» is its working
@@ -137,7 +138,7 @@ export function createCleanup(d: { service: Service }) {
   /** Only what the last measure put in that pile, and inside the project: nothing else is ever touched from here. */
   function itemOf(pid: string, path: string, pile: Pile): CleanItem {
     const it = views.get(pid)?.items.find((x) => x.path === path && x.pile === pile)
-    if (!it) throw new Error('Mídelo otra vez: no está en ese montón')
+    if (!it) throw new Error(t('Mídelo otra vez: no está en ese montón'))
     return it
   }
 
@@ -148,7 +149,7 @@ export function createCleanup(d: { service: Service }) {
     const v = views.get(pid)!
     v.items = v.items.filter((x) => x !== it)
     v.totals.sobra = Math.max(0, v.totals.sobra - it.size)
-    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: `A la papelera: ${it.rel} (${Math.round(it.size / 1048576)} MB) · ${it.why}`, detail: it.path, source: 'Mission Control' })
+    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: t('A la papelera: {rel} ({v0} MB) · {why}', { rel: it.rel, v0: Math.round(it.size / 1048576), why: it.why }), detail: it.path, source: 'Mission Control' })
     service.push()
     return it.rel
   }
@@ -171,11 +172,11 @@ export function createCleanup(d: { service: Service }) {
   async function restore(pid: string, from: string): Promise<string> {
     const list = readIndex(pid)
     const a = list.find((x) => x.from === from)
-    if (!a) throw new Error('Ya no está apartado')
+    if (!a) throw new Error(t('Ya no está apartado'))
     mkdirSync(dirname(a.from), { recursive: true })
     try { await rename(a.to, a.from) } catch { await cp(a.to, a.from, { recursive: true }); await rm(a.to, { recursive: true, force: true }) }
     writeIndex(pid, list.filter((x) => x !== a))
-    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: `Devuelto a su sitio: ${a.name}`, detail: a.from, source: 'Mission Control' })
+    addEvent(service.db, { projectId: pid, at: Date.now(), kind: 'limpieza', title: t('Devuelto a su sitio: {name}', { name: a.name }), detail: a.from, source: 'Mission Control' })
     service.push()
     return a.name
   }
@@ -196,7 +197,7 @@ export function createCleanup(d: { service: Service }) {
           try {
             await shell.trashItem(a.to)
             writeIndex(p.id, readIndex(p.id).filter((x) => x.from !== a.from))
-            addEvent(service.db, { projectId: p.id, at: now, kind: 'limpieza', title: `A la papelera tras estar apartado sin que nadie lo pidiera: ${a.name}`, detail: a.from, source: 'Mission Control' })
+            addEvent(service.db, { projectId: p.id, at: now, kind: 'limpieza', title: t('A la papelera tras estar apartado sin que nadie lo pidiera: {name}', { name: a.name }), detail: a.from, source: 'Mission Control' })
           } catch { /* next round */ }
         }
       }

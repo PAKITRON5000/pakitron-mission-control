@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131 · «Columna»: the whole app in one narrow column, like on the phone, with its tabs at the bottom and «Más» for the
 // rest. For keeping it at one side of the screen while working on the other.
 import { useState } from 'react'
@@ -21,7 +22,7 @@ export default function Columna() {
       <div className="col-stage">
         <div className="col-frame">
           <ScreenBox route={route} className="col-content">{!inTabs && <PanelBar route={route} onBack={() => go('inicio')} />}</ScreenBox>
-          <nav className="col-tabs" aria-label="Apartados">
+          <nav className="col-tabs" aria-label={t('Apartados')}>
             {TABS.map((r) => {
               const n = NAV.find((x) => x.route === r)!
               return (
@@ -34,13 +35,13 @@ export default function Columna() {
             })}
             <button className={`col-tab ${!inTabs ? 'on' : ''}`} onClick={() => setMore(true)} aria-haspopup="dialog">
               <span className="icon-sq" style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--fill-2)', color: 'var(--label)' }}><Menu size={15} /></span>
-              <span>Más</span>
+              <span>{t('Más')}</span>
               {moreBadge ? <span className="col-badge pill num">{moreBadge}</span> : null}
             </button>
           </nav>
           {more && (
             <div className="col-more" onClick={() => setMore(false)}>
-              <div className="col-more-sheet" role="dialog" aria-label="Todos los apartados" onClick={(e) => e.stopPropagation()}>
+              <div className="col-more-sheet" role="dialog" aria-label={t('Todos los apartados')} onClick={(e) => e.stopPropagation()}>
                 {NAV.filter((n) => !TABS.includes(n.route)).map((n) => (
                   <button key={n.route} className="col-more-item" onClick={() => { go(n.route); setMore(false) }}>
                     <NavIcon route={n.route} size={40} />

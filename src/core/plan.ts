@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // How many accounts are worth running at once on a project, and on what (EV20; the user, 12-11: «debe autogestionarse»).
 // Only the decision, as a pure function; launching is the app's. The rule (docs/MISION.md): parallel work is limited by
 // what cannot be shared, not by how many accounts are free. A front is one account in one copy of the project doing one
@@ -85,12 +86,12 @@ export interface StaffInput {
  */
 export function staffGap(i: StaffInput): { open: number; why: string } {
   const now = i.now ?? Date.now()
-  if (i.playing) return { open: 0, why: 'el usuario está jugando: no se abren ventanas' }
-  if (!i.lastActivityAt || now - i.lastActivityAt > STAFF_RECENT_MS) return { open: 0, why: 'nadie ha trabajado en este proyecto en el último día' }
-  if (i.lastLaunchAt && now - i.lastLaunchAt < STAFF_COOLDOWN_MS) return { open: 0, why: 'se acaba de abrir una cuenta aquí' }
-  if ((i.launches ?? 0) >= STAFF_MAX_LAUNCHES) return { open: 0, why: `ya se han abierto ${i.launches} cuentas aquí en seis horas y ninguna sigue trabajando: algo las para` }
-  if (i.scheduledSoon) return { open: 0, why: 'hay un arranque programado en este proyecto' }
+  if (i.playing) return { open: 0, why: t('el usuario está jugando: no se abren ventanas') }
+  if (!i.lastActivityAt || now - i.lastActivityAt > STAFF_RECENT_MS) return { open: 0, why: t('nadie ha trabajado en este proyecto en el último día') }
+  if (i.lastLaunchAt && now - i.lastLaunchAt < STAFF_COOLDOWN_MS) return { open: 0, why: t('se acaba de abrir una cuenta aquí') }
+  if ((i.launches ?? 0) >= STAFF_MAX_LAUNCHES) return { open: 0, why: t('ya se han abierto {launches} cuentas aquí en seis horas y ninguna sigue trabajando: algo las para', { launches: i.launches }) }
+  if (i.scheduledSoon) return { open: 0, why: t('hay un arranque programado en este proyecto') }
   const busy = Math.max(i.working, i.claims ? 1 : 0)
-  if (busy >= i.max) return { open: 0, why: busy ? 'ya hay quien trabaja aquí' : 'el tope de cuentas a la vez es cero' }
-  return { open: i.max - busy, why: busy ? 'cabe otro frente' : 'quedan tareas y nadie trabaja aquí' }
+  if (busy >= i.max) return { open: 0, why: busy ? t('ya hay quien trabaja aquí') : t('el tope de cuentas a la vez es cero') }
+  return { open: i.max - busy, why: busy ? 'cabe otro frente' : t('quedan tareas y nadie trabaja aquí') }
 }

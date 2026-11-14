@@ -1,5 +1,6 @@
 // Every conversation of every Claude: which are open and what each is doing; opened, it reads like a chat and writing to it
 // is the same as typing in its window on the PC.
+import { t } from '../../../core/i18n'
 import { ScreenIcon } from '../components/Sidebar'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -55,7 +56,7 @@ function shrink(file: File): Promise<string> {
       URL.revokeObjectURL(url)
       resolve(canvas.toDataURL('image/jpeg', 0.86))
     }
-    img.onerror = () => reject(new Error(`No se pudo leer ${file.name}`))
+    img.onerror = () => reject(new Error(t('No se pudo leer {name}', { name: file.name })))
     img.src = url
   })
 }
@@ -69,16 +70,16 @@ function useCredits(account?: AccountId): string {
   return [part('5 h', snap?.fiveHour), part('semana', snap?.sevenDay)].filter(Boolean).join(' · ')
 }
 
-const STATUS: Record<Chat['status'], [string, string]> = {
-  working: ['Trabajando', 'var(--green)'],
-  waiting: ['Te pregunta algo', 'var(--orange)'],
-  limit: ['Sin uso: sigue cuando vuelva', 'var(--red)'],
-  idle: ['Abierto, sin trabajar', 'var(--blue)'],
-  closed: ['Cerrado', 'var(--gray)']
+const STATUS: Record<Chat['status'], { readonly label: string; color: string }> = {
+  working: { get label() { return t('Trabajando') }, color: 'var(--green)' },
+  waiting: { get label() { return t('Te pregunta algo') }, color: 'var(--orange)' },
+  limit: { get label() { return t('Sin uso: sigue cuando vuelva') }, color: 'var(--red)' },
+  idle: { get label() { return t('Abierto, sin trabajar') }, color: 'var(--blue)' },
+  closed: { get label() { return t('Cerrado') }, color: 'var(--gray)' }
 }
 
 function Dot({ status }: { status: Chat['status'] }) {
-  return <span className={`m-dot ${status === 'working' ? 'm-dot--live' : ''}`} style={{ background: STATUS[status][1] }} />
+  return <span className={`m-dot ${status === 'working' ? 'm-dot--live' : ''}`} style={{ background: STATUS[status].color }} />
 }
 
 /** Bold and code, the two marks Claude uses all the time; the rest stays as written. */
@@ -175,16 +176,16 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
         const path = await api<string>('chatUpload', shot.name, shot.data)
         saved.push(shot.note.trim() ? `${path} (nota: ${shot.note.trim()})` : path)
       }
-      const body = saved.length ? `${said} [Capturas del móvil, míralas con Read: ${saved.join(' ; ')}]`.trim() : said
+      const body = saved.length ? t('{said} [Capturas del móvil, míralas con Read: {v0}]', { said: said, v0: saved.join(' ; ') }).trim() : said
       const how = await api<string>('chatSend', chat.sessionId, chat.cwd, chat.account, body)
       setText('')
       setShots([])
       pinned.current = true
       if (box.current) box.current.style.height = ''
-      if (how === 'opened') toast('Chat cerrado: lo he abierto en el PC con tu mensaje')
+      if (how === 'opened') toast(t('Chat cerrado: lo he abierto en el PC con tu mensaje'))
       // EV141: a session with no window.
-      else if (how === 'queued') toast('Está trabajando sin ventana: le llega tu mensaje en su siguiente paso')
-      else if (how === 'resumed') toast('Sigue sin ventana con tu mensaje')
+      else if (how === 'queued') toast(t('Está trabajando sin ventana: le llega tu mensaje en su siguiente paso'))
+      else if (how === 'resumed') toast(t('Sigue sin ventana con tu mensaje'))
     } catch (e) {
       toast((e as Error).message)
     }
@@ -197,22 +198,22 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
   return (
     <div className="m-chat" ref={layer}>
       <header className="m-chatHead">
-        <button className="m-icon" onClick={onBack} aria-label="Volver"><ChevronLeft size={24} /></button>
+        <button className="m-icon" onClick={onBack} aria-label={t('Volver')}><ChevronLeft size={24} /></button>
         {chat.account && <Avatar id={chat.account} size={32} />}
         <div className="min-w-0 flex-1">
           <div className="m-chatTitle truncate">{chatTitle(info, state?.projects)}</div>
-          <div className="m-chatSub truncate"><Dot status={info.status} /> {info.doing || info.waitingFor || `${chat.account ? accName(chat.account) : chat.alias} · ${STATUS[info.status][0]}`}</div>
+          <div className="m-chatSub truncate"><Dot status={info.status} /> {info.doing || info.waitingFor || `${chat.account ? accName(chat.account) : chat.alias} · ${STATUS[info.status].label}`}</div>
           {credits && <div className="m-chatCredits truncate">{credits}</div>}
         </div>
-        {info.live && info.status === 'working' && <button className="m-icon" onClick={() => void key('esc')} aria-label="Parar"><Square size={18} /></button>}
-        {!info.live && chat.account && <button className="btn btn-sm flex-none" title="Abre una ventana con esta conversación, donde la dejó" onClick={() => void api('resumeSession', chat.account, chat.cwd, chat.sessionId).then(() => toast('Retomando en una ventana nueva'), (e: Error) => toast(e.message))}><RotateCcw size={13} /> Retomar</button>}
+        {info.live && info.status === 'working' && <button className="m-icon" onClick={() => void key('esc')} aria-label={t('Parar')}><Square size={18} /></button>}
+        {!info.live && chat.account && <button className="btn btn-sm flex-none" title={t('Abre una ventana con esta conversación, donde la dejó')} onClick={() => void api('resumeSession', chat.account, chat.cwd, chat.sessionId).then(() => toast(t('Retomando en una ventana nueva')), (e: Error) => toast(e.message))}><RotateCcw size={13} /> {t('Retomar')}</button>}
         {/* EV141 (Decidir #148): a background session has no window; «Ver» opens one on it, to watch it and write to it. */}
-        {chat.background && chat.account && <button className="btn btn-sm flex-none" title="Abre una ventana con esta sesión de fondo: la ves y le escribes como a cualquier Claude" onClick={() => void api('attachBackground', chat.account, chat.background).then(() => toast('Abriendo la sesión en una ventana'), (e: Error) => toast(e.message))}>Ver</button>}
+        {chat.background && chat.account && <button className="btn btn-sm flex-none" title={t('Abre una ventana con esta sesión de fondo: la ves y le escribes como a cualquier Claude')} onClick={() => void api('attachBackground', chat.account, chat.background).then(() => toast(t('Abriendo la sesión en una ventana')), (e: Error) => toast(e.message))}>{t('Ver')}</button>}
         {/* EV151: an open session with a window: its window in front of the others. */}
-        {info.live && !chat.background && <button className="btn btn-sm flex-none" title="Pone su ventana delante de las demás, para mirarla o escribirle" onClick={() => void api('frontSession', chat.sessionId).then(() => toast('Ventana delante'), (e: Error) => toast(e.message))}>Ver ventana</button>}
+        {info.live && !chat.background && <button className="btn btn-sm flex-none" title={t('Pone su ventana delante de las demás, para mirarla o escribirle')} onClick={() => void api('frontSession', chat.sessionId).then(() => toast(t('Ventana delante')), (e: Error) => toast(e.message))}>{t('Ver ventana')}</button>}
       </header>
       <div className="m-msgs" onScroll={(e) => { const el = e.currentTarget; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }}>
-        {!tail && <div className="m-note">Cargando…</div>}
+        {!tail && <div className="m-note">{t('Cargando…')}</div>}
         {tail?.messages.map((m) => <Bubble key={m.id} m={m} />)}
         {(info.status === 'working' || tail?.midTurn) && (
           <div className="m-liveBox">
@@ -224,12 +225,12 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
       </div>
       {stuck && (
         <div className="m-choices">
-          <span>{asking?.question || 'Te está pidiendo algo:'}</span>
+          <span>{asking?.question || t('Te está pidiendo algo:')}</span>
           {asking?.options.length
             ? asking.options.map((o, i) => <button key={i} className="m-choiceWide" onClick={() => void key(String(i + 1))}>{i + 1}. {o}</button>)
             : ['1', '2', '3'].map((k) => <button key={k} onClick={() => void key(k)}>{k}</button>)}
-          <button className="m-choiceSoft" onClick={() => void key('enter')}>Confirmar</button>
-          <button className="m-choiceSoft" onClick={() => void key('esc')}>Cancelar</button>
+          <button className="m-choiceSoft" onClick={() => void key('enter')}>{t('Confirmar')}</button>
+          <button className="m-choiceSoft" onClick={() => void key('esc')}>{t('Cancelar')}</button>
         </div>
       )}
       {shots.length > 0 && (
@@ -237,17 +238,17 @@ function Conversation({ chat, onBack }: { chat: Chat; onBack: () => void }) {
           {shots.map((s) => (
             <div key={s.id} className="m-shot">
               <img src={s.data} alt="" />
-              <input value={s.note} placeholder="Nota (opcional)" onChange={(e) => setShots((all) => all.map((x) => (x.id === s.id ? { ...x, note: e.target.value } : x)))} />
-              <button onClick={() => setShots((all) => all.filter((x) => x.id !== s.id))} aria-label="Quitar"><X size={16} /></button>
+              <input value={s.note} placeholder={t('Nota (opcional)')} onChange={(e) => setShots((all) => all.map((x) => (x.id === s.id ? { ...x, note: e.target.value } : x)))} />
+              <button onClick={() => setShots((all) => all.filter((x) => x.id !== s.id))} aria-label={t('Quitar')}><X size={16} /></button>
             </div>
           ))}
         </div>
       )}
       <div className="m-compose">
-        <label className="m-clip" aria-label="Adjuntar capturas"><Paperclip size={20} /><input type="file" accept="image/*" multiple hidden onChange={(e) => { void pick(e.target.files); e.target.value = '' }} /></label>
-        <textarea ref={box} rows={1} value={text} placeholder={info.live ? `Escribe a ${chat.account ? accName(chat.account) : chat.alias}…` : 'Escribe para retomar este chat…'}
+        <label className="m-clip" aria-label={t('Adjuntar capturas')}><Paperclip size={20} /><input type="file" accept="image/*" multiple hidden onChange={(e) => { void pick(e.target.files); e.target.value = '' }} /></label>
+        <textarea ref={box} rows={1} value={text} placeholder={info.live ? t('Escribe a {v0}…', { v0: chat.account ? accName(chat.account) : chat.alias }) : t('Escribe para retomar este chat…')}
           onChange={(e) => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px` }} />
-        <button className="m-send" disabled={(!text.trim() && !shots.length) || sending} onClick={() => void send()} aria-label="Enviar"><Send size={18} /></button>
+        <button className="m-send" disabled={(!text.trim() && !shots.length) || sending} onClick={() => void send()} aria-label={t('Enviar')}><Send size={18} /></button>
       </div>
     </div>
   )
@@ -260,17 +261,17 @@ function NewChat({ onClose }: { onClose: () => void }) {
   const start = async () => {
     try {
       await api('chatNew', who, state?.activeProjectId, text.trim())
-      toast('Abierto en el PC: aparecerá aquí en unos segundos')
+      toast(t('Abierto en el PC: aparecerá aquí en unos segundos'))
       onClose()
     } catch (e) { toast((e as Error).message) }
   }
   return (
     <div className="m-sheetBack" onClick={onClose}>
       <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="m-sheetTitle">Nuevo chat</div>
+        <div className="m-sheetTitle">{t('Nuevo chat')}</div>
         <div className="m-who">{state?.accounts.map((a) => <button key={a.id} className={who === a.id ? 'on' : ''} onClick={() => setWho(a.id as AccountId)}><Avatar id={a.id as AccountId} size={30} /></button>)}</div>
-        <textarea rows={4} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="¿Qué quieres que haga?" />
-        <button className="m-primary" disabled={!text.trim()} onClick={() => void start()}>Empezar</button>
+        <textarea rows={4} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={t('¿Qué quieres que haga?')} />
+        <button className="m-primary" disabled={!text.trim()} onClick={() => void start()}>{t('Empezar')}</button>
       </div>
     </div>
   )
@@ -290,26 +291,56 @@ export function Chats() {
     return () => { alive = false; clearInterval(t) }
   }, [route, all])
   if (open) return createPortal(<Conversation chat={open} onBack={() => setOpen(undefined)} />, document.body)
-  const live = (chats ?? []).filter((c) => c.live)
-  const closed = (chats ?? []).filter((c) => !c.live)
-  const row = (c: Chat) => (
-    <button key={c.sessionId} className="m-row" onClick={() => setOpen(c)}>
-      <span className="relative flex-none">{c.account ? <Avatar id={c.account} size={46} /> : <span className="m-noAvatar" />}<span className="m-rowDot"><Dot status={c.status} /></span></span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2"><span className="m-rowTitle truncate flex-1">{chatTitle(c, state?.projects)}</span><span className="m-rowWhen">{ago(c.lastAt)}</span></span>
-        <span className="m-rowDoing truncate" style={{ color: c.doing ? 'var(--label)' : undefined }}>{c.doing ? c.doing : c.last || STATUS[c.status][0]}</span>
-        <span className="m-rowWho truncate">{c.account ? accName(c.account) : c.alias} · {STATUS[c.status][0]}</span>
-      </span>
-    </button>
-  )
+  // EV170 (the user, 14-11: «la sección "chats" es un poco confusa ahora mismo y difícil de entender»): grouped by what
+  // matters to the user, in that order, each group saying what it is and what can be done with it.
+  const list = chats ?? []
+  const projectOf = (c: Chat) => {
+    const cwd = c.cwd.toLowerCase().replace(/[\\/]+$/, '')
+    return state?.projects.find((p) => { const r = p.root.toLowerCase().replace(/[\\/]+$/, ''); return cwd === r || cwd.startsWith(r + '\\') || cwd.startsWith(r + '/') })?.name
+  }
+  const groups: { key: string; title: string; hint: string; items: Chat[] }[] = [
+    { key: 'waiting', title: t('Te esperan'), hint: t('Te preguntan algo o piden permiso: ábrelo para contestar.'), items: list.filter((c) => c.live && c.status === 'waiting') },
+    { key: 'working', title: t('Trabajando ahora'), hint: t('Ábrelo para ver qué hace o escribirle; lo lee al acabar su paso.'), items: list.filter((c) => c.live && c.status === 'working') },
+    { key: 'idle', title: t('Abiertos, sin trabajar'), hint: t('Tienen su ventana abierta pero están quietos: escríbeles para darles trabajo.'), items: list.filter((c) => c.live && c.status === 'idle') },
+    { key: 'limit', title: t('Sin uso'), hint: t('Se les acabó el uso: siguen solos cuando vuelva.'), items: list.filter((c) => c.live && c.status === 'limit') },
+    { key: 'closed', title: all ? t('Conversaciones guardadas') : t('Conversaciones recientes'), hint: t('Ya cerradas: ábrelas para leerlas o retomarlas donde lo dejaron.'), items: list.filter((c) => !c.live) }
+  ]
+  const row = (c: Chat) => {
+    const project = projectOf(c)
+    return (
+      <button key={c.sessionId} className="m-row" onClick={() => setOpen(c)} title={t('Abrir la conversación')}>
+        <span className="relative flex-none">{c.account ? <Avatar id={c.account} size={46} /> : <span className="m-noAvatar" />}<span className="m-rowDot"><Dot status={c.status} /></span></span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-2"><span className="m-rowTitle truncate flex-1">{chatTitle(c, state?.projects)}</span><span className="m-rowWhen">{ago(c.lastAt)}</span></span>
+          <span className="m-rowDoing truncate" style={{ color: c.doing ? 'var(--label)' : undefined }}>{c.doing ? c.doing : c.waitingFor || c.last || STATUS[c.status].label}</span>
+          <span className="m-rowWho truncate flex items-center gap-1.5">
+            <span>{c.account ? accName(c.account) : c.alias}</span>
+            {project && <span className="pill" style={{ padding: '0 6px', fontSize: 11 }}>{project}</span>}
+            <span style={{ color: STATUS[c.status].color, fontWeight: 600 }}>{STATUS[c.status].label}</span>
+            {c.background && <span className="c3">{t('· de fondo, sin ventana')}</span>}
+          </span>
+        </span>
+        <ChevronRight size={18} className="c3 flex-none" />
+      </button>
+    )
+  }
   return (
     <div className="m-list">
-      <div className="flex items-center mb-2"><h1 className="t-display flex-1 flex items-center gap-3"><ScreenIcon route="chats" />Chats</h1><button className="m-add" onClick={() => setAdding(true)} aria-label="Nuevo chat"><Plus size={20} /></button></div>
-      {chats && !chats.length && <Empty title="No hay chats" text="Cuando un Claude trabaje, aparecerá aquí." />}
-      {live.length > 0 && <><div className="m-group">Abiertos ahora</div>{live.map(row)}</>}
-      {closed.length > 0 && <><div className="m-group">{all ? 'Guardadas' : 'Recientes'}</div>{closed.map(row)}</>}
+      <div className="flex items-center gap-3 mb-1">
+        <h1 className="t-display flex-1 flex items-center gap-3"><ScreenIcon route="chats" />{t('Chats')}</h1>
+        <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}><Plus size={14} /> {t('Nuevo chat')}</button>
+      </div>
+      <div className="t-small c2 mb-4">{t('Las conversaciones de tus Claude, como en un móvil: ábrelas para ver qué hacen, contestarles o darles trabajo. Arriba, lo que te espera.')}</div>
+      {chats && !chats.length && <Empty title={t('No hay chats')} text={t('Cuando un Claude trabaje, aparecerá aquí. Con «Nuevo chat» abres uno en el proyecto que elijas.')} />}
+      {groups.filter((g) => g.items.length).map((g) => (
+        <section key={g.key} className="mb-2">
+          <div className="m-group" style={g.key === 'waiting' ? { color: 'var(--orange)' } : undefined}>{g.title} · {g.items.length}</div>
+          <div className="t-small c3 px-1 mb-1">{g.hint}</div>
+          {g.items.map(row)}
+        </section>
+      ))}
       {/* EV71: every saved conversation of the project is here (Cuentas only links here); each one opens and can be taken up again. */}
-      {!all && closed.length >= 15 && <button className="btn btn-ghost mt-3" onClick={() => setAll(true)}><RotateCcw size={14} /> Ver todas las guardadas de este proyecto</button>}
+      {!all && list.filter((c) => !c.live).length >= 15 && <button className="btn btn-ghost mt-3" onClick={() => setAll(true)}><RotateCcw size={14} /> {t('Ver todas las guardadas de este proyecto')}</button>}
       {adding && <NewChat onClose={() => setAdding(false)} />}
     </div>
   )

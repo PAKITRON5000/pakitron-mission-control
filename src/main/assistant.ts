@@ -1,3 +1,4 @@
+import { t } from '../core/i18n'
 // The assistant's data (EV85): what each answer of core/assistant.ts is made from, read from the app itself, and the two
 // things it does: passing a request on (through the same calls as «Nueva instrucción») and «Pregúntale a Claude», the
 // only one that spends usage (Haiku, with the account that has the most week left, without hooks or CLAUDE.md).
@@ -131,12 +132,12 @@ export function createAssistant(d: AssistantDeps) {
     const project = service.project(pid) ?? service.projects[0]
     switch (u.intent) {
       case 'ayuda': return answerHelp()
-      case 'gracias': return { intent: 'gracias', text: '¡A mandar! Aquí estoy para lo que necesites.', chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
+      case 'gracias': return { intent: 'gracias', text: t('¡A mandar! Aquí estoy para lo que necesites.'), chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
       case 'espera': return waiting()
       case 'quien': return answerWho(agents(), projects(), u.account, now)
       case 'uso': return answerUsage(agents(), u.account, now)
       case 'fotos': return photos(u.topic ?? '', u.projectId, u.range)
-      case 'hizo': return did(u.account, u.range ?? { from: now - 12 * 3600_000, to: now, label: 'las últimas 12 horas' })
+      case 'hizo': return did(u.account, u.range ?? { from: now - 12 * 3600_000, to: now, label: t('las últimas 12 horas') })
       case 'tareas': {
         const all = u.taskId ? service.projects.flatMap((p) => tasksOf(p.id)) : undefined
         const claims = service.projects.flatMap((p) => listClaims(service.db, p.id).filter((c) => !c.abandoned).map((c) => ({ key: c.taskKey, account: c.account })))
@@ -156,21 +157,21 @@ export function createAssistant(d: AssistantDeps) {
       case 'recargas': {
         // EV96: what each window showed at its limit, and what the app will do (the same as Ajustes › Recargas regaladas).
         const v = (d.call('recharges') ?? {}) as Record<string, { record?: { available: boolean; kinds?: string[]; useBy?: string; usedAt?: number }; decision: { action: string; why: string } }>
-        const rows = Object.entries(v).filter(([, x]) => x.record).map(([id, x]) => ({ title: `Claude ${id.slice(6)}: ${x.record!.available ? `tiene recarga${x.record!.kinds?.length ? ' (' + x.record!.kinds.join(', ') + ')' : ''}${x.record!.useBy ? ', hasta ' + x.record!.useBy : ''}` : x.record!.usedAt ? 'ya la usó' : 'sin recarga ahora'}`, sub: x.record!.available ? (x.decision.action === 'usar' ? 'Es el momento: se usa ya' : `Ahora no: ${x.decision.why}`) : undefined, account: id }))
-        return { intent: 'recargas', text: rows.length ? 'Lo que sé de las recargas regaladas (se ven en la ventana de cada cuenta al llegar a su límite):' : 'Aún no he visto ninguna recarga: se ven en la ventana de cada cuenta cuando llega a su límite. En Ajustes › Cuentas › Recargas puedes revisarlas sin usarlas.', rows, more: { label: 'Abrir Recargas regaladas', go: { route: 'ajustes', projectId } } }
+        const rows = Object.entries(v).filter(([, x]) => x.record).map(([id, x]) => ({ title: `Claude ${id.slice(6)}: ${x.record!.available ? `tiene recarga${x.record!.kinds?.length ? ' (' + x.record!.kinds.join(', ') + ')' : ''}${x.record!.useBy ? ', hasta ' + x.record!.useBy : ''}` : x.record!.usedAt ? 'ya la usó' : 'sin recarga ahora'}`, sub: x.record!.available ? (x.decision.action === 'usar' ? t('Es el momento: se usa ya') : t('Ahora no: {why}', { why: x.decision.why })) : undefined, account: id }))
+        return { intent: 'recargas', text: rows.length ? t('Lo que sé de las recargas regaladas (se ven en la ventana de cada cuenta al llegar a su límite):') : t('Aún no he visto ninguna recarga: se ven en la ventana de cada cuenta cuando llega a su límite. En Ajustes › Cuentas › Recargas puedes revisarlas sin usarlas.'), rows, more: { label: t('Abrir Recargas regaladas'), go: { route: 'ajustes', projectId } } }
       }
       case 'disco': {
         // EV100: free space where each project lives, and where to clean.
         const disks = (await Promise.resolve(d.call('diskFree')).catch(() => [])) as { drive: string; free: number; total: number; projects: string[] }[]
-        const rows = disks.map((x) => ({ title: `${x.drive} ${Math.round((x.free / x.total) * 100)} % libre (${Math.round(x.free / (1 << 30))} GB de ${Math.round(x.total / (1 << 30))} GB)`, sub: x.projects.map((p) => service.project(p)?.name ?? p).join(', '), color: diskLow(x.free, x.total) ? 'var(--red)' : 'var(--green)' }))
+        const rows = disks.map((x) => ({ title: t('{drive} {v0} % libre ({v1} GB de {v2} GB)', { drive: x.drive, v0: Math.round((x.free / x.total) * 100), v1: Math.round(x.free / (1 << 30)), v2: Math.round(x.total / (1 << 30)) }), sub: x.projects.map((p) => service.project(p)?.name ?? p).join(', '), color: diskLow(x.free, x.total) ? 'var(--red)' : 'var(--green)' }))
         const low = disks.some((x) => diskLow(x.free, x.total))
-        return { intent: 'disco', text: low ? 'Queda poco disco donde viven tus proyectos. En Ajustes › Proyecto › Limpieza ves qué sobra (a la papelera) y qué es dudoso (se aparta), con vuelta atrás.' : 'Hay espacio de sobra.', rows, more: { label: 'Abrir Limpieza', go: { route: 'ajustes', projectId } } }
+        return { intent: 'disco', text: low ? t('Queda poco disco donde viven tus proyectos. En Ajustes › Proyecto › Limpieza ves qué sobra (a la papelera) y qué es dudoso (se aparta), con vuelta atrás.') : t('Hay espacio de sobra.'), rows, more: { label: t('Abrir Limpieza'), go: { route: 'ajustes', projectId } } }
       }
       case 'carga': {
         // EV112: who loads the PC now, with the Claude behind each process (read by the app every two minutes).
         const l = (await Promise.resolve(d.call('machineLoad')).catch(() => undefined)) as { loaded: boolean; text: string; top: { name: string; account?: string; doing: string; cpuPct: number; ramMb: number }[] } | undefined
-        if (!l) return { intent: 'carga', text: 'Aún no he leído la carga del PC (la leo cada dos minutos): pregúntamelo otra vez en un momento.' }
-        const rows = l.top.map((p) => ({ title: `${p.account === 'claude' ? 'Un Claude' : p.account ? `Claude ${p.account.slice(6)}` : 'El PC'}: ${p.name}`, sub: `${p.doing === p.name ? '' : p.doing + ' · '}${String(p.cpuPct).replace('.', ',')} % del procesador · ${p.ramMb >= 1024 ? `${(p.ramMb / 1024).toFixed(1).replace('.', ',')} GB` : `${p.ramMb} MB`}`, color: p.cpuPct >= 10 || p.ramMb >= 2048 ? 'var(--orange)' : 'var(--green)' }))
+        if (!l) return { intent: 'carga', text: t('Aún no he leído la carga del PC (la leo cada dos minutos): pregúntamelo otra vez en un momento.') }
+        const rows = l.top.map((p) => ({ title: `${p.account === 'claude' ? 'Un Claude' : p.account ? `Claude ${p.account.slice(6)}` : 'El PC'}: ${p.name}`, sub: t('{v0}{v1} % del procesador · {v2}', { v0: p.doing === p.name ? '' : p.doing + ' · ', v1: String(p.cpuPct).replace('.', ','), v2: p.ramMb >= 1024 ? `${(p.ramMb / 1024).toFixed(1).replace('.', ',')} GB` : `${p.ramMb} MB` }), color: p.cpuPct >= 10 || p.ramMb >= 2048 ? 'var(--orange)' : 'var(--green)' }))
         return { intent: 'carga', text: `${l.loaded ? 'El PC va cargado.' : 'El PC va bien ahora mismo.'} ${l.text}`, rows }
       }
       default: return answerUnknown()
@@ -179,7 +180,7 @@ export function createAssistant(d: AssistantDeps) {
 
   /** «Enviar»: saved like «Nueva instrucción» and, when the plan says so, written in its window or opened (the dispatcher decides). */
   async function send(plan: SendPlan): Promise<Reply> {
-    if (!service.project(plan.projectId)) throw new Error('Proyecto desconocido')
+    if (!service.project(plan.projectId)) throw new Error(t('Proyecto desconocido'))
     await d.call('addInstruction', { projectId: plan.projectId, kind: plan.kind, body: plan.body, target: plan.target })
     let started: { action: string; why: string } | undefined
     if (plan.start && plan.target) {
@@ -200,7 +201,7 @@ export function createAssistant(d: AssistantDeps) {
       // EV146: an account paying per use (a key, Console, a cloud) costs money for each question: only when there is no other.
       .sort((a, b) => Number(Boolean(service.agents.find((x) => x.id === a.id)?.identity.plan?.paysPerUse)) - Number(Boolean(service.agents.find((x) => x.id === b.id)?.identity.plan?.paysPerUse))
         || (b.week && b.week.resetsAt > now ? 100 - b.week.used : 50) - (a.week && a.week.resetsAt > now ? 100 - a.week.used : 50))[0]
-    if (!pick) return { intent: 'nose', text: 'Ahora no hay ninguna cuenta con uso para preguntárselo.' }
+    if (!pick) return { intent: 'nose', text: t('Ahora no hay ninguna cuenta con uso para preguntárselo.') }
     const acc = service.accounts.find((a) => a.id === pick.id)!
     const p = service.project(projectId) ?? service.projects[0]
     const v = d.wheel()?.view(p.id)
@@ -210,7 +211,7 @@ export function createAssistant(d: AssistantDeps) {
       'Los Claude:', replyAsText(answerWho(agents(), projects(), undefined, now)),
       'Uso:', replyAsText(answerUsage(agents(), undefined, now)),
       'Rueda:', replyAsText(answerWheel({ id: p.id, name: p.name }, v?.chain, v?.members ?? [], now)),
-      'Últimas 12 horas:', replyAsText(did(undefined, { from: now - 12 * 3600_000, to: now, label: 'las últimas 12 horas' })),
+      'Últimas 12 horas:', replyAsText(did(undefined, { from: now - 12 * 3600_000, to: now, label: t('las últimas 12 horas') })),
       `Tareas de ${p.name}:`, replyAsText(answerTasks({ project: { id: p.id, name: p.name }, tasks: tasksOf(p.id), projects: projects(), claims: [], agenda: v?.chain?.until?.section }))
     ].join('\n')
     const prompt = `Eres el asistente de Mission Control, la app con la que el usuario coordina varias cuentas de Claude Code («Claude 1», «Claude 3»…) que trabajan en sus proyectos. Contesta en español sencillo, para alguien que no programa, en 2 a 5 frases, usando solo estos datos; si no están, dilo claramente y no te lo inventes.\n\nDatos de la app:\n${facts}\n\nPregunta del usuario: ${text}`
@@ -218,13 +219,13 @@ export function createAssistant(d: AssistantDeps) {
     mkdirSync(cwd, { recursive: true })
     const out = await new Promise<string>((resolve, reject) => {
       const child = execFile(findClaude(), ['-p', '--safe-mode', '--model', 'haiku', '--tools', '', '--no-session-persistence'], { cwd, env: envFor(acc), windowsHide: true, timeout: 120_000, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
-        if (err) reject(new Error(String(stderr || err.message).trim().split('\n')[0] || 'no contestó'))
+        if (err) reject(new Error(String(stderr || err.message).trim().split('\n')[0] || t('no contestó')))
         else resolve(String(stdout).trim())
       })
       child.stdin?.end(prompt)
     })
-    addEvent(service.db, { projectId: p.id, at: Date.now(), account: pick.id as AccountId, kind: 'asistente', title: `El asistente le ha preguntado a Claude ${pick.id.slice(6)} (Haiku): «${text.slice(0, 120)}»`, source: 'Mission Control' })
-    return { intent: 'nose', text: out || 'No ha contestado nada.', by: `Claude ${pick.id.slice(6)} con Haiku · ha gastado un poco de su uso`, chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
+    addEvent(service.db, { projectId: p.id, at: Date.now(), account: pick.id as AccountId, kind: 'asistente', title: t('El asistente le ha preguntado a Claude {v0} (Haiku): «{v1}»', { v0: pick.id.slice(6), v1: text.slice(0, 120) }), source: 'Mission Control' })
+    return { intent: 'nose', text: out || t('No ha contestado nada.'), by: `Claude ${pick.id.slice(6)} con Haiku · ha gastado un poco de su uso`, chips: ['¿Qué me espera?', '¿Quién trabaja?'] }
   }
 
   /**
@@ -233,7 +234,7 @@ export function createAssistant(d: AssistantDeps) {
    */
   function away(from: number) {
     const now = Date.now()
-    const range = { from, to: now, label: 'mientras no estabas' }
+    const range = { from, to: now, label: t('mientras no estabas') }
     const accounts = service.agents.filter((a) => !service.settings.accountStatus?.[a.id]).map((a) => {
       const r = did(a.id, range)
       const h = a.usage.history.filter((x) => x.at >= from && x.week != null)

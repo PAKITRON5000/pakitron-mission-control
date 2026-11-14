@@ -381,7 +381,7 @@ export interface Settings {
   /** EV68: the user hid «Primeros pasos» (Inicio); it comes back only while there is no project. */
   firstRunDone?: boolean
   /** Backup accounts (IV1, core/reserve.ts): opened on their project when every other account in use is out of usage. */
-  reserves?: { account: AccountId; projectId: string; on: boolean }[]
+  reserves?: { account: AccountId; projectId: string; on: boolean; note?: string; marginMin?: number }[]
   /** Accounts the user marked as out of Fable: Claude Code does not report each model's limit. */
   noFable?: string[]
   /** When an account stops for its limit in the middle of a project, open the next one there to take over. */
@@ -438,11 +438,15 @@ export interface Settings {
    * on a wide screen (2560 px or more), 1.1 otherwise (main/index.ts › uiScale).
    */
   uiScale?: number
+  /** EV161: the language of the app and of what the Claudes are told («es», «en»); none: the system's. */
+  lang?: 'es' | 'en'
   /**
    * EV96 (Decidir #130 «B»): Claude Code's gifted limit resets (`/limit-reset`): used by the app at the best moment
    * ('sola', the default), only told to the user ('avisar'), or left alone ('no').
    */
   smartRecharge?: 'sola' | 'avisar' | 'no'
+  /** EV171: when «Mejorar mi proyecto» was last asked for each project (by itself on adding it, at most once a week). */
+  improveAsked?: Record<string, number>
   /** EV100: projects where what was set aside and nobody asked for goes to the bin by itself (smart deletion). */
   smartClean?: Record<string, boolean>
   /**

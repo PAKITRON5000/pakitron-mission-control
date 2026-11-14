@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { agendaBlocked, agendaDone, chainStep, memberViews, nextInLine, rotation, turnFor, wheelProjectOf, wheelsOf, type ChainMember, type RelayChain } from '../src/core/chain'
+import { agendaBlocked, agendaDone, callable, callText, chainStep, memberViews, nextInLine, rotation, turnFor, wheelProjectOf, wheelsOf, type ChainMember, type RelayChain } from '../src/core/chain'
 
 const m = (id: string, o: Partial<ChainMember> = {}): ChainMember => ({ id: id as any, state: 'disponible', hasLogin: true, workingHere: false, ...o })
 const wheel = (o: Partial<RelayChain> = {}): RelayChain => ({ on: true, order: ['claude3', 'claude1', 'claude6'] as any, ...o })
@@ -62,6 +62,35 @@ describe('rueda de relevos', () => {
     expect(acts[0]).toMatchObject({ kind: 'esperar' })
     const busy = chainStep(wheel({ holder: 'claude3' as any }), [m('claude3', { state: 'sin-uso' }), m('claude1', { workingElsewhere: 'mission-control' }), m('claude6', { status: 'pausada' })], NOW)
     expect(busy[0]).toMatchObject({ kind: 'esperar' })
+  })
+
+  it('EV153: llama a la siguiente con uso que trabaja en otro proyecto, al agotarse la del turno y cuando está a punto', () => {
+    const away = { workingElsewhere: 'Mission Control', elsewhereId: 'mission-control', state: 'trabajando' as const }
+    // Ran out: nobody free here; Claude 1 (next) is at work on Mission Control with usage: it is called there.
+    const out = chainStep(wheel({ holder: 'claude3' as any, phase: 'trabaja' }), [m('claude3', { state: 'sin-uso' }), m('claude1', away), m('claude6', { state: 'sin-uso' })], NOW)
+    expect(out[0]).toMatchObject({ kind: 'esperar' })
+    expect(out[1]).toMatchObject({ kind: 'llamar', account: 'claude1', holder: 'claude3', elsewhere: 'Mission Control', elsewhereId: 'mission-control' })
+    // Already waiting: it is still called (the app does not repeat the call more often than every 20 min).
+    expect(chainStep(wheel({ holder: 'claude3' as any, phase: 'espera' }), [m('claude3', { state: 'sin-uso' }), m('claude1', away), m('claude6', { state: 'sin-uso' })], NOW))
+      .toEqual([expect.objectContaining({ kind: 'llamar', account: 'claude1' })])
+    // About to run out (the overlap's mark) with nobody free here: called before the cut, not after.
+    const soon = chainStep(wheel({ holder: 'claude6' as any, phase: 'trabaja' }), [m('claude6', { state: 'trabajando', workingHere: true, fiveUsed: 96 }), m('claude3', away), m('claude1', { state: 'sin-uso' })], NOW)
+    expect(soon).toEqual([expect.objectContaining({ kind: 'llamar', account: 'claude3', holder: 'claude6' })])
+    // One free here goes first (the overlap, as before), and nobody is called.
+    const free = chainStep(wheel({ holder: 'claude6' as any, phase: 'trabaja' }), [m('claude6', { state: 'trabajando', workingHere: true, fiveUsed: 96 }), m('claude3', away), m('claude1')], NOW)
+    expect(free).toEqual([{ kind: 'solapar', from: 'claude6', to: 'claude1' }])
+    // Never one that could not take the turn anyway: set aside, nearly out, or out of usage.
+    expect(callable(m('claude1', { ...away, status: 'pausada' }), wheel())).toBe(false)
+    expect(callable(m('claude1', { ...away, fiveUsed: 97 }), wheel())).toBe(false)
+    expect(callable(m('claude1', away), wheel({ paused: ['claude1'] as any }))).toBe(false)
+    expect(callable(m('claude1'), wheel())).toBe(false)
+    // Once free there, it takes the turn as anybody free would.
+    expect(chainStep(wheel({ holder: 'claude3' as any, phase: 'espera' }), [m('claude3', { state: 'sin-uso' }), m('claude1'), m('claude6', { state: 'sin-uso' })], NOW)[0])
+      .toMatchObject({ kind: 'pasar', from: 'claude3', to: 'claude1' })
+    const text = callText({ account: 'claude1' as any, holder: 'claude3' as any, project: 'Mi Juego', elsewhere: 'Mission Control', why: 'Claude 3 se ha quedado sin uso' })
+    expect(text).toContain('Deja Mission Control a salvo')
+    expect(text).toContain('pmc guarda')
+    expect(text).toContain('el turno de Mi Juego')
   })
 
   it('empieza la rueda por la primera con uso si nadie tiene el turno', () => {

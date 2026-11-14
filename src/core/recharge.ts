@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Smart recharge (EV96; the user, 13-11: «cuando te regalan cupones de esos de recarga… que lo autoaplique de la manera más
 // inteligente… y así si el usuario no está y sigue trabajando»; Decidir #130 «B»: it applies them by itself when that is
 // safe, never buying anything, and the app finds them, not the user).
@@ -106,10 +107,10 @@ const who = (id: string) => `Claude ${id.replace(/\D/g, '')}`
  * would be lost (use by the next day).
  */
 export function rechargeDecision(i: RechargeInput): RechargeDecision {
-  if (i.mode === 'no') return { action: 'nada', why: 'las recargas no se tocan (Ajustes)' }
-  if (!i.offer?.available) return { action: 'nada', why: 'no tiene recarga a mano' }
-  if (!i.limit || i.limit.resetsAt <= i.now) return { action: 'nada', why: 'no está parada por su límite' }
-  if (i.offer.lastTryAt && i.now - i.offer.lastTryAt < 30 * 60_000) return { action: 'esperar', why: 'se intentó hace menos de media hora' }
+  if (i.mode === 'no') return { action: 'nada', why: t('las recargas no se tocan (Ajustes)') }
+  if (!i.offer?.available) return { action: 'nada', why: t('no tiene recarga a mano') }
+  if (!i.limit || i.limit.resetsAt <= i.now) return { action: 'nada', why: t('no está parada por su límite') }
+  if (i.offer.lastTryAt && i.now - i.offer.lastTryAt < 30 * 60_000) return { action: 'esperar', why: t('se intentó hace menos de media hora') }
   const weekly = i.limit.kind === 'semanal'
   const kinds = i.offer.kinds
   const weekLeft = i.weekResetsAt && i.weekResetsAt > i.now && i.weekUsed != null ? 100 - i.weekUsed : undefined
@@ -120,9 +121,9 @@ export function rechargeDecision(i: RechargeInput): RechargeDecision {
   const kind = !kinds?.length ? (weekly ? undefined : '5-hour')
     : weekly ? (kinds.find((k) => k === 'weekly') ?? kinds.find((k) => k === 'full') ?? (fable ? kinds.find((k) => k === 'fable') : undefined))
     : (kinds.find((k) => k === '5-hour') ?? (weekLeft != null && weekLeft < 30 ? kinds.find((k) => k === 'full') : undefined))
-  if (!kind) return { action: 'nada', why: weekly ? 'su recarga no sirve para el límite semanal' : 'su recarga es mejor guardarla para cuando se le acabe la semana' }
+  if (!kind) return { action: 'nada', why: weekly ? t('su recarga no sirve para el límite semanal') : t('su recarga es mejor guardarla para cuando se le acabe la semana') }
   const minutes = Math.round((i.limit.resetsAt - i.now) / 60_000)
-  if (minutes < WORTH_MINUTES) return { action: 'esperar', why: `vuelve sola en ${minutes} min` }
+  if (minutes < WORTH_MINUTES) return { action: 'esperar', why: t('vuelve sola en {minutes} min', { minutes: minutes }) }
   // The user, 13-11: «se gasta si con el cálculo sabes que gastaremos los créditos semanales antes de la recarga y merecerá
   // la pena; si no, no… calcúlalo tú». With the forecast (EV67): if the other accounts of the wheel have work hours enough
   // to reach this account's own return, or the agenda fits in what they have, the reset is kept; only when the wheel would
@@ -131,17 +132,17 @@ export function rechargeDecision(i: RechargeInput): RechargeDecision {
   const gapH = (i.limit.resetsAt - i.now) / 3600_000
   if (i.othersHours != null && !expiresFirst) {
     const oh = Math.round(i.othersHours * 10) / 10
-    if (i.othersHours >= gapH) return { action: 'esperar', why: `las demás tienen unas ${oh} h de trabajo, hasta que vuelva sola: la recarga se guarda` }
-    if (i.agendaHours != null && i.agendaHours <= i.othersHours) return { action: 'esperar', why: `lo que queda de la agenda (unas ${i.agendaHours} h) cabe en lo que tienen las demás: la recarga se guarda` }
+    if (i.othersHours >= gapH) return { action: 'esperar', why: t('las demás tienen unas {oh} h de trabajo, hasta que vuelva sola: la recarga se guarda', { oh: oh }) }
+    if (i.agendaHours != null && i.agendaHours <= i.othersHours) return { action: 'esperar', why: t('lo que queda de la agenda (unas {agendaHours} h) cabe en lo que tienen las demás: la recarga se guarda', { agendaHours: i.agendaHours }) }
   } else if (i.othersHours == null && kind !== '5-hour') {
     // Without a forecast: a weekly, full or Fable reset is not spent on a week that comes back within a day anyway.
     const weekBack = weekly ? i.limit.resetsAt : i.weekResetsAt
-    if (weekBack && weekBack - i.now < WEEK_SOON_MS && !(i.useByAt != null && i.useByAt < weekBack)) return { action: 'esperar', why: `su semana se renueva en ${Math.max(1, Math.round((weekBack - i.now) / 3600_000))} h: la recarga se guarda` }
+    if (weekBack && weekBack - i.now < WEEK_SOON_MS && !(i.useByAt != null && i.useByAt < weekBack)) return { action: 'esperar', why: t('su semana se renueva en {v0} h: la recarga se guarda', { v0: Math.max(1, Math.round((weekBack - i.now) / 3600_000)) }) }
   }
-  if (!weekly && weekLeft != null && weekLeft < WEEK_FLOOR && kind !== 'full') return { action: 'nada', why: `le queda el ${Math.round(weekLeft)} % de la semana: recargar las 5 horas no daría para nada` }
-  if (!i.workLeft) return { action: 'esperar', why: 'no hay trabajo esperando' }
+  if (!weekly && weekLeft != null && weekLeft < WEEK_FLOOR && kind !== 'full') return { action: 'nada', why: t('le queda el {v0} % de la semana: recargar las 5 horas no daría para nada', { v0: Math.round(weekLeft) }) }
+  if (!i.workLeft) return { action: 'esperar', why: t('no hay trabajo esperando') }
   const expiring = i.useByAt != null && i.useByAt - i.now < 26 * 3600_000
-  if (i.othersReady.length && !expiring) return { action: 'esperar', why: `${i.othersReady.map(who).join(' y ')} puede seguir: la recarga se guarda` }
+  if (i.othersReady.length && !expiring) return { action: 'esperar', why: t('{v0} puede seguir: la recarga se guarda', { v0: i.othersReady.map(who).join(' y ') }) }
   const why = expiring && i.othersReady.length ? 'caduca pronto y se perdería' : `nadie más puede seguir y volvería en ${minutes >= 120 ? Math.round(minutes / 60) + ' h' : minutes + ' min'}`
   return { action: i.mode === 'avisar' ? 'avisar' : 'usar', why, kind }
 }

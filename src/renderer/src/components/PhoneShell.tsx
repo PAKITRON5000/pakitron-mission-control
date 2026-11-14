@@ -4,6 +4,7 @@ import { Bell, Download, LayoutGrid, MessageCircle, Gavel, ListChecks, MessageSq
 import { useStore, type Route } from '../lib/store'
 import { api } from '../lib/api'
 import { NAV } from './Sidebar'
+import { t } from '../../../core/i18n'
 
 /**
  * The phone layout is for the phone (the web view, narrower than 760 px). On the PC the app is zoomed (1.1 or 1.25), so
@@ -23,11 +24,11 @@ export function usePhone(): boolean {
 }
 
 const TABS: { route: Route; label: string; icon: typeof Bell }[] = [
-  { route: 'inicio', label: 'Inicio', icon: LayoutGrid },
-  { route: 'chats', label: 'Chats', icon: MessageCircle },
-  { route: 'decisiones', label: 'Decidir', icon: Gavel },
-  { route: 'tareas', label: 'Tareas', icon: ListChecks },
-  { route: 'revisiones', label: 'Revisar', icon: MessageSquareText }
+  { route: 'inicio', get label() { return t('Inicio') }, icon: LayoutGrid },
+  { route: 'chats', get label() { return t('Chats') }, icon: MessageCircle },
+  { route: 'decisiones', get label() { return t('Decidir') }, icon: Gavel },
+  { route: 'tareas', get label() { return t('Tareas') }, icon: ListChecks },
+  { route: 'revisiones', get label() { return t('Revisar') }, icon: MessageSquareText }
 ]
 
 function base64ToKey(s: string): Uint8Array<ArrayBuffer> {
@@ -46,15 +47,15 @@ function InstallSheet({ onClose }: { onClose: () => void }) {
   return (
     <div className="m-sheetBack" onClick={onClose}>
       <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="m-sheetTitle">Instalar como app</div>
+        <div className="m-sheetTitle">{t('Instalar como app')}</div>
         <ol className="m-steps-install">
-          <li>Toca el botón <b>≡</b> junto a la dirección, abajo. Si en tu Safari ves el botón <b>Compartir</b> (un cuadrado con una flecha), toca ese y salta al paso 3.</li>
-          <li>Elige <b>Compartir</b>.</li>
-          <li>Baja por la lista y toca <b>Añadir a pantalla de inicio</b>. Si no sale, busca en <b>Más</b>.</li>
-          <li>Si ves <b>Abrir como app web</b>, déjalo activado, y pulsa <b>Añadir</b>.</li>
-          <li>Cierra Safari y abre <b>Mission</b> desde su icono.</li>
+          <li>{t('Toca el botón ')}<b>≡</b>{t(' junto a la dirección, abajo. Si en tu Safari ves el botón ')}<b>{t('Compartir')}</b>{t(' (un cuadrado con una flecha), toca ese y salta al paso 3.')}</li>
+          <li>{t('Elige ')}<b>{t('Compartir')}</b>.</li>
+          <li>{t('Baja por la lista y toca ')}<b>{t('Añadir a pantalla de inicio')}</b>{t('. Si no sale, busca en ')}<b>{t('Más')}</b>.</li>
+          <li>{t('Si ves ')}<b>{t('Abrir como app web')}</b>{t(', déjalo activado, y pulsa ')}<b>{t('Añadir')}</b>.</li>
+          <li>{t('Cierra Safari y abre ')}<b>{t('Mission')}</b>{t(' desde su icono.')}</li>
         </ol>
-        <button className="m-primary" onClick={onClose}>Entendido</button>
+        <button className="m-primary" onClick={onClose}>{t('Entendido')}</button>
       </div>
     </div>
   )
@@ -81,24 +82,24 @@ function PushOffer({ onInstall }: { onInstall: () => void }) {
   if (!standalone) {
     return (
       <div className="m-offer m-offer--go">
-        <button className="flex items-center gap-2.5 flex-1 min-w-0 text-left" style={{ color: 'white', fontWeight: 600 }} onClick={onInstall}><Download size={18} className="flex-none" /><span className="flex-1">Instalar como app, sin Safari y con avisos</span></button>
-        <button onClick={close} aria-label="Cerrar" style={{ color: 'white' }}><X size={16} /></button>
+        <button className="flex items-center gap-2.5 flex-1 min-w-0 text-left" style={{ color: 'white', fontWeight: 600 }} onClick={onInstall}><Download size={18} className="flex-none" /><span className="flex-1">{t('Instalar como app, sin Safari y con avisos')}</span></button>
+        <button onClick={close} aria-label={t('Cerrar')} style={{ color: 'white' }}><X size={16} /></button>
       </div>
     )
   }
   if (!can) return null
   const enable = async () => {
     try {
-      if ((await Notification.requestPermission()) !== 'granted') return toast('Sin permiso no puedo avisarte')
+      if ((await Notification.requestPermission()) !== 'granted') return toast(t('Sin permiso no puedo avisarte'))
       const reg = await navigator.serviceWorker.ready
       const key = await api<string>('pushKey')
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ToKey(key) })
       await api('pushAdd', sub.toJSON())
-      toast('Avisos activados')
+      toast(t('Avisos activados'))
       setHidden(true)
     } catch (e) { toast((e as Error).message) }
   }
-  return <button className="m-offer m-offer--go" onClick={() => void enable()}><Bell size={18} className="flex-none" /><span className="flex-1 text-left">Toca aquí para que te avise cuando necesite algo</span></button>
+  return <button className="m-offer m-offer--go" onClick={() => void enable()}><Bell size={18} className="flex-none" /><span className="flex-1 text-left">{t('Toca aquí para que te avise cuando necesite algo')}</span></button>
 }
 
 /**
@@ -115,7 +116,7 @@ function PhoneProjects() {
   }, [state?.activeProjectId, state?.projects.length])
   if (!state || state.projects.length < 2) return null
   return (
-    <nav ref={bar} className="m-projects" aria-label="Proyectos">
+    <nav ref={bar} className="m-projects" aria-label={t('Proyectos')}>
       {state.projects.map((p) => {
         const on = p.id === state.activeProjectId
         const x = state.pending?.[p.id]
@@ -145,20 +146,20 @@ export function PhoneShell({ Screen }: { Screen: ComponentType }) {
       <PushOffer onInstall={() => void install()} />
       <PhoneProjects />
       <main className="content m-content"><Screen key={route} /></main>
-      <nav className="m-tabs" aria-label="Navegación">
+      <nav className="m-tabs" aria-label={t('Navegación')}>
         {TABS.map((t) => (
           <button key={t.route} className={route === t.route ? 'on' : ''} onClick={() => go(t.route)}>
             <span className="relative"><t.icon size={23} />{count[t.route] ? <span className="m-badge">{count[t.route]}</span> : null}</span>
             {t.label}
           </button>
         ))}
-        <button className={!inTabs ? 'on' : ''} onClick={() => setMore(true)}><Menu size={23} />Más</button>
+        <button className={!inTabs ? 'on' : ''} onClick={() => setMore(true)}><Menu size={23} />{t('Más')}</button>
       </nav>
       {sheet}
       {more && (
         <div className="m-sheetBack" onClick={() => setMore(false)}>
           <div className="m-sheet" onClick={(e) => e.stopPropagation()}>
-            {!isInstalled() && <button className="m-primary" onClick={() => { setMore(false); void install() }}>Instalar como app</button>}
+            {!isInstalled() && <button className="m-primary" onClick={() => { setMore(false); void install() }}>{t('Instalar como app')}</button>}
             <div className="m-moreGrid">
               {NAV.filter((n) => !TABS.some((t) => t.route === n.route)).map((n) => (
                 <button key={n.route} onClick={() => { go(n.route); setMore(false) }}>

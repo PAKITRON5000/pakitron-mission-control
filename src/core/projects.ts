@@ -1,10 +1,11 @@
+import { t } from './i18n'
 // Projects: a folder (usually a git repository) with its copies (worktrees), docs and media folders.
 // Git is only read, with --no-optional-locks so not even the index gets refreshed.
 import { execFile } from 'node:child_process'
 import { existsSync, statSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
-import type { CopyStatus, DocSource, ProjectConfig } from './types'
+import type { CopyStatus, DocSource, ProjectConfig, Settings } from './types'
 import type { DB } from './db'
 import { findMediaDirs } from './profile'
 import { BOOKKEEPING, parseDiff, TASK_ID, taskOfSubject, type TaskCommit } from './taskdiff'
@@ -157,7 +158,7 @@ const PROJECT_COLORS = ['#FF6B8B', '#64D2FF', '#FFD60A', '#5E5CE6', '#FF9F0A', '
 export async function detectProject(root: string, name?: string, id?: string, color?: string): Promise<ProjectConfig> {
   const trees = await listWorktrees(root)
   const copies = trees.map((t) => ({ path: t.path, label: copyLabel(root, t.path), branch: t.branch }))
-  if (!copies.length) copies.push({ path: root, label: 'Copia principal', branch: undefined })
+  if (!copies.length) copies.push({ path: root, label: t('Copia principal'), branch: undefined })
   const docsDirs = copies.map((c) => join(c.path, 'docs')).filter((d) => existsSync(d))
   const mediaDirs: string[] = []
   for (const c of copies) {
@@ -197,6 +198,67 @@ export function saveProject(db: DB, p: ProjectConfig): void {
   ).run(p.id, p.name, JSON.stringify(p), p.createdAt, now)
 }
 
+/** Every table that keeps something of a project by its id: removing the project (EV169) empties them of it. */
+export const PROJECT_TABLES = ['tasks', 'events', 'assets', 'comments', 'instructions', 'claims', 'claim_history', 'decisions', 'assignments', 'task_cards', 'task_changes', 'verifications', 'memories'] as const
+
+/**
+ * EV169 (the user, 14-11 14:40: «añade a la app una opción para borrar proyectos»): the project and everything the
+ * database kept about it, in one go. The caller makes a copy of the database first; the folder is not touched here.
+ */
+export function forgetProject(db: DB, id: string): void {
+  db.exec('BEGIN')
+  try {
+    for (const table of PROJECT_TABLES) db.prepare(`DELETE FROM ${table} WHERE project_id = ?`).run(id)
+    db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+}
+
+/**
+ * EV169: gallery entries of a project that no longer exists (a scan that was under way when it was removed, 14-11: the
+ * photos of the first project removed came back). '*' is not a project but everything, and stays. Returns how many went.
+ */
+export function dropOrphanAssets(db: DB): number {
+  if (!(db.prepare('SELECT COUNT(*) AS n FROM projects').get() as { n: number }).n) return 0
+  return Number(db.prepare("DELETE FROM assets WHERE project_id <> '*' AND project_id NOT IN (SELECT id FROM projects)").run().changes)
+}
+
+/**
+ * EV169: what changes in the settings when a project goes: nothing may name it any more (its wheel, its backup account,
+ * starts scheduled on it, its routines, turn order, smart cleaning, autonomy and backups), it stops being the open one,
+ * and its folder is not offered again as a project («Añadirlo como proyecto»).
+ */
+export function settingsWithoutProject(s: Settings, id: string, root: string): Partial<Settings> {
+  const drop = <V>(r: Record<string, V> | undefined): Record<string, V> => Object.fromEntries(Object.entries(r ?? {}).filter(([k]) => k !== id))
+  return {
+    relayChains: drop(s.relayChains),
+    routines: drop(s.routines),
+    nextOrderBy: drop(s.nextOrderBy),
+    smartClean: drop(s.smartClean),
+    improveAsked: drop(s.improveAsked),
+    reserves: (s.reserves ?? []).filter((r) => r.projectId !== id),
+    schedules: Object.fromEntries(Object.entries(s.schedules ?? {}).filter(([, v]) => v?.projectId !== id)),
+    autonomyOff: (s.autonomyOff ?? []).filter((x) => x !== id),
+    ...(s.backup?.off ? { backup: { ...s.backup, off: s.backup.off.filter((x) => x !== id) } } : {}),
+    declinedFolders: [...new Set([...(s.declinedFolders ?? []), root])],
+    ...(s.activeProjectId === id ? { activeProjectId: undefined } : {})
+  }
+}
+
+/**
+ * EV169: whether a project's folder may go to the bin along with it. Never a drive, the user's folder, its Downloads,
+ * Documents or Desktop, nor the folder of this app (or one that holds it): only the project's own folder.
+ */
+export function binnable(root: string, appDir: string, home = homedir()): boolean {
+  const r = root.replace(/\//g, '\\').toLowerCase().replace(/\\+$/, '')
+  if (!/^[a-z]:\\[^\\]/.test(r)) return false // a drive itself, or not a folder on a drive
+  const keep = [home, ...['Downloads', 'Documents', 'Desktop', 'OneDrive'].map((d) => join(home, d)), process.env.SystemRoot, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], appDir]
+  return !keep.some((k) => k && isInside(k, root))
+}
+
 /** Refreshes the list of copies (worktrees come and go) without losing the user's choices. */
 export async function refreshProjectCopies(db: DB, p: ProjectConfig): Promise<ProjectConfig> {
   const fresh = await detectProject(p.root, p.name, p.id, p.color)
@@ -225,7 +287,7 @@ export function projectForPath(projects: ProjectConfig[], path: string): { proje
   const lower = path.toLowerCase().replace(/\//g, '\\')
   let best: { project?: ProjectConfig; copy?: string; len: number } = { len: -1 }
   for (const p of projects) {
-    for (const c of [...p.copies, { path: p.root, label: 'Copia principal' }]) {
+    for (const c of [...p.copies, { path: p.root, label: t('Copia principal') }]) {
       const cp = c.path.toLowerCase()
       if ((lower === cp || lower.startsWith(cp + '\\')) && cp.length > best.len) best = { project: p, copy: c.label, len: cp.length }
     }

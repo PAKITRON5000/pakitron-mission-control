@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Decisions: what a Claude needs the user to decide or approve, with pictures. A Claude asks with `pmc decide` and goes
 // on with something else; the user answers in Mission Control with one click (and a note if he wants); the answer goes
 // back to that Claude as an instruction, through the same hooks that deliver everything else. The pictures are copied
@@ -183,7 +184,7 @@ export function answerText(d: Decision, choice?: string, note?: string, status: 
     : opt ? `elige «${opt.label}»${opt.detail ? ` (${opt.detail})` : ''}`
     // EV147: «responde» alone read as an order to the Claude (14-11); it is the user answering with a note and no option.
     : choice === 'si' ? 'lo aprueba' : choice === 'no' ? 'no lo aprueba' : 'contesta con una nota, sin elegir opción'
-  return `Decisión del usuario sobre «${d.title}» (#${d.id}${d.taskExtId ? `, ${d.taskExtId}` : ''}): ${what}.${reactionsText(d, reactions)}${note?.trim() ? ` Su nota: ${note.trim()}` : ''} Apúntalo en docs/TASKS.md (y en docs/DECISIONS.md si cambia algo de lo acordado) y sigue con esa tarea cuando le toque por prioridad.`
+  return t('Decisión del usuario sobre «{title}» (#{id}{v0}): {what}.{v1}{v2} Apúntalo en docs/TASKS.md (y en docs/DECISIONS.md si cambia algo de lo acordado) y sigue con esa tarea cuando le toque por prioridad.', { title: d.title, id: d.id, v0: d.taskExtId ? `, ${d.taskExtId}` : '', what: what, v1: reactionsText(d, reactions), v2: note?.trim() ? ` Su nota: ${note.trim()}` : '' })
 }
 
 /** EV147: why `pmc decide` did not save a question already asked on the same task, with what the user answered. */
@@ -192,7 +193,7 @@ export function alreadyAskedText(d: Decision): string {
   const opt = d.options.find((o) => o.id === d.choice)
   const answer = d.status === 'pendiente' ? `aún sin contestar (hecha a las ${hh}): su respuesta te llegará sola`
     : `contestada a las ${hh}: ${opt ? `«${opt.label}»${opt.detail ? ` (${opt.detail})` : ''}` : 'sin elegir opción'}${d.note ? `; su nota: ${d.note}` : ''}`
-  return `No guardada: ${d.taskExtId} ya tiene la pregunta #${d.id} «${d.title}» (de ${d.askedBy ?? 'otra cuenta'}), ${answer}. No le preguntes lo mismo dos veces: sigue con esa respuesta. Si la tuya es otra pregunta, repite la orden con --otra.`
+  return t('No guardada: {taskExtId} ya tiene la pregunta #{id} «{title}» (de {v0}), {answer}. No le preguntes lo mismo dos veces: sigue con esa respuesta. Si la tuya es otra pregunta, repite la orden con --otra.', { taskExtId: d.taskExtId, id: d.id, title: d.title, v0: d.askedBy ?? 'otra cuenta', answer: answer })
 }
 
 /** EV147: the account holding the decision's task now, when it is not the one that asked (it took over meanwhile). */
@@ -214,7 +215,7 @@ export function recentOnTask(db: DB, projectId: string, taskExtId: string | unde
 
 export function answerDecision(db: DB, project: ProjectConfig, id: number, a: { choice?: string; note?: string; status?: DecisionStatus; reactions?: Record<number, 'si' | 'no'> }, now = Date.now()): Decision {
   const d = getDecision(db, id)
-  if (!d) throw new Error('La decisión no existe')
+  if (!d) throw new Error(t('La decisión no existe'))
   const status = a.status ?? 'decidida'
   const reactions = a.reactions && Object.keys(a.reactions).length ? a.reactions : undefined
   // EV147: to whoever holds the task now if another account took it over; the one that asked is named.
@@ -227,7 +228,7 @@ export function answerDecision(db: DB, project: ProjectConfig, id: number, a: { 
   const opt = d.options.find((o) => o.id === a.choice)
   addEvent(db, {
     projectId: project.id, at: now, account: d.askedBy, kind: 'decidida',
-    title: `Has decidido «${d.title}»: ${status === 'descartada' ? 'descartada' : opt?.label ?? (a.choice === 'si' ? 'aprobado' : a.choice === 'no' ? 'no aprobado' : reactions ? 'lo que te gusta y lo que no' : 'con nota')}`,
+    title: t('Has decidido «{title}»: {v0}', { title: d.title, v0: status === 'descartada' ? 'descartada' : opt?.label ?? (a.choice === 'si' ? 'aprobado' : a.choice === 'no' ? 'no aprobado' : reactions ? 'lo que te gusta y lo que no' : 'con nota') }),
     detail: a.note, source: 'Mission Control', ref: `dec:${id}`
   })
   return getDecision(db, id)!

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // What kind of project the user is creating (EV45). An empty folder tells the app nothing, so the first Claude had to guess
 // the technology, invent the first tasks and only then get the right helpers. A template says it at the start: the kind
 // (so the subagents fit from the first minute: game reviewer, 3D artist, visual reviewer), a few rules for its CLAUDE.md,
@@ -26,13 +27,13 @@ const PLAN = 'P1 · Plan: qué se hace en la primera versión y qué no, la tecn
 
 export const TEMPLATES: ProjectTemplate[] = [
   {
-    id: 'libre', label: 'Que lo decida Claude', sub: 'Cualquier otra cosa: el primer Claude elige la tecnología y te la cuenta.',
+    id: 'libre', get label() { return t('Que lo decida Claude') }, get sub() { return t('Cualquier otra cosa: el primer Claude elige la tecnología y te la cuenta.') },
     kinds: [], heavy: [], rules: [],
     tasks: [PLAN],
     first: 'Decide la tecnología adecuada y explícasela al usuario en dos líneas.'
   },
   {
-    id: 'juego-unity', label: 'Juego en Unity', sub: '2D o 3D. Unity se usa por turnos: una compilación cada vez.',
+    id: 'juego-unity', get label() { return t('Juego en Unity') }, get sub() { return t('2D o 3D. Unity se usa por turnos: una compilación cada vez.') },
     kinds: ['unity'], heavy: ['unity'],
     rules: [
       'Juego en Unity. El editor y las compilaciones son un recurso que no se comparte: antes de abrir Unity o compilar, `pmc recurso unity "para qué"`, y suéltalo al acabar.',
@@ -48,7 +49,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Tecnología: Unity (la versión más reciente instalada en Unity Hub).'
   },
   {
-    id: 'juego-godot', label: 'Juego en Godot', sub: 'Ligero y rápido de probar; bueno para 2D.',
+    id: 'juego-godot', get label() { return t('Juego en Godot') }, get sub() { return t('Ligero y rápido de probar; bueno para 2D.') },
     kinds: ['godot'], heavy: [],
     rules: [
       'Juego en Godot 4. Las escenas y scripts se prueban sin ventana (`godot --headless`) en las comprobaciones de `pmc.json`.',
@@ -63,7 +64,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Tecnología: Godot 4 con GDScript, salvo que el plan dé un motivo para otra cosa.'
   },
   {
-    id: 'web', label: 'Web o app en el navegador', sub: 'Una página, una tienda, una herramienta.',
+    id: 'web', get label() { return t('Web o app en el navegador') }, get sub() { return t('Una página, una tienda, una herramienta.') },
     kinds: ['web'], heavy: [],
     rules: [
       'Web con TypeScript. `pmc.json` comprueba tipos y pruebas; nada se da por hecho sin pasarlas.',
@@ -78,7 +79,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Tecnología de partida: Vite con TypeScript; cambia solo si el plan lo justifica.'
   },
   {
-    id: 'escritorio', label: 'Programa de escritorio', sub: 'Una aplicación de Windows con ventana propia.',
+    id: 'escritorio', get label() { return t('Programa de escritorio') }, get sub() { return t('Una aplicación de Windows con ventana propia.') },
     kinds: ['electron'], heavy: [],
     rules: [
       'Aplicación de escritorio con Electron y TypeScript. `pmc.json` comprueba tipos y pruebas.',
@@ -94,7 +95,7 @@ export const TEMPLATES: ProjectTemplate[] = [
   },
   // EV127: the kinds that do not look like the first projects.
   {
-    id: 'movil', label: 'App de móvil', sub: 'Para Android y iPhone a la vez.',
+    id: 'movil', get label() { return t('App de móvil') }, get sub() { return t('Para Android y iPhone a la vez.') },
     kinds: ['flutter'], heavy: [],
     rules: [
       'App de móvil con Flutter. `pmc.json` pasa `flutter analyze` y `flutter test`; nada se da por hecho sin pasarlos.',
@@ -109,7 +110,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Tecnología de partida: Flutter con Dart.'
   },
   {
-    id: 'video', label: 'Vídeo', sub: 'Guion, montaje y render. La gráfica, por turnos.',
+    id: 'video', get label() { return t('Vídeo') }, get sub() { return t('Guion, montaje y render. La gráfica, por turnos.') },
     kinds: ['video'], heavy: ['gpu'],
     rules: [
       'Proyecto de vídeo. Renderizar y generar con la gráfica es un recurso que no se comparte: `pmc recurso gpu "para qué"` antes, y suéltalo al acabar. Si el usuario está jugando o editando, no se lanza.',
@@ -125,7 +126,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Decide con qué se monta (lo que haya instalado en este PC) y díselo al usuario.'
   },
   {
-    id: 'arte-3d', label: 'Arte 3D', sub: 'Personajes, escenarios o piezas en Blender.',
+    id: 'arte-3d', get label() { return t('Arte 3D') }, get sub() { return t('Personajes, escenarios o piezas en Blender.') },
     kinds: ['blender'], heavy: ['gpu'],
     rules: [
       'Arte 3D con Blender, por scripts de Python en `ArtSource/` siempre que se pueda (se repiten y se pueden corregir). Renderizar usa la gráfica: `pmc recurso gpu "para qué"`.',
@@ -140,7 +141,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Herramienta: Blender, por scripts de Python.'
   },
   {
-    id: 'datos', label: 'Análisis de datos', sub: 'Tablas, cuentas, gráficos y conclusiones.',
+    id: 'datos', get label() { return t('Análisis de datos') }, get sub() { return t('Tablas, cuentas, gráficos y conclusiones.') },
     kinds: ['data', 'python'], heavy: [],
     rules: [
       'Análisis de datos con Python (pandas y cuadernos de Jupyter). Cada cifra sale de código que se puede volver a ejecutar, nunca a mano.',
@@ -156,7 +157,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Pregunta al usuario por los datos si no están en la carpeta, con pmc decide.'
   },
   {
-    id: 'escritura', label: 'Libro o guion', sub: 'Una novela, un guion, un cuento, un artículo largo.',
+    id: 'escritura', get label() { return t('Libro o guion') }, get sub() { return t('Una novela, un guion, un cuento, un artículo largo.') },
     kinds: ['writing'], heavy: [],
     rules: [
       'Escritura. Un capítulo o escena por archivo (Markdown) y por cuenta: dos cuentas no escriben el mismo a la vez.',
@@ -172,7 +173,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Pregunta al usuario el tono y para quién es antes de escribir, con pmc decide.'
   },
   {
-    id: 'musica', label: 'Música o audio', sub: 'Canciones, efectos de sonido, un pódcast.',
+    id: 'musica', get label() { return t('Música o audio') }, get sub() { return t('Canciones, efectos de sonido, un pódcast.') },
     kinds: ['audio'], heavy: [],
     rules: [
       'Música o audio. Lo que se pueda, por código (Python, SuperCollider, una estación de audio por línea de órdenes) para poder repetirlo; los proyectos de la estación de audio, uno por cuenta.',
@@ -188,7 +189,7 @@ export const TEMPLATES: ProjectTemplate[] = [
     first: 'Mira qué hay instalado en este PC para hacer audio y díselo al usuario.'
   },
   {
-    id: 'documento', label: 'Documento o investigación', sub: 'Un informe, un libro, un estudio.',
+    id: 'documento', get label() { return t('Documento o investigación') }, get sub() { return t('Un informe, un libro, un estudio.') },
     kinds: ['docs'], heavy: [],
     rules: [
       'Documento o investigación. Cada dato con su fuente; lo que sea opinión, dicho como opinión.',

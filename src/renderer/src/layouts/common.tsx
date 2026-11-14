@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131: the pieces every shape of the app shares (layouts/meta.ts): the screens by route, the title bar, one screen in a
 // box with its fade, the way back with its «?», the marks of what waits, and what floats over any shape.
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react'
@@ -39,23 +40,23 @@ export const FULL_HEIGHT: Route[] = ['tareas', 'asistente']
 
 /** EV68: what each section is for, in one line (for anyone who opens the app for the first time). */
 export const HELP: Partial<Record<Route, string>> = {
-  decisiones: 'Lo que los Claude te preguntan: contesta y les llega al momento',
-  revisiones: 'Las correcciones que pediste sobre imágenes y vídeos, para aprobarlas',
-  asistente: 'Pregunta lo que quieras o pide algo para un Claude, sin gastar uso',
-  relevos: 'Quién trabaja en cada proyecto y quién sigue cuando se agote',
-  proximo: 'Cuándo vuelve cada cuenta y qué hará después',
-  chats: 'Las conversaciones de los Claude, abiertas y guardadas',
-  agentes: 'Tus cuentas de Claude: uso, estado y ventanas',
-  skills: 'Lo que saben hacer los Claude y lo que les vendría bien',
-  tareas: 'Lo que queda por hacer en el proyecto, lo que se hace y lo hecho',
-  galeria: 'Todas las imágenes, vídeos y modelos del proyecto',
-  cronologia: 'Lo que ha pasado, día a día',
-  integracion: 'Las ramas y copias de trabajo del proyecto',
-  memoria: 'Lo que los Claude no deben olvidar y lo que has pedido',
-  ajustes: 'Tamaño, colores, forma de la app, cuentas, avisos y copias de seguridad'
+  get decisiones() { return t('Lo que los Claude te preguntan: contesta y les llega al momento') },
+  get revisiones() { return t('Las correcciones que pediste sobre imágenes y vídeos, para aprobarlas') },
+  get asistente() { return t('Pregunta lo que quieras o pide algo para un Claude, sin gastar uso') },
+  get relevos() { return t('Quién trabaja en cada proyecto y quién sigue cuando se agote') },
+  get proximo() { return t('Cuándo vuelve cada cuenta y qué hará después') },
+  get chats() { return t('Las conversaciones de los Claude, abiertas y guardadas') },
+  get agentes() { return t('Tus cuentas de Claude: uso, estado y ventanas') },
+  get skills() { return t('Lo que saben hacer los Claude y lo que les vendría bien') },
+  get tareas() { return t('Lo que queda por hacer en el proyecto, lo que se hace y lo hecho') },
+  get galeria() { return t('Todas las imágenes, vídeos y modelos del proyecto') },
+  get cronologia() { return t('Lo que ha pasado, día a día') },
+  get integracion() { return t('Las ramas y copias de trabajo del proyecto') },
+  get memoria() { return t('Lo que los Claude no deben olvidar y lo que has pedido') },
+  get ajustes() { return t('Tamaño, colores, forma de la app, cuentas, avisos y copias de seguridad') }
 }
 
-export const KEYS_HELP = 'Ctrl + K busca cualquier cosa · Ctrl + J abre el asistente · Ctrl + N, una instrucción nueva · Ctrl + 1…9, los apartados · Ctrl + Tab, el siguiente proyecto · Ctrl + / Ctrl −, el tamaño de la letra.'
+export const keysHelp = () => t('Ctrl + K busca cualquier cosa · Ctrl + J abre el asistente · Ctrl + N, una instrucción nueva · Ctrl + 1…9, los apartados · Ctrl + Tab, el siguiente proyecto · Ctrl + / Ctrl −, el tamaño de la letra.')
 
 /** The red marks of what waits for the user, by section (Decidir counts every project). */
 export function useBadges(): Partial<Record<Route, number>> {
@@ -87,10 +88,10 @@ export function ProjectSwitcher() {
   const waiting = Object.entries(state?.pending ?? {}).filter(([id]) => id !== state?.activeProjectId).reduce((n, [, x]) => n + x.decisions, 0)
   return (
     <div className="relative no-drag min-w-0" ref={ref}>
-      <button className="btn btn-ghost btn-sm min-w-0" style={{ height: 30 }} onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} title="Cambiar de proyecto (Ctrl + Tab)">
+      <button className="btn btn-ghost btn-sm min-w-0" style={{ height: 30 }} onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} title={t('Cambiar de proyecto (Ctrl + Tab)')}>
         <span className="dot flex-none" style={{ background: p?.color ?? 'var(--label-3)' }} />
-        <span className="t-head truncate">{p?.name ?? 'Sin proyecto'}</span>
-        {waiting > 0 && <span className="pill num flex-none" style={{ background: 'var(--red)', color: 'white', height: 18, padding: '0 6px' }} title="Preguntas en otros proyectos">{waiting}</span>}
+        <span className="t-head truncate">{p?.name ?? t('Sin proyecto')}</span>
+        {waiting > 0 && <span className="pill num flex-none" style={{ background: 'var(--red)', color: 'white', height: 18, padding: '0 6px' }} title={t('Preguntas en otros proyectos')}>{waiting}</span>}
         <ChevronDown size={13} className="c3 flex-none" />
       </button>
       <AnimatePresence>
@@ -101,13 +102,13 @@ export function ProjectSwitcher() {
               <button key={x.id} className="w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-0 bg-transparent hover:bg-[var(--fill)]" onClick={() => { void api('setActiveProject', x.id); setOpen(false) }}>
                 <span className="dot" style={{ background: x.color }} />
                 <span className="min-w-0 flex-1"><span className="t-body block truncate" style={{ fontWeight: 560 }}>{x.name}</span><span className="t-small c3 block truncate">{x.root}</span></span>
-                {state.pending?.[x.id]?.decisions ? <span className="pill num flex-none" style={{ background: 'var(--red)', color: 'white' }} title="Preguntas en Decidir">{state.pending[x.id].decisions}</span> : null}
+                {state.pending?.[x.id]?.decisions ? <span className="pill num flex-none" style={{ background: 'var(--red)', color: 'white' }} title={t('Preguntas en Decidir')}>{state.pending[x.id].decisions}</span> : null}
                 {x.id === state.activeProjectId && <Check size={14} style={{ color: 'var(--accent)' }} />}
               </button>
             ))}
             <div className="hairline my-1" />
-            <button className="w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-0 bg-transparent hover:bg-[var(--fill)] t-body" onClick={() => { setOpen(false); void api<any>('addProject').then((r) => r && toast(`Proyecto añadido: ${r.name}`)) }}>
-              <FolderPlus size={15} className="c3" /> Añadir proyecto…
+            <button className="w-full text-left flex items-center gap-2.5 px-2.5 py-2 rounded-lg border-0 bg-transparent hover:bg-[var(--fill)] t-body" onClick={() => { setOpen(false); void api<any>('addProject').then((r) => r && toast(t('Proyecto añadido: {name}', { name: r.name }))) }}>
+              <FolderPlus size={15} className="c3" />{t(' Añadir proyecto…')}
             </button>
           </motion.div>
         )}
@@ -126,36 +127,36 @@ export function TitleBar({ tabs = true, middle }: { tabs?: boolean; middle?: Rea
       {tabs ? <ProjectTabs /> : <ProjectSwitcher />}
       {middle}
       <div className="ml-auto flex items-center gap-2 flex-none">
-        <button className="no-drag flex items-center justify-center min-[1200px]:justify-start gap-2 h-[30px] w-[34px] px-0 min-[1200px]:px-3 rounded-[8px] border-0 t-small c3 min-[1200px]:w-[min(260px,19vw)]" title="Buscar (Ctrl+K)" style={{ background: 'var(--fill)' }} onClick={() => setPalette(true)} aria-label="Buscar (Ctrl+K)">
-          <Search size={14} className="flex-none" /> <span className="truncate hidden min-[1200px]:inline">Buscar</span> <span className="kbd ml-auto hidden min-[1200px]:inline">Ctrl K</span>
+        <button className="no-drag flex items-center justify-center min-[1200px]:justify-start gap-2 h-[30px] w-[34px] px-0 min-[1200px]:px-3 rounded-[8px] border-0 t-small c3 min-[1200px]:w-[min(260px,19vw)]" title={t('Buscar (Ctrl+K)')} style={{ background: 'var(--fill)' }} onClick={() => setPalette(true)} aria-label={t('Buscar (Ctrl+K)')}>
+          <Search size={14} className="flex-none" /> <span className="truncate hidden min-[1200px]:inline">{t('Buscar')}</span> <span className="kbd ml-auto hidden min-[1200px]:inline">{t('Ctrl K')}</span>
         </button>
         <AssistantButton />
-        <button className="btn btn-sm btn-icon btn-ghost hidden min-[1200px]:inline-flex" aria-label="Actualizar" title={state?.refreshedAt?.agents ? `Actualizado ${ago(state.refreshedAt.agents, now)}` : 'Actualizar'} onClick={async () => { setSpin(true); await refresh(); setSpin(false) }}>
+        <button className="btn btn-sm btn-icon btn-ghost hidden min-[1200px]:inline-flex" aria-label={t('Actualizar')} title={state?.refreshedAt?.agents ? t('Actualizado {v0}', { v0: ago(state.refreshedAt.agents, now) }) : t('Actualizar')} onClick={async () => { setSpin(true); await refresh(); setSpin(false) }}>
           <RefreshCw size={15} className={spin ? 'animate-spin' : ''} />
         </button>
-        <button className="btn btn-sm btn-icon btn-primary rounded-full" style={{ borderRadius: 99, width: 30, height: 30 }} onClick={() => openComposer()} aria-label="Nueva instrucción (Ctrl+N)" title="Nueva instrucción (Ctrl+N)"><Plus size={17} strokeWidth={2.4} /></button>
+        <button className="btn btn-sm btn-icon btn-primary rounded-full" style={{ borderRadius: 99, width: 30, height: 30 }} onClick={() => openComposer()} aria-label={t('Nueva instrucción (Ctrl+N)')} title={t('Nueva instrucción (Ctrl+N)')}><Plus size={17} strokeWidth={2.4} /></button>
       </div>
     </header>
   )
 }
 
 /** The way back and the «?» of a section, at the top of its box. `back` says where back goes. */
-export function PanelBar({ route, back = 'Inicio', onBack, extra }: { route: Route; back?: string; onBack: () => void; extra?: ReactNode }) {
+export function PanelBar({ route, back = t('Inicio'), onBack, extra }: { route: Route; back?: string; onBack: () => void; extra?: ReactNode }) {
   const [help, setHelp] = useState(false)
   useEffect(() => setHelp(false), [route])
   const n = NAV.find((x) => x.route === route)
   return (
     <div className="panel-bar">
-      <button className="panel-back" onClick={onBack} title={`Volver a ${back}`}><ArrowLeft size={15} strokeWidth={2.4} /> {back}</button>
+      <button className="panel-back" onClick={onBack} title={t('Volver a {back}', { back })}><ArrowLeft size={15} strokeWidth={2.4} /> {back}</button>
       {extra}
       <span className="relative ml-auto flex-none">
-        <button className="panel-back" style={{ width: 30, padding: 0, justifyContent: 'center' }} onClick={() => setHelp(!help)} aria-expanded={help} title="Ayuda de esta pantalla">?</button>
+        <button className="panel-back" style={{ width: 30, padding: 0, justifyContent: 'center' }} onClick={() => setHelp(!help)} aria-expanded={help} title={t('Ayuda de esta pantalla')}>?</button>
         {help && n && (
           <div className="card p-4 absolute right-0 top-9 z-20 flex flex-col gap-2" style={{ width: 320 }} onMouseLeave={() => setHelp(false)}>
             <b className="t-head">{n.label}</b>
             <span className="t-small c2">{HELP[route] ?? ''}</span>
-            <span className="t-small c3">{KEYS_HELP}</span>
-            <span className="t-small c3">¿Dudas? Pregúntale al asistente: «¿para qué sirve {n.label}?»</span>
+            <span className="t-small c3">{keysHelp()}</span>
+            <span className="t-small c3">{t('¿Dudas? Pregúntale al asistente: «¿para qué sirve ')}{n.label}?»</span>
           </div>
         )}
       </span>

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The health of a project in one line (EV47), for «Tus proyectos» in Inicio: do its checks pass, when was the last commit,
 // is there work left unsaved with nobody on it, how many tasks are left and who is working there. Everything comes from
 // what the app already reads (copies, verifications, tasks, sessions); nothing is run for it. No node imports.
@@ -31,7 +32,7 @@ export interface HealthLine { level: 'bien' | 'aviso' | 'mal'; parts: string[] }
 
 const ago = (ms: number, now: number) => {
   const m = Math.max(0, Math.round((now - ms) / 60_000))
-  return m < 60 ? `hace ${Math.max(1, m)} min` : m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`
+  return m < 60 ? t('hace {v0} min', { v0: Math.max(1, m) }) : m < 48 * 60 ? t('hace {v0} h', { v0: Math.round(m / 60) }) : t('hace {v0} días', { v0: Math.round(m / 1440) })
 }
 
 /** Unsaved changes this old, with nobody working there, are work someone may lose or redo. */

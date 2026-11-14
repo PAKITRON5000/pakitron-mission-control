@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131 · «Dos paneles»: two sections at once, side by side (the Chats while answering in Decidir, the Tasks next to the
 // Gallery). The left one is the app's own place (links and Ctrl + number move it); the right one keeps its own choice.
 // In a window too narrow for two, only the left one, and «⇄» swaps them.
@@ -13,8 +14,8 @@ function PaneHead({ route, onPick, extra }: { route: Route; onPick: (r: Route) =
   const n = NAV.find((x) => x.route === route)
   return (
     <div className="pane-head">
-      <span className="pane-title">{n?.label ?? 'Inicio'}</span>
-      <div className="pane-picks" role="tablist" aria-label="Apartado de este panel">
+      <span className="pane-title">{n?.label ?? t('Inicio')}</span>
+      <div className="pane-picks" role="tablist" aria-label={t('Apartado de este panel')}>
         {NAV.map((x) => (
           <button key={x.route} role="tab" aria-selected={x.route === route} className={`pane-pick ${x.route === route ? 'on' : ''}`} onClick={() => onPick(x.route)} title={x.label}>
             <NavIcon route={x.route} size={24} />
@@ -52,17 +53,17 @@ export default function Dividida() {
   // The same section on both sides says nothing twice: the right one moves to another.
   const shown: Route = right === route ? (route === 'chats' ? 'decisiones' : 'chats') : right
   const swap = () => { const l = route; go(shown); pickRight(l) }
-  const swapBtn = <button className="btn btn-sm btn-icon btn-ghost flex-none" onClick={swap} title="Cambiar de lado los dos paneles" aria-label="Cambiar de lado"><ArrowLeftRight size={15} /></button>
+  const swapBtn = <button className="btn btn-sm btn-icon btn-ghost flex-none" onClick={swap} title={t('Cambiar de lado los dos paneles')} aria-label={t('Cambiar de lado')}><ArrowLeftRight size={15} /></button>
   return (
     <div className="app lay-dividida">
       <TitleBar />
       <div className={`split ${two ? 'two' : ''}`}>
-        <section className="pane" aria-label="Panel izquierdo">
+        <section className="pane" aria-label={t('Panel izquierdo')}>
           <PaneHead route={route} onPick={(r) => go(r)} extra={!two && swapBtn} />
           <Pane route={route} />
         </section>
         {two && (
-          <section className="pane" aria-label="Panel derecho">
+          <section className="pane" aria-label={t('Panel derecho')}>
             <PaneHead route={shown} onPick={pickRight} extra={swapBtn} />
             <Pane route={shown} />
           </section>

@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ArrowUp, ChevronRight, Sparkles, Send, X, PenLine, Bot, Check } from 'lucide-react'
@@ -79,23 +80,23 @@ function Answer({ m, compact }: { m: ChatMsg; compact?: boolean }) {
         <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'color-mix(in srgb, var(--indigo) 10%, var(--bg-elev))', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--indigo) 30%, transparent)' }}>
           <div className="flex items-center gap-2 min-w-0">
             {r.send.target ? <Avatar id={r.send.target as any} size={26} /> : <Send size={15} style={{ color: 'var(--indigo)' }} />}
-            <span className="t-small" style={{ fontWeight: 650 }}>Para {nameify(r.send.who)} · {r.send.project}</span>
+            <span className="t-small" style={{ fontWeight: 650 }}>{t('Para {v0} · {project}', { v0: nameify(r.send.who), project: r.send.project })}</span>
           </div>
           <div className="t-small c2 selectable" style={{ fontStyle: 'italic' }}>«{r.send.body.length > 240 ? r.send.body.slice(0, 240) + '…' : r.send.body}»</div>
-          {m.done === 'enviado' ? <div className="t-small flex items-center gap-1.5" style={{ color: 'var(--green)', fontWeight: 600 }}><Check size={14} /> Enviado</div>
-            : m.done === 'cancelado' ? <div className="t-small c3">No se ha enviado.</div>
+          {m.done === 'enviado' ? <div className="t-small flex items-center gap-1.5" style={{ color: 'var(--green)', fontWeight: 600 }}><Check size={14} /> {t('Enviado')}</div>
+            : m.done === 'cancelado' ? <div className="t-small c3">{t('No se ha enviado.')}</div>
             : (
               <div className="flex flex-wrap gap-1.5">
-                <button className="btn btn-sm btn-primary" onClick={() => void sendPlan(m.id)}><Send size={12} /> {r.send.kind === 'idea' || r.send.kind === 'nota' ? 'Guardar' : 'Enviar'}</button>
-                <button className="btn btn-sm" title="Abre «Nueva instrucción» con este texto para cambiar destino o tipo" onClick={() => { cancelPlan(m.id); openComposer({ text: r.send!.body, target: r.send!.target }) }}><PenLine size={12} /> Cambiar…</button>
-                <button className="btn btn-sm btn-ghost" onClick={() => cancelPlan(m.id)}><X size={12} /> No</button>
+                <button className="btn btn-sm btn-primary" onClick={() => void sendPlan(m.id)}><Send size={12} /> {r.send.kind === 'idea' || r.send.kind === 'nota' ? t('Guardar') : t('Enviar')}</button>
+                <button className="btn btn-sm" title={t('Abre «Nueva instrucción» con este texto para cambiar destino o tipo')} onClick={() => { cancelPlan(m.id); openComposer({ text: r.send!.body, target: r.send!.target }) }}><PenLine size={12} /> {t('Cambiar…')}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => cancelPlan(m.id)}><X size={12} /> {t('No')}</button>
               </div>
             )}
         </div>
       )}
       {r?.offerClaude && !m.done && (
         <div>
-          <button className="btn btn-sm" style={{ color: 'var(--indigo)' }} title="Se lo pregunta a Haiku con la cuenta que más semana tiene, dándole lo que sabe la app. Gasta un poco de uso." onClick={() => void askClaude(m.id, state?.activeProjectId)}><Bot size={13} /> Pregúntale a Claude <span className="c3">(gasta un poco de uso)</span></button>
+          <button className="btn btn-sm" style={{ color: 'var(--indigo)' }} title={t('Se lo pregunta a Haiku con la cuenta que más semana tiene, dándole lo que sabe la app. Gasta un poco de uso.')} onClick={() => void askClaude(m.id, state?.activeProjectId)}><Bot size={13} /> {t('Pregúntale a Claude')} <span className="c3">{t('(gasta un poco de uso)')}</span></button>
         </div>
       )}
       {r?.more && <div><button className="btn btn-sm btn-ghost" style={{ color: 'var(--accent)', paddingLeft: 0 }} onClick={() => void run(r.more!.go)}>{r.more.label} <ChevronRight size={13} /></button></div>}
@@ -148,10 +149,10 @@ export function AssistantChat({ compact, empty }: { compact?: boolean; empty?: R
       </AnimatePresence>
       <div className="flex items-end gap-2 flex-none" style={{ padding: compact ? '8px 10px 10px' : '6px 0 0' }}>
         <textarea ref={input} rows={1} className="field flex-1 t-body" style={{ resize: 'none', minHeight: compact ? 36 : 44, maxHeight: 140, padding: compact ? '8px 12px' : '11px 14px', borderRadius: 14, fontSize: compact ? 13.5 : 14.5 }}
-          placeholder={compact ? 'Pregunta o pide algo…' : 'Pregúntame lo que quieras o pídeme algo para un Claude…'} value={text}
+          placeholder={compact ? t('Pregunta o pide algo…') : t('Pregúntame lo que quieras o pídeme algo para un Claude…')} value={text}
           onChange={(e) => { setText(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(140, e.target.scrollHeight) + 'px' }}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }} aria-label="Escribe al asistente" />
-        <motion.button className="btn btn-primary btn-icon flex-none" style={{ width: compact ? 36 : 44, height: compact ? 36 : 44, borderRadius: 999 }} disabled={!text.trim() || busy} onClick={() => submit()} aria-label="Enviar" whileTap={{ scale: 0.9 }}>
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }} aria-label={t('Escribe al asistente')} />
+        <motion.button className="btn btn-primary btn-icon flex-none" style={{ width: compact ? 36 : 44, height: compact ? 36 : 44, borderRadius: 999 }} disabled={!text.trim() || busy} onClick={() => submit()} aria-label={t('Enviar')} whileTap={{ scale: 0.9 }}>
           <ArrowUp size={compact ? 17 : 20} strokeWidth={2.5} />
         </motion.button>
       </div>

@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Check, ChevronDown, Undo2, Gavel, Send, ThumbsUp, ThumbsDown, Music } from 'lucide-react'
@@ -17,8 +18,8 @@ function Thumbs({ value, onChange, dark }: { value?: Reaction; onChange?: (v?: R
   const base = dark ? { background: 'rgb(0 0 0 / 0.55)', color: 'white', backdropFilter: 'blur(8px)' } : { background: 'var(--fill)' }
   return (
     <span className="inline-flex gap-1 flex-none" onClick={(e) => e.stopPropagation()}>
-      <button className="btn btn-sm btn-icon" title="Me gusta" aria-pressed={value === 'si'} disabled={!onChange} style={value === 'si' ? { background: 'var(--green)', color: 'white', opacity: 1 } : base} onClick={() => onChange?.(value === 'si' ? undefined : 'si')}><ThumbsUp size={13} /></button>
-      <button className="btn btn-sm btn-icon" title="No me gusta" aria-pressed={value === 'no'} disabled={!onChange} style={value === 'no' ? { background: 'var(--red)', color: 'white', opacity: 1 } : base} onClick={() => onChange?.(value === 'no' ? undefined : 'no')}><ThumbsDown size={13} /></button>
+      <button className="btn btn-sm btn-icon" title={t('Me gusta')} aria-pressed={value === 'si'} disabled={!onChange} style={value === 'si' ? { background: 'var(--green)', color: 'white', opacity: 1 } : base} onClick={() => onChange?.(value === 'si' ? undefined : 'si')}><ThumbsUp size={13} /></button>
+      <button className="btn btn-sm btn-icon" title={t('No me gusta')} aria-pressed={value === 'no'} disabled={!onChange} style={value === 'no' ? { background: 'var(--red)', color: 'white', opacity: 1 } : base} onClick={() => onChange?.(value === 'no' ? undefined : 'no')}><ThumbsDown size={13} /></button>
     </span>
   )
 }
@@ -36,7 +37,7 @@ function Media({ d, react, setReact, onZoom }: { d: Decision; react: Record<numb
         <div className="decision-shots">
           {pics.map((im) => (
             <div key={im.n} className="flex flex-col gap-1.5 min-w-0">
-              <button className="decision-shot" onClick={() => onZoom(im.n)} title="Pulsa para verla grande">
+              <button className="decision-shot" onClick={() => onZoom(im.n)} title={t('Pulsa para verla grande')}>
                 <img src={shot(d, im.n)} alt={im.caption} loading="lazy" />
                 <span className="absolute right-2 top-2"><Thumbs dark value={react[im.n]} onChange={setReact && ((v) => setReact(im.n, v))} /></span>
               </button>
@@ -59,11 +60,11 @@ function Media({ d, react, setReact, onZoom }: { d: Decision; react: Record<numb
         <div key={g} className="flex flex-col gap-1.5">
           {g && <div className="flex items-center gap-1.5 t-micro" style={{ color: 'var(--accent)' }}><Music size={12} /> {g}</div>}
           {sounds.filter((s) => (s.group ?? '') === g).map((s) => (
-            <SoundRow key={s.n} src={shot(d, s.n)} caption={s.caption ?? `Sonido ${s.n + 1}`} right={<Thumbs value={react[s.n]} onChange={setReact && ((v) => setReact(s.n, v))} />} />
+            <SoundRow key={s.n} src={shot(d, s.n)} caption={s.caption ?? t('Sonido {n}', { n: s.n + 1 })} right={<Thumbs value={react[s.n]} onChange={setReact && ((v) => setReact(s.n, v))} />} />
           ))}
         </div>
       ))}
-      {sounds.length > 0 && setReact && <div className="t-small c3">Marca 👍 o 👎 en cada una: se lo digo al Claude tal cual, junto con lo que elijas abajo.</div>}
+      {sounds.length > 0 && setReact && <div className="t-small c3">{t('Marca 👍 o 👎 en cada una: se lo digo al Claude tal cual, junto con lo que elijas abajo.')}</div>}
     </div>
   )
 }
@@ -79,10 +80,10 @@ function DecidedRow({ d, startOpen, onReopen }: { d: Decision; startOpen: boolea
   const [open, setOpen] = useState(startOpen)
   const [zoom, setZoom] = useState<number>()
   const opt = d.options.find((o) => o.id === d.choice)
-  const verdict = d.status === 'descartada' ? 'No hacía falta' : opt?.label ?? (d.choice === 'si' ? 'Aprobado' : d.choice === 'no' ? 'No aprobado' : 'Con nota')
+  const verdict = d.status === 'descartada' ? t('No hacía falta') : opt?.label ?? (d.choice === 'si' ? t('Aprobado') : d.choice === 'no' ? t('No aprobado') : t('Con nota'))
   const reactions = Object.values(d.reactions ?? {})
   const first = d.images[0]
-  const delivered = d.status !== 'descartada' && d.askedBy ? (d.deliveredAt ? `${accName(d.askedBy)} ya lo ha recibido, ${ago(d.deliveredAt)}` : `Le llegará a ${accName(d.askedBy)} en su próximo paso`) : undefined
+  const delivered = d.status !== 'descartada' && d.askedBy ? (d.deliveredAt ? t('{v0} ya lo ha recibido, {v1}', { v0: accName(d.askedBy), v1: ago(d.deliveredAt) }) : t('Le llegará a {v0} en su próximo paso', { v0: accName(d.askedBy) })) : undefined
   return (
     <div id={`dec-${d.id}`} className="card overflow-hidden">
       <button className="w-full text-left flex items-start gap-3 p-3 border-0 bg-transparent" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -98,7 +99,7 @@ function DecidedRow({ d, startOpen, onReopen }: { d: Decision; startOpen: boolea
         <div className="flex flex-col gap-4 pt-1">
           <div className="px-5 flex flex-col gap-2">
             {d.question && <div className="t-body c2 selectable whitespace-pre-wrap leading-relaxed">{d.question}</div>}
-            {d.context && <details className="t-small c3"><summary className="cursor-pointer select-none">Más contexto</summary><div className="mt-2 whitespace-pre-wrap selectable leading-relaxed">{d.context}</div></details>}
+            {d.context && <details className="t-small c3"><summary className="cursor-pointer select-none">{t('Más contexto')}</summary><div className="mt-2 whitespace-pre-wrap selectable leading-relaxed">{d.context}</div></details>}
           </div>
           {d.images.length > 0 && <Media d={d} react={(d.reactions ?? {}) as Record<number, Reaction>} onZoom={setZoom} />}
           <div className="px-5 pb-5 flex flex-col gap-3">
@@ -108,15 +109,15 @@ function DecidedRow({ d, startOpen, onReopen }: { d: Decision; startOpen: boolea
                   <div key={o.id} className={`option-btn ${d.choice === o.id ? 'on' : ''}`} style={{ cursor: 'default', opacity: d.choice === o.id ? 1 : 0.6 }}>
                     <span className="t-head flex items-center gap-1.5">{d.choice === o.id && <Check size={15} strokeWidth={3} />}{o.label}</span>
                     {o.detail && <span className="t-small" style={{ opacity: 0.75 }}>{o.detail}</span>}
-                    {d.choice === o.id && <span className="t-micro mt-1">Lo que elegiste</span>}
+                    {d.choice === o.id && <span className="t-micro mt-1">{t('Lo que elegiste')}</span>}
                   </div>
                 ))}
               </div>
             )}
-            {d.note && <div className="rounded-xl px-3 py-2" style={{ background: 'var(--fill)' }}><div className="t-micro c3 mb-0.5">Lo que escribiste</div><div className="t-body selectable whitespace-pre-wrap">{d.note}</div></div>}
+            {d.note && <div className="rounded-xl px-3 py-2" style={{ background: 'var(--fill)' }}><div className="t-micro c3 mb-0.5">{t('Lo que escribiste')}</div><div className="t-body selectable whitespace-pre-wrap">{d.note}</div></div>}
             <div className="flex items-center gap-2 flex-wrap">
               {delivered && <span className="t-small c3">{delivered}</span>}
-              <button className="btn btn-sm ml-auto" onClick={onReopen}><Undo2 size={13} /> Reabrir</button>
+              <button className="btn btn-sm ml-auto" onClick={onReopen}><Undo2 size={13} /> {t('Reabrir')}</button>
             </div>
           </div>
         </div>
@@ -135,7 +136,7 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
   const [react, setReactAll] = useState<Record<number, Reaction>>({})
   const setReact = (n: number, v?: Reaction) => setReactAll((r) => { const x = { ...r }; if (v) x[n] = v; else delete x[n]; return x })
   const reacted = Object.keys(react).length
-  const opts = d.options.length ? d.options : [{ id: 'si', label: 'Aprobar', detail: 'Está bien así' }, { id: 'no', label: 'No, cambiarlo', detail: 'Explica qué en la nota' }]
+  const opts = d.options.length ? d.options : [{ id: 'si', label: t('Aprobar'), detail: t('Está bien así') }, { id: 'no', label: t('No, cambiarlo'), detail: t('Explica qué en la nota') }]
   const picked = opts.find((o) => o.id === choice)
   const needsNote = choice === 'no' && !note.trim()
   const send = async (status: 'decidida' | 'descartada' = 'decidida') => {
@@ -143,7 +144,7 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
     setBusy(true)
     try {
       const r = await api<Decision>('answerDecision', state.activeProjectId, d.id, { choice: status === 'descartada' ? undefined : choice, note, status, reactions: status === 'descartada' ? undefined : react })
-      toast(d.askedBy ? `Enviado a ${accName(d.askedBy)}: le llega en su próximo paso` : 'Decisión guardada: la recoge el primer Claude que trabaje')
+      toast(d.askedBy ? t('Enviado a {v0}: le llega en su próximo paso', { v0: accName(d.askedBy) }) : t('Decisión guardada: la recoge el primer Claude que trabaje'))
       onDone(r)
     } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
   }
@@ -151,7 +152,7 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
     <motion.article id={`dec-${d.id}`} layout="position" className="decision" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 60, transition: { duration: 0.22 } }} transition={SPRING_SOFT}>
       <div className="p-5 pb-4 flex flex-col gap-3">
         <div className="flex items-center gap-2 t-small c3 flex-wrap">
-          {d.askedBy ? <><Avatar id={d.askedBy} size={22} /><span className="c2" style={{ fontWeight: 600 }}>{accName(d.askedBy)} pregunta</span></> : <span className="c2" style={{ fontWeight: 600 }}>Pendiente</span>}
+          {d.askedBy ? <><Avatar id={d.askedBy} size={22} /><span className="c2" style={{ fontWeight: 600 }}>{t('{v0} pregunta', { v0: accName(d.askedBy) })}</span></> : <span className="c2" style={{ fontWeight: 600 }}>{t('Pendiente')}</span>}
           {d.taskExtId && <span className="pill" style={{ background: 'var(--fill)' }}><b className="num">{d.taskExtId}</b></span>}
           <PriorityBadge p={d.priority} withLabel />
           <span className="ml-auto">{ago(d.createdAt)}</span>
@@ -160,10 +161,10 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
         {d.question && <div className="t-body c2 selectable whitespace-pre-wrap leading-relaxed" style={{ fontSize: 15 }}>{d.question}</div>}
         {d.defaultChoice && d.waitUntil && (
           <div className="t-small rounded-xl px-3 py-2" style={{ background: 'var(--fill)', color: 'var(--label-2)' }}>
-            Si no contestas antes de <b>{new Date(d.waitUntil).toLocaleString('es-ES', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</b>, se elegirá <b>«{d.options.find((o) => o.id === d.defaultChoice)?.label ?? d.defaultChoice}»</b> para que el trabajo no se pare. Puedes cambiarlo después.
+            {t('Si no contestas antes de')} <b>{new Date(d.waitUntil).toLocaleString('es-ES', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}</b>{t(', se elegirá')} <b>«{d.options.find((o) => o.id === d.defaultChoice)?.label ?? d.defaultChoice}»</b> {t('para que el trabajo no se pare. Puedes cambiarlo después.')}
           </div>
         )}
-        {d.context && <details className="t-small c3"><summary className="cursor-pointer select-none">Más contexto</summary><div className="mt-2 whitespace-pre-wrap selectable leading-relaxed">{d.context}</div></details>}
+        {d.context && <details className="t-small c3"><summary className="cursor-pointer select-none">{t('Más contexto')}</summary><div className="mt-2 whitespace-pre-wrap selectable leading-relaxed">{d.context}</div></details>}
       </div>
       {d.images.length > 0 && <Media d={d} react={react} setReact={setReact} onZoom={setZoom} />}
       <div className="px-5 pb-5 flex flex-col gap-3">
@@ -175,14 +176,14 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
             </button>
           ))}
         </div>
-        <textarea className="field" style={{ minHeight: 64, padding: '10px 12px', resize: 'vertical' }} placeholder={choice === 'no' ? 'Qué hay que cambiar…' : 'Nota para el Claude (opcional)'} value={note} onChange={(e) => setNote(e.target.value)}
+        <textarea className="field" style={{ minHeight: 64, padding: '10px 12px', resize: 'vertical' }} placeholder={choice === 'no' ? t('Qué hay que cambiar…') : t('Nota para el Claude (opcional)')} value={note} onChange={(e) => setNote(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && (choice || note.trim() || reacted) && !needsNote) void send() }} />
         <div className="flex items-center gap-2 flex-wrap">
           <button className="btn btn-primary" style={{ height: 36, padding: '0 16px', fontSize: 14 }} disabled={busy || (!choice && !note.trim() && !reacted) || needsNote} onClick={() => void send()}>
-            <Send size={15} /> {picked ? `Decidir: ${picked.label}` : note.trim() ? 'Enviar la nota' : reacted ? 'Enviar lo que te gusta' : 'Elige una opción'}
+            <Send size={15} /> {picked ? t('Decidir: {label}', { label: picked.label }) : note.trim() ? t('Enviar la nota') : reacted ? t('Enviar lo que te gusta') : t('Elige una opción')}
           </button>
-          <span className="t-small c3">{needsNote ? 'Di qué cambiar en la nota' : 'Ctrl + Intro para enviar'}</span>
-          <button className="btn btn-ghost btn-sm ml-auto c3" disabled={busy} onClick={() => void send('descartada')} title="Ya no hace falta decidirlo">No hace falta</button>
+          <span className="t-small c3">{needsNote ? t('Di qué cambiar en la nota') : t('Ctrl + Intro para enviar')}</span>
+          <button className="btn btn-ghost btn-sm ml-auto c3" disabled={busy} onClick={() => void send('descartada')} title={t('Ya no hace falta decidirlo')}>{t('No hace falta')}</button>
         </div>
       </div>
       <AnimatePresence>{zoom != null && <Lightbox {...lightItems(d, zoom)} onClose={() => setZoom(undefined)} />}</AnimatePresence>
@@ -217,16 +218,16 @@ function ReviewTasks() {
     <>
       {list.length > 0 && (
         <section className="mt-10">
-          <div className="t-section mb-1">Tareas que esperan tu visto bueno <span className="c3 num" style={{ fontWeight: 500 }}>· {list.length}</span></div>
-          <div className="t-small c3 mb-3">Los Claude las dan por hechas; solo cuentan como buenas cuando tú lo dices.</div>
+          <div className="t-section mb-1">{t('Tareas que esperan tu visto bueno')} <span className="c3 num" style={{ fontWeight: 500 }}>· {list.length}</span></div>
+          <div className="t-small c3 mb-3">{t('Los Claude las dan por hechas; solo cuentan como buenas cuando tú lo dices.')}</div>
           <div className="flex flex-col gap-3">{list.slice(0, limit).map(item)}</div>
-          {list.length > limit && <button className="btn btn-sm mt-3" onClick={() => setLimit(limit + REVIEW_PAGE)}>Ver {Math.min(REVIEW_PAGE, list.length - limit)} más</button>}
+          {list.length > limit && <button className="btn btn-sm mt-3" onClick={() => setLimit(limit + REVIEW_PAGE)}>{t('Ver {v0} más', { v0: Math.min(REVIEW_PAGE, list.length - limit) })}</button>}
         </section>
       )}
       {changed.length > 0 && (
         <section className="mt-10">
-          <div className="t-section mb-1">Con cambios pedidos <span className="c3 num" style={{ fontWeight: 500 }}>· {changed.length}</span></div>
-          <div className="t-small c3 mb-3">Ya las has revisado. Volverán arriba cuando el Claude haya hecho lo que le pides.</div>
+          <div className="t-section mb-1">{t('Con cambios pedidos')} <span className="c3 num" style={{ fontWeight: 500 }}>· {changed.length}</span></div>
+          <div className="t-small c3 mb-3">{t('Ya las has revisado. Volverán arriba cuando el Claude haya hecho lo que le pides.')}</div>
           <div className="flex flex-col gap-3">{changed.map(item)}</div>
         </section>
       )}
@@ -261,16 +262,16 @@ export function Decisions() {
     <div className="content-inner max-w-[1180px]">
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
-          <h1 className="t-display flex items-center gap-3"><span className="icon-sq icon-sq-lg" style={{ background: 'var(--red)' }}><Gavel size={17} /></span>Decidir{project ? <span className="flex items-center gap-2" style={{ fontWeight: 450 }}><span className="c3">·</span><span className="dot" style={{ width: 12, height: 12, background: project.color }} /><span className="c2">{project.name}</span></span> : null}</h1>
-          <div className="t-head c2 mt-2" style={{ fontWeight: 450 }}>Lo que los Claude necesitan que decidas o apruebes. Elige, añade una nota si quieres, y les llega solo; mientras tanto siguen con otra cosa.</div>
+          <h1 className="t-display flex items-center gap-3"><span className="icon-sq icon-sq-lg" style={{ background: 'var(--red)' }}><Gavel size={17} /></span>{t('Decidir')}{project ? <span className="flex items-center gap-2" style={{ fontWeight: 450 }}><span className="c3">·</span><span className="dot" style={{ width: 12, height: 12, background: project.color }} /><span className="c2">{project.name}</span></span> : null}</h1>
+          <div className="t-head c2 mt-2" style={{ fontWeight: 450 }}>{t('Lo que los Claude necesitan que decidas o apruebes. Elige, añade una nota si quieres, y les llega solo; mientras tanto siguen con otra cosa.')}</div>
         </div>
         <div className="ml-auto">
-          <Segmented value={tab} onChange={setTab} options={[{ value: 'pendientes', label: `Pendientes · ${pending.length}` }, { value: 'decididas', label: `Decididas · ${done.length}` }]} />
+          <Segmented value={tab} onChange={setTab} options={[{ value: 'pendientes', label: t('Pendientes · {length}', { length: pending.length }) }, { value: 'decididas', label: t('Decididas · {length}', { length: done.length }) }]} />
         </div>
       </div>
 
       {(state?.projects.length ?? 0) > 1 && (
-        <div className="flex items-center gap-2 flex-wrap mb-5" role="tablist" aria-label="Proyecto">
+        <div className="flex items-center gap-2 flex-wrap mb-5" role="tablist" aria-label={t('Proyecto')}>
           {state!.projects.map((p) => {
             const n = state!.pending?.[p.id]?.decisions ?? 0
             const on = p.id === pid
@@ -289,9 +290,9 @@ export function Decisions() {
       {tab === 'pendientes' ? (
         <>
           {pending.length === 0 && !q.loading && (
-            <div className="card"><Empty icon={<Check size={30} />} title={`Nada pendiente de decidir${project ? ` en ${project.name}` : ''}`}
-              text={elsewhere.length ? <>Pero te esperan preguntas en {elsewhere.map((p, i) => <span key={p.id}>{i ? ' y ' : ''}<b>{p.name}</b> ({state!.pending[p.id].decisions})</span>)}.</> : <>Cuando un Claude necesite tu opinión, la verás aquí con fotos y te avisará Inicio. No tienes que hacer nada hasta entonces.</>}
-              action={elsewhere.length ? <button className="btn btn-primary" onClick={() => void api('setActiveProject', elsewhere[0].id)}>Ir a {elsewhere[0].name}</button> : undefined} /></div>
+            <div className="card"><Empty icon={<Check size={30} />} title={t('Nada pendiente de decidir{v0}', { v0: project ? t(' en {name}', { name: project.name }) : '' })}
+              text={elsewhere.length ? <>{t('Pero te esperan preguntas en')} {elsewhere.map((p, i) => <span key={p.id}>{i ? ' y ' : ''}<b>{p.name}</b> ({state!.pending[p.id].decisions})</span>)}.</> : <>{t('Cuando un Claude necesite tu opinión, la verás aquí con fotos y te avisará Inicio. No tienes que hacer nada hasta entonces.')}</>}
+              action={elsewhere.length ? <button className="btn btn-primary" onClick={() => void api('setActiveProject', elsewhere[0].id)}>{t('Ir a {name}', { name: elsewhere[0].name })}</button> : undefined} /></div>
           )}
           <div className="flex flex-col gap-5">
             <AnimatePresence initial={false}>
@@ -302,9 +303,9 @@ export function Decisions() {
         </>
       ) : (
         <div className="flex flex-col gap-2">
-          {done.length === 0 && <div className="card"><Empty title="Aún no has decidido nada aquí" text="Cuando contestes una pregunta de un Claude, queda aquí con tu respuesta, por si quieres cambiarla." /></div>}
+          {done.length === 0 && <div className="card"><Empty title={t('Aún no has decidido nada aquí')} text={t('Cuando contestes una pregunta de un Claude, queda aquí con tu respuesta, por si quieres cambiarla.')} /></div>}
           {done.map((d) => (
-            <DecidedRow key={d.id} d={d} startOpen={openedFromSearch === d.id} onReopen={async () => { const r = await api<Decision>('reopenDecision', d.id); setAnswered((m) => ({ ...m, [r.id]: r })); setTab('pendientes'); toast('Vuelve a pendientes') }} />
+            <DecidedRow key={d.id} d={d} startOpen={openedFromSearch === d.id} onReopen={async () => { const r = await api<Decision>('reopenDecision', d.id); setAnswered((m) => ({ ...m, [r.id]: r })); setTab('pendientes'); toast(t('Vuelve a pendientes')) }} />
           ))}
         </div>
       )}

@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131 · «Barra lateral»: a desktop app as always: the sections and the Claudes down the left, the project in a menu at
 // the top, the screen beside. The menu folds to icons (by hand, or by itself in a narrow window).
 import { useEffect, useState } from 'react'
@@ -20,7 +21,7 @@ export default function Lateral() {
   const fold = () => { const v = !folded; setFolded(v); try { localStorage.setItem('pmc.lateral', v ? 'min' : 'open') } catch { /* private */ } }
   return (
     <div className="app lay-lateral">
-      <TitleBar tabs={false} middle={!narrow && <button className="btn btn-sm btn-icon btn-ghost no-drag flex-none" onClick={fold} title={folded ? 'Abrir el menú' : 'Plegar el menú'} aria-label={folded ? 'Abrir el menú' : 'Plegar el menú'}><PanelLeft size={15} /></button>} />
+      <TitleBar tabs={false} middle={!narrow && <button className="btn btn-sm btn-icon btn-ghost no-drag flex-none" onClick={fold} title={folded ? t('Abrir el menú') : t('Plegar el menú')} aria-label={folded ? t('Abrir el menú') : t('Plegar el menú')}><PanelLeft size={15} /></button>} />
       <div className="shell">
         <Sidebar width={collapsed ? 62 : 236} collapsed={collapsed} />
         <ScreenBox route={route}>{route !== 'inicio' && <PanelBar route={route} onBack={() => go('inicio')} />}</ScreenBox>

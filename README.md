@@ -4,7 +4,7 @@
 
 [Leer en español](LEEME.md) · [Buy me a coffee](https://buymeacoffee.com/pakitron.exe)
 
-> The interface is in Spanish. The pictures below use made-up data: three accounts and three example projects.
+> The interface is in English and Spanish (Settings › General › Language; by default, your Windows language). The pictures below use made-up data: three accounts and three example projects.
 
 ![Mission Control home: two Claude Code sessions at work, questions waiting for an answer and the live map of accounts and projects](docs/img/inicio.png)
 

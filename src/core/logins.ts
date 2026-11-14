@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // When each account's sign-in ends (EV98). Claude Code warns only inside a session («this sign-in ends between 18 and 21
 // November… Run claude auth login before then»), and a wheel that runs at night would find the account logged out. The app
 // reads `claude auth status` (free, no usage) and says it days before. No node imports: main/index.ts runs the command
@@ -36,17 +37,17 @@ const HIDDEN_LIMITS = (plan: string) => `Con ${plan} hay límites, pero Claude C
 export function planOf(s: Pick<LoginState, 'loggedIn' | 'method' | 'provider' | 'plan'> | undefined): PlanInfo | undefined {
   if (!s?.loggedIn) return undefined
   const plan = (s.plan ?? '').toLowerCase()
-  if (s.method === 'third_party' || (s.provider && s.provider !== 'firstParty')) return { label: CLOUD[s.provider ?? ''] ?? 'Nube propia', limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
-  if (s.method === 'api_key') return { label: 'Pago por uso (clave)', limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
-  if (/ultra/.test(plan)) return { label: 'Ultra', limits: true }
-  if (/20\s*x|max_?20/.test(plan)) return { label: 'Max 20x', limits: true }
-  if (/max/.test(plan)) return { label: /5\s*x|max_?5/.test(plan) ? 'Max 5x' : 'Max', limits: true }
-  if (/enterprise/.test(plan)) return { label: 'Enterprise', limits: false, note: HIDDEN_LIMITS('Enterprise') }
-  if (/team/.test(plan)) return { label: 'Team', limits: false, note: HIDDEN_LIMITS('Team') }
-  if (/pro/.test(plan)) return { label: 'Pro', limits: true }
-  if (s.method === 'oauth_token') return { label: 'Suscripción (token)', limits: true }
-  if (s.method === 'claude.ai') return { label: 'Claude.ai', limits: true }
-  return { label: 'Pago por uso (Console)', limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
+  if (s.method === 'third_party' || (s.provider && s.provider !== 'firstParty')) return { label: CLOUD[s.provider ?? ''] ?? t('Nube propia'), limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
+  if (s.method === 'api_key') return { label: t('Pago por uso (clave)'), limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
+  if (/ultra/.test(plan)) return { label: t('Ultra'), limits: true }
+  if (/20\s*x|max_?20/.test(plan)) return { label: t('Max 20x'), limits: true }
+  if (/max/.test(plan)) return { label: /5\s*x|max_?5/.test(plan) ? t('Max 5x') : t('Max'), limits: true }
+  if (/enterprise/.test(plan)) return { label: t('Enterprise'), limits: false, note: HIDDEN_LIMITS('Enterprise') }
+  if (/team/.test(plan)) return { label: t('Team'), limits: false, note: HIDDEN_LIMITS('Team') }
+  if (/pro/.test(plan)) return { label: t('Pro'), limits: true }
+  if (s.method === 'oauth_token') return { label: t('Suscripción (token)'), limits: true }
+  if (s.method === 'claude.ai') return { label: t('Claude.ai'), limits: true }
+  return { label: t('Pago por uso (Console)'), limits: false, note: PAY_AS_YOU_GO, paysPerUse: true }
 }
 
 /**
@@ -54,9 +55,9 @@ export function planOf(s: Pick<LoginState, 'loggedIn' | 'method' | 'provider' | 
  * Max or Ultra session «aún sin datos»; with Team or Enterprise that it is not given; paying per use, this session's cost.
  */
 export function noLimitsText(plan: PlanInfo | undefined, costUsd?: number): string {
-  if (plan?.paysPerUse) return typeof costUsd === 'number' ? `gasto de esta sesión ${costUsd.toFixed(2)} $` : 'paga por uso'
-  if (plan && !plan.limits) return `uso: ${plan.label} no lo da`
-  return 'uso: aún sin datos'
+  if (plan?.paysPerUse) return typeof costUsd === 'number' ? t('gasto de esta sesión {v0} $', { v0: costUsd.toFixed(2) }) : t('paga por uso')
+  if (plan && !plan.limits) return t('uso: {label} no lo da', { label: plan.label })
+  return t('uso: aún sin datos')
 }
 
 /** Warn this many days before. */
@@ -65,11 +66,11 @@ export const LOGIN_WARN_DAYS = 5
 /** What to tell the user about an account's sign-in, if anything. */
 export function loginWarning(s: LoginState | undefined, now = Date.now()): { level: 'caducada' | 'pronto'; text: string; days?: number } | undefined {
   if (!s) return undefined
-  if (!s.loggedIn || (s.expiresAt != null && s.expiresAt <= now)) return { level: 'caducada', text: 'su inicio de sesión ha caducado: no puede trabajar hasta que entres otra vez' }
+  if (!s.loggedIn || (s.expiresAt != null && s.expiresAt <= now)) return { level: 'caducada', text: t('su inicio de sesión ha caducado: no puede trabajar hasta que entres otra vez') }
   if (s.expiresAt == null) return undefined
   const days = (s.expiresAt - now) / 86400_000
   if (days > LOGIN_WARN_DAYS) return undefined
   const d = new Date(s.expiresAt)
   const when = `el ${['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()]} ${d.getDate()} a las ${d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`
-  return { level: 'pronto', days: Math.max(0, Math.floor(days)), text: `su inicio de sesión caduca ${when}${days < 1 ? ' (hoy)' : ` (quedan ${Math.floor(days)} ${Math.floor(days) === 1 ? 'día' : 'días'})`}` }
+  return { level: 'pronto', days: Math.max(0, Math.floor(days)), text: t('su inicio de sesión caduca {when}{v0}', { when: when, v0: days < 1 ? ' (hoy)' : ` (quedan ${Math.floor(days)} ${Math.floor(days) === 1 ? 'día' : 'días'})` }) }
 }

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Automatic hand-off: when an account stops for its usage limit in the middle of a project, the next account that can
 // go on is opened there and told to take over (`pmc relevo <account>`). Asked for by the user on 12-11 («cuando te quedes
 // sin créditos… que siga él solo»). Everything here is the decision; opening the window is the app's (main/index.ts).
@@ -36,7 +37,7 @@ const MIN_WEEK_FREE = 5
 
 export function pickSuccessor(i: RelayInput): RelayChoice {
   const busyHere = i.agents.find((a) => a.id !== i.from && isWorkingOn(a, i.projectId))
-  if (busyHere) return { why: `${busyHere.id} ya está trabajando en este proyecto y seguirá la cola: abrir otra cuenta gastaría el doble` }
+  if (busyHere) return { why: t('{id} ya está trabajando en este proyecto y seguirá la cola: abrir otra cuenta gastaría el doble', { id: busyHere.id }) }
   const out: string[] = []
   const can = i.agents.filter((a) => {
     if (a.id === i.from) return false
@@ -49,14 +50,14 @@ export function pickSuccessor(i: RelayInput): RelayChoice {
     if (a.fiveFree != null && a.fiveFree < MIN_WEEK_FREE) { out.push(`${a.id} con el ${a.fiveFree} % de sus 5 horas`); return false }
     return true
   })
-  if (!can.length) return { why: `ninguna cuenta puede seguir (${out.join('; ') || 'no hay más cuentas'})` }
+  if (!can.length) return { why: t('ninguna cuenta puede seguir ({v0})', { v0: out.join('; ') || 'no hay más cuentas' }) }
   const hasFable = (a: RelayCandidate) => !i.noFable.includes(a.id)
   const place = (a: RelayCandidate) => { const n = i.order.indexOf(a.id); return n < 0 ? 1e6 : n }
   const sorted = [...can].sort((a, b) =>
     (i.wantsFable ? Number(hasFable(b)) - Number(hasFable(a)) : 0) || place(a) - place(b) || (b.weekFree ?? 50) - (a.weekFree ?? 50))
   const to = sorted[0]
   const fable = i.wantsFable && hasFable(to)
-  return { to: to.id, fable, why: i.wantsFable && !fable ? 'ninguna cuenta libre tiene Fable: sigue con su modelo habitual lo que esté definido' : fable ? 'tiene Fable y es la siguiente del turno' : 'es la siguiente del turno' }
+  return { to: to.id, fable, why: i.wantsFable && !fable ? t('ninguna cuenta libre tiene Fable: sigue con su modelo habitual lo que esté definido') : fable ? t('tiene Fable y es la siguiente del turno') : t('es la siguiente del turno') }
 }
 
 /** One hand-off per account and project in this time: a session that hits the limit again and again must not open windows. */

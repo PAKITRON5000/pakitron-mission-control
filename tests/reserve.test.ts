@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { reserveDue, reservePrompt, reservedFor, reserveWrapUp, wrapUpText, type ReserveAgent } from '../src/core/reserve'
+import { marginOf, RESERVE_CLOSE_WAIT_MS, RESERVE_MIN_MARGIN_MS, reserveDue, reservePrompt, reservedFor, reserveWrapUp, wrapUpText, type ReserveAgent } from '../src/core/reserve'
 import { decideLaunch } from '../src/core/dispatch'
 
 const now = Date.parse('2026-11-13T09:30:00+01:00')
@@ -61,5 +61,24 @@ describe('cuenta de reserva (IV1)', () => {
   })
   it('el mensaje cabe en una línea', () => {
     expect(reservePrompt('Video')).not.toMatch(/\n/)
+  })
+})
+
+describe('tiempos muertos elegidos en Relevos (EV166)', () => {
+  const agents = (h: number) => [out('claude1', h), out('claude3', 5), free('claude5', 'apartada'), out('claude6', 5)]
+  it('el margen lo elige el usuario: con 2 h, una que vuelve en 1,5 h no la deja abrirse; con 30 min, sí', () => {
+    expect(reserveDue({ ...rule, marginMin: 120 }, agents(1.5), status, now).open).toBe(false)
+    expect(reserveDue({ ...rule, marginMin: 30 }, agents(0.75), status, now).open).toBe(true)
+    expect(reserveDue({ ...rule, marginMin: 30 }, agents(0.25), status, now).open).toBe(false)
+    expect(marginOf({})).toBe(RESERVE_MIN_MARGIN_MS)
+  })
+  it('lo que el usuario escribió que haga va en el texto con que se abre, en una línea', () => {
+    const s = reservePrompt('Mis Vídeos', 'Ordena los vídeos\ny "limpia" la carpeta')
+    expect(s).toContain('Lo que el usuario quiere que hagas aquí: Ordena los vídeos y limpia la carpeta')
+    expect(s).not.toMatch(/["\n]/)
+    expect(reservePrompt('Mis Vídeos')).not.toContain('quiere que hagas')
+  })
+  it('la rueda espera a la reserva como mucho un cuarto de hora', () => {
+    expect(RESERVE_CLOSE_WAIT_MS).toBe(15 * 60_000)
   })
 })

@@ -1,4 +1,5 @@
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
+import { t } from '../../../core/i18n'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { api, type AgentState, type AccountId, type AgentCard, type AccountActivity } from '../lib/api'
@@ -7,14 +8,14 @@ export const SPRING = { type: 'spring', bounce: 0, duration: 0.38 } as const
 export const SPRING_SOFT = { type: 'spring', bounce: 0.12, duration: 0.45 } as const
 
 export const STATE_META: Record<AgentState, { label: string; color: string }> = {
-  trabajando: { label: 'Trabajando', color: 'var(--green)' },
-  esperando: { label: 'Te espera', color: 'var(--yellow)' },
-  'sin-uso': { label: 'Sin uso', color: 'var(--red)' },
-  bloqueado: { label: 'Bloqueado', color: 'var(--orange)' },
-  disponible: { label: 'Disponible', color: 'var(--teal)' },
-  desconectado: { label: 'Sin sesión', color: 'var(--label-3)' },
-  apartada: { label: 'No usar', color: 'var(--label-3)' },
-  baja: { label: 'De baja', color: 'var(--label-3)' }
+  trabajando: { get label() { return t('Trabajando') }, color: 'var(--green)' },
+  esperando: { get label() { return t('Te espera') }, color: 'var(--yellow)' },
+  'sin-uso': { get label() { return t('Sin uso') }, color: 'var(--red)' },
+  bloqueado: { get label() { return t('Bloqueado') }, color: 'var(--orange)' },
+  disponible: { get label() { return t('Disponible') }, color: 'var(--teal)' },
+  desconectado: { get label() { return t('Sin sesión') }, color: 'var(--label-3)' },
+  apartada: { get label() { return t('No usar') }, color: 'var(--label-3)' },
+  baja: { get label() { return t('De baja') }, color: 'var(--label-3)' }
 }
 
 /** Filled from the accounts in Ajustes as the state arrives; an unknown one is grey. */
@@ -39,10 +40,10 @@ export const accLabel = (id: string) => accName(id)
 export const nameify = (text: string) => (Object.values(ACCOUNT_NAME).some(Boolean) ? text.replace(/\bClaude (\d{1,2})\b/g, (m, n: string) => ACCOUNT_NAME[`claude${n}`] || m) : text)
 
 export const PRIORITY: { v: number; label: string; color: string }[] = [
-  { v: 0, label: 'Urgente', color: 'var(--red)' },
-  { v: 1, label: 'Alta', color: 'var(--orange)' },
-  { v: 2, label: 'Normal', color: 'var(--label-3)' },
-  { v: 3, label: 'Baja', color: 'var(--teal)' }
+  { v: 0, get label() { return t('Urgente') }, color: 'var(--red)' },
+  { v: 1, get label() { return t('Alta') }, color: 'var(--orange)' },
+  { v: 2, get label() { return t('Normal') }, color: 'var(--label-3)' },
+  { v: 3, get label() { return t('Baja') }, color: 'var(--teal)' }
 ]
 
 /** A small flag for urgente/alta/baja (normal shows nothing). */
@@ -50,7 +51,7 @@ export function PriorityBadge({ p, withLabel }: { p: number; withLabel?: boolean
   if (p === 2 || p == null) return null
   const m = PRIORITY[p] ?? PRIORITY[2]
   return (
-    <span className="pill" style={{ background: `color-mix(in srgb, ${m.color} 16%, transparent)`, color: m.color, padding: withLabel ? undefined : '1px 6px' }} title={`Prioridad ${m.label.toLowerCase()}`}>
+    <span className="pill" style={{ background: `color-mix(in srgb, ${m.color} 16%, transparent)`, color: m.color, padding: withLabel ? undefined : '1px 6px' }} title={t('Prioridad {label}', { label: m.label.toLowerCase() })}>
       <svg width="10" height="11" viewBox="0 0 10 11" aria-hidden><path d="M1.5 10.5V1M1.5 1.5h6.2L6.4 4l1.3 2.5H1.5" fill={p <= 1 ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
       {withLabel && m.label}
     </span>
@@ -228,7 +229,7 @@ export function SheetHeader({ children, onClose }: { children: ReactNode; onClos
   return (
     <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b" style={{ borderColor: 'var(--sep)' }}>
       <div className="min-w-0 flex-1">{children}</div>
-      <button className="btn btn-sm btn-icon btn-ghost" onClick={onClose} aria-label="Cerrar">
+      <button className="btn btn-sm btn-icon btn-ghost" onClick={onClose} aria-label={t('Cerrar')}>
         <X size={16} />
       </button>
     </div>
@@ -262,15 +263,15 @@ export function Recharge({ a, onDone }: { a: Pick<AgentCard, 'id' | 'identity'>;
     setChecking(true)
     void api<{ ok: boolean; checked: boolean; words: string; backAt?: number }>('probeNow', a.id).then((r) => {
       const at = r.backAt ? new Date(r.backAt).toLocaleString('es-ES', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''
-      onDone?.(!r.checked ? `No se pudo comprobar: cuento con Claude ${n} como dices`
-        : r.ok ? `Comprobado: Claude ${n} ya tiene uso (${r.words}) y vuelve al turno`
-        : `Comprobado: Claude ${n} sigue sin uso${at ? `; vuelve el ${at}` : ''}`)
+      onDone?.(!r.checked ? t('No se pudo comprobar: cuento con Claude {n} como dices', { n: n })
+        : r.ok ? t('Comprobado: Claude {n} ya tiene uso ({words}) y vuelve al turno', { n: n, words: r.words })
+        : t('Comprobado: Claude {n} sigue sin uso{v0}', { n: n, v0: at ? t('; vuelve el {at}', { at: at }) : '' }))
     }, (e) => onDone?.((e as Error).message)).finally(() => setChecking(false))
   }
   return (
     <span className="inline-flex items-center gap-2 flex-wrap">
-      <button className="btn btn-sm btn-primary" title={`Abre la página de uso de Claude: entra con la cuenta de Claude ${n}${a.identity?.email ? ` (${a.identity.email})` : ''} y recárgala allí`} onClick={() => void api('openUsagePage')}>Recargar</button>
-      <button className="btn btn-sm" disabled={checking} title="La app se lo pregunta a Claude en unos segundos, sin abrir ventana. Además lo comprueba sola cada 10 minutos" onClick={check}>{checking ? 'Comprobando…' : 'Ya está recargada'}</button>
+      <button className="btn btn-sm btn-primary" title={t('Abre la página de uso de Claude: entra con la cuenta de Claude {n}{v0} y recárgala allí', { n: n, v0: a.identity?.email ? ` (${a.identity.email})` : '' })} onClick={() => void api('openUsagePage')}>Recargar</button>
+      <button className="btn btn-sm" disabled={checking} title={t('La app se lo pregunta a Claude en unos segundos, sin abrir ventana. Además lo comprueba sola cada 10 minutos')} onClick={check}>{checking ? t('Comprobando…') : t('Ya está recargada')}</button>
     </span>
   )
 }

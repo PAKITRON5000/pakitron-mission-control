@@ -5,6 +5,7 @@
 // llegue el aviso al chat abierto y siga… esto se tiene que poder decidir»). Everything here is the decision; typing in
 // a window is the app's (main/index.ts).
 import type { AccountId } from './types'
+import { t } from './i18n'
 
 /**
  * 'conjunto': the accounts relay each other on the same project (the hand-off opens the next one where the first was).
@@ -14,8 +15,9 @@ import type { AccountId } from './types'
 export type RelayMode = 'conjunto' | 'proyecto'
 
 export const RELAY_MODES: { id: RelayMode; label: string; sub: string }[] = [
-  { id: 'conjunto', label: 'Relevos conjuntos', sub: 'Todas en el mismo proyecto: cuando una se queda sin uso, la siguiente del turno sigue su trabajo.' },
-  { id: 'proyecto', label: 'Cada una en su proyecto', sub: 'Nadie toma el trabajo de otra: cuando una se queda sin uso, las demás siguen con lo suyo, y ella retoma lo suyo en su misma ventana al volver.' }
+  // EV162: getters, so they come out in the language chosen when they are read.
+  { id: 'conjunto', get label() { return t('Relevos conjuntos') }, get sub() { return t('Todas en el mismo proyecto: cuando una se queda sin uso, la siguiente del turno sigue su trabajo.') } },
+  { id: 'proyecto', get label() { return t('Cada una en su proyecto') }, get sub() { return t('Nadie toma el trabajo de otra: cuando una se queda sin uso, las demás siguen con lo suyo, y ella retoma lo suyo en su misma ventana al volver.') } }
 ]
 
 export const relayModeOf = (s: { relayMode?: RelayMode }): RelayMode => (s.relayMode === 'proyecto' ? 'proyecto' : 'conjunto')
@@ -98,15 +100,15 @@ export function heavyTurns(i: TurnInput): TurnAction[] {
 const who = (id: string) => `Claude ${id.slice(6)}`
 
 export function waitMessage(holder: AccountId, holderProject: string): string {
-  return `Mission Control (trabajo pesado por turnos): ${who(holder)} está usando Unity o Blender en ${holderProject}. Si lo que te toca ahora es ligero (sin Unity, Blender, renders ni la gráfica), sigue con ello. Si necesitas lo pesado, cierra tu turno aquí sin empezarlo y espera: te escribiré en este chat cuando te toque.`
+  return t('Mission Control (trabajo pesado por turnos): {v0} está usando Unity o Blender en {holderProject}. Si lo que te toca ahora es ligero (sin Unity, Blender, renders ni la gráfica), sigue con ello. Si necesitas lo pesado, cierra tu turno aquí sin empezarlo y espera: te escribiré en este chat cuando te toque.', { v0: who(holder), holderProject: holderProject })
 }
 
 export function goMessage(holder: AccountId, project: string): string {
-  return `Mission Control: ya te toca. ${who(holder)} ha terminado con lo pesado o se ha quedado sin uso. Sigue con tu trabajo en ${project} donde lo dejaste, también lo pesado.`
+  return t('Mission Control: ya te toca. {v0} ha terminado con lo pesado o se ha quedado sin uso. Sigue con tu trabajo en {project} donde lo dejaste, también lo pesado.', { v0: who(holder), project: project })
 }
 
 export function backMessage(project: string): string {
-  return `Mission Control: ya tienes uso otra vez. Sigue con tu trabajo en ${project} donde lo dejaste, sin repetir lo hecho.`
+  return t('Mission Control: ya tienes uso otra vez. Sigue con tu trabajo en {project} donde lo dejaste, sin repetir lo hecho.', { project: project })
 }
 
 /**

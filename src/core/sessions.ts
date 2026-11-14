@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Sessions of Claude Code, from documented or plain-file sources only:
 //   - `claude agents --json` with each account's CLAUDE_CONFIG_DIR: live sessions (documented, "for scripting").
 //   - <configDir>/history.jsonl: which account typed into which conversation (local prompt history).
@@ -75,11 +76,11 @@ export function listAgents(acc: AccountConfig, timeoutMs = 20000): Promise<Agent
       if (err) return reject(new Error(err.message.split('\n')[0]))
       const text = stdout.trim()
       const start = text.indexOf('[')
-      if (start < 0) return reject(new Error('Respuesta sin lista de sesiones'))
+      if (start < 0) return reject(new Error(t('Respuesta sin lista de sesiones')))
       try {
         resolve(JSON.parse(text.slice(start)) as AgentsJsonRow[])
       } catch (e) {
-        reject(new Error('No se pudo leer la lista de sesiones'))
+        reject(new Error(t('No se pudo leer la lista de sesiones')))
       }
     })
     child.stdin?.end()

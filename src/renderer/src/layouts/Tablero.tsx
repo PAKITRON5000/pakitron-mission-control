@@ -1,5 +1,6 @@
 // EV131 · «Tablero»: big cards, one per section, each with what matters in it right now (how many questions wait, who
 // works, when the next account is back…). The one you press opens whole, with «← Tablero» to come back.
+import { t, tn } from '../../../core/i18n'
 import { useStore, type Route } from '../lib/store'
 import { NAV } from '../components/Sidebar'
 import { accName } from '../components/ui'
@@ -14,7 +15,7 @@ function useTiles(): Tile[] {
   const { state, now } = useStore()
   const badges = useBadges()
   if (!state) return []
-  const t = state.summary?.tasks
+  const tally = state.summary?.tasks
   const inUse = state.agents.filter((a) => a.state !== 'baja' && a.state !== 'apartada' && (a.identity.hasLogin || a.sessions.length))
   const working = inUse.filter((a) => a.state === 'trabajando')
   const out = inUse.filter((a) => a.state === 'sin-uso')
@@ -29,23 +30,23 @@ function useTiles(): Tile[] {
   const form = LAYOUTS.find((l) => l.id === (state.settings.layout ?? 'pestanas'))?.name
   const decisions = badges.decisiones ?? 0
   return [
-    { route: 'inicio', big: t ? `${t.done} de ${t.total}` : project?.name ?? 'Sin proyecto', sub: t ? 'tareas hechas · el resumen del proyecto' : 'Añade un proyecto para empezar' },
-    { route: 'decisiones', big: decisions ? plural(decisions, 'pregunta', 'preguntas') : 'Nada que decidir', sub: decisions ? 'te esperan para seguir' : 'Los Claude no te preguntan nada ahora', hot: decisions > 0 },
-    { route: 'revisiones', big: badges.revisiones ? plural(badges.revisiones, 'corrección', 'correcciones') : 'Al día', sub: badges.revisiones ? 'hechas, para que las apruebes' : 'Nada que revisar', hot: Boolean(badges.revisiones) },
-    { route: 'asistente', big: 'Pregunta', sub: 'Lo que quieras de tus proyectos, sin gastar uso' },
-    { route: 'relevos', big: working.length ? plural(working.length, 'trabajando', 'trabajando') : 'Nadie trabaja', sub: working.length ? working.map((a) => accName(a.id)).join(', ') : 'Quién sigue cuando una se agote' },
-    { route: 'proximo', big: back ? `A las ${clock(back.at!)}` : out.length ? 'Sin hora' : 'Todas con uso', sub: back ? `vuelve ${accName(back.a.id)}` : out.length ? `${plural(out.length, 'cuenta', 'cuentas')} sin uso` : 'Ninguna cuenta espera' },
-    { route: 'chats', big: windows ? plural(windows, 'ventana', 'ventanas') : 'Ninguna abierta', sub: 'Las conversaciones de los Claude' },
-    { route: 'agentes', big: plural(inUse.length, 'cuenta', 'cuentas'), sub: out.length ? `${out.length} sin uso ahora` : 'Todas con uso' },
+    { route: 'inicio', big: tally ? t('{done} de {total}', { done: tally.done, total: tally.total }) : project?.name ?? t('Sin proyecto'), sub: tally ? t('tareas hechas · el resumen del proyecto') : t('Añade un proyecto para empezar') },
+    { route: 'decisiones', big: decisions ? tn(decisions, '{n} pregunta', '{n} preguntas') : t('Nada que decidir'), sub: decisions ? t('te esperan para seguir') : t('Los Claude no te preguntan nada ahora'), hot: decisions > 0 },
+    { route: 'revisiones', big: badges.revisiones ? tn(badges.revisiones, '{n} corrección', '{n} correcciones') : t('Al día'), sub: badges.revisiones ? t('hechas, para que las apruebes') : t('Nada que revisar'), hot: Boolean(badges.revisiones) },
+    { route: 'asistente', big: t('Pregunta'), sub: t('Lo que quieras de tus proyectos, sin gastar uso') },
+    { route: 'relevos', big: working.length ? tn(working.length, '{n} trabajando', '{n} trabajando') : t('Nadie trabaja'), sub: working.length ? working.map((a) => accName(a.id)).join(', ') : t('Quién sigue cuando una se agote') },
+    { route: 'proximo', big: back ? t('A las {v0}', { v0: clock(back.at!) }) : out.length ? t('Sin hora') : t('Todas con uso'), sub: back ? t('vuelve {v0}', { v0: accName(back.a.id) }) : out.length ? t('{v0} sin uso', { v0: tn(out.length, '{n} cuenta', '{n} cuentas') }) : t('Ninguna cuenta espera') },
+    { route: 'chats', big: windows ? tn(windows, '{n} ventana', '{n} ventanas') : t('Ninguna abierta'), sub: t('Las conversaciones de los Claude') },
+    { route: 'agentes', big: tn(inUse.length, '{n} cuenta', '{n} cuentas'), sub: out.length ? t('{length} sin uso ahora', { length: out.length }) : t('Todas con uso') },
     // EV133: counted in the background and kept (main/index.ts › tallySkills): opening the board reads no skill folder.
-    { route: 'skills', big: sk ? plural(sk.installed, 'skill', 'skills') : 'Skills', sub: sk?.suggested ? `${sk.suggested} más le vendrían bien` : sk?.suggested === 0 ? 'Tiene las que le vendrían bien' : 'Busca las que le vendrían bien' },
-    { route: 'tareas', big: t ? `${t.open + t.doing} por hacer` : 'Tareas', sub: t ? `${t.doing} en marcha${t.review ? ` · ${t.review} para revisar` : ''}` : undefined, hot: Boolean(t?.review) },
+    { route: 'skills', big: sk ? tn(sk.installed, '{n} skill', '{n} skills') : t('Skills'), sub: sk?.suggested ? t('{suggested} más le vendrían bien', { suggested: sk.suggested }) : sk?.suggested === 0 ? t('Tiene las que le vendrían bien') : t('Busca las que le vendrían bien') },
+    { route: 'tareas', big: tally ? t('{n} por hacer', { n: tally.open + tally.doing }) : t('Tareas'), sub: tally ? t('{doing} en marcha{v0}', { doing: tally.doing, v0: tally.review ? t(' · {review} para revisar', { review: tally.review }) : '' }) : undefined, hot: Boolean(tally?.review) },
     // EV133: what came today, from the day's summary the window already has (no slow read to open the board).
-    { route: 'galeria', big: day?.media ? `${day.media} ${day.media === 1 ? 'nueva' : 'nuevas'} hoy` : 'Nada nuevo hoy', sub: 'Imágenes, vídeos y modelos del proyecto' },
-    { route: 'cronologia', big: last ? ago(last.at, now) : 'Cronología', sub: `${last ? `último relevo${last.account ? `, de ${accName(last.account)}` : ''}` : 'Lo que ha pasado, día a día'}${day?.commits ? ` · ${plural(day.commits, 'commit', 'commits')} hoy` : ''}` },
-    { route: 'integracion', big: dirty ? plural(dirty, 'cambio', 'cambios') : plural(copies.length, 'copia', 'copias'), sub: dirty ? 'sin guardar en git' : 'Ramas y copias de trabajo, al día' },
-    { route: 'memoria', big: day?.requests ? plural(day.requests, 'petición', 'peticiones') : state.memories != null ? plural(state.memories, 'recuerdo', 'recuerdos') : 'Memoria', sub: day?.requests ? `las de hoy${state.memories != null ? ` · ${plural(state.memories, 'recuerdo', 'recuerdos')} que no olvidan` : ''}` : 'Lo que no deben olvidar y lo que has pedido' },
-    { route: 'ajustes', big: form ? `Forma «${form}»` : 'Ajustes', sub: 'Tamaño, colores, forma, cuentas y avisos' }
+    { route: 'galeria', big: day?.media ? tn(day.media, '{n} nueva hoy', '{n} nuevas hoy') : t('Nada nuevo hoy'), sub: t('Imágenes, vídeos y modelos del proyecto') },
+    { route: 'cronologia', big: last ? ago(last.at, now) : t('Cronología'), sub: `${last ? t('último relevo{v0}', { v0: last.account ? t(', de {v0}', { v0: accName(last.account) }) : '' }) : t('Lo que ha pasado, día a día')}${day?.commits ? tn(day.commits, ' · {n} commit hoy', ' · {n} commits hoy') : ''}` },
+    { route: 'integracion', big: dirty ? tn(dirty, '{n} cambio', '{n} cambios') : tn(copies.length, '{n} copia', '{n} copias'), sub: dirty ? t('sin guardar en git') : t('Ramas y copias de trabajo, al día') },
+    { route: 'memoria', big: day?.requests ? tn(day.requests, '{n} petición', '{n} peticiones') : state.memories != null ? tn(state.memories, '{n} recuerdo', '{n} recuerdos') : t('Memoria'), sub: day?.requests ? t('las de hoy{v0}', { v0: state.memories != null ? t(' · {v0} que no olvidan', { v0: tn(state.memories, '{n} recuerdo', '{n} recuerdos') }) : '' }) : t('Lo que no deben olvidar y lo que has pedido') },
+    { route: 'ajustes', big: form ? t('Forma «{form}»', { form: form }) : t('Ajustes'), sub: t('Tamaño, colores, forma, cuentas y avisos') }
   ]
 }
 
@@ -59,18 +60,18 @@ export default function Tablero() {
       <TitleBar />
       <div className="shell">
         {open ? (
-          <ScreenBox route={open}><PanelBar route={open} back="Tablero" onBack={() => go('inicio')} /></ScreenBox>
+          <ScreenBox route={open}><PanelBar route={open} back={t('Tablero')} onBack={() => go('inicio')} /></ScreenBox>
         ) : (
           <main className="content">
             <div className="content-inner">
               <div className="board">
-                {tiles.map((t) => {
-                  const n = NAV.find((x) => x.route === t.route)!
+                {tiles.map((tally) => {
+                  const n = NAV.find((x) => x.route === tally.route)!
                   return (
-                    <button key={t.route} className={`board-tile ${t.hot ? 'hot' : ''}`} style={{ ['--tile-c' as any]: n.color }} onClick={() => go(t.route === 'inicio' ? 'inicio' : t.route, t.route === 'inicio' ? 'resumen' : undefined)}>
-                      <span className="flex items-center gap-2.5"><NavIcon route={t.route} size={34} /><span className="board-name">{t.route === 'inicio' ? 'Resumen' : n.label}</span></span>
-                      <span className="board-big">{t.big}</span>
-                      {t.sub && <span className="board-sub">{t.sub}</span>}
+                    <button key={tally.route} className={`board-tile ${tally.hot ? 'hot' : ''}`} style={{ ['--tile-c' as any]: n.color }} onClick={() => go(tally.route === 'inicio' ? 'inicio' : tally.route, tally.route === 'inicio' ? 'resumen' : undefined)}>
+                      <span className="flex items-center gap-2.5"><NavIcon route={tally.route} size={34} /><span className="board-name">{tally.route === 'inicio' ? t('Resumen') : n.label}</span></span>
+                      <span className="board-big">{tally.big}</span>
+                      {tally.sub && <span className="board-sub">{tally.sub}</span>}
                     </button>
                   )
                 })}

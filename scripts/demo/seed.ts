@@ -119,7 +119,7 @@ const list: ProjectConfig[] = [
 const db = openDb()
 for (const p of list) saveProject(db, p)
 db.prepare("INSERT INTO settings(key, value) VALUES('ui', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-  .run(JSON.stringify({ activeProjectId: 'starfall', theme: 'dark', relayRulesAt: now - 3 * 24 * hour, autonomous: true, firstRunDone: true }))
+  .run(JSON.stringify({ activeProjectId: 'starfall', theme: 'dark', relayRulesAt: now - 3 * 24 * hour, autonomous: true, firstRunDone: true, lang: process.env.PMC_DEMO_LANG || 'es' }))
 // The app keeps its accounts here (accounts.json is only its copy for the CLI): without it, it would look for its own.
 db.prepare("INSERT INTO settings(key, value) VALUES('accounts', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(accountList))
 

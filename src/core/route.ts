@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Where a request written in the app goes (EV46): the project its words point to, and the account that will do it. Before,
 // «Nueva instrucción» went to the project on screen and to «any Claude»: a request about the game written while looking at
 // the video project landed in the wrong one, and nobody said who would pick it up. No node imports: the screens use it.
@@ -49,7 +50,7 @@ export function guessProject(text: string, projects: RouteProject[]): { id: stri
   // Two of its own words, well ahead of the next; or one long, specific word («subtítulos») no other project has.
   const lone = first && first.score === 1 && first.own.length === 1 && first.own[0].length >= 8 && (!second || second.score === 0)
   if (!first || (first.score < 2 && !lone) || (second && first.score < second.score * 2)) return undefined
-  return { id: first.p.id, byName: first.byName.length, own: first.own.length, why: first.byName.length ? `nombras «${first.p.name}»` : `«${first.own.slice(0, 3).join('», «')}» solo ${first.own.length > 1 ? 'salen' : 'sale'} en sus tareas` }
+  return { id: first.p.id, byName: first.byName.length, own: first.own.length, why: first.byName.length ? t('nombras «{name}»', { name: first.p.name }) : t('«{v0}» solo {v1} en sus tareas', { v0: first.own.slice(0, 3).join('», «'), v1: first.own.length > 1 ? 'salen' : 'sale' }) }
 }
 
 export interface RouteAccount {
@@ -69,10 +70,10 @@ export interface RouteAccount {
 export function pickAccount(projectId: string, accounts: RouteAccount[]): { id: string; why: string } | undefined {
   const usable = accounts.filter((a) => !a.out && !a.limited)
   const here = usable.find((a) => a.windows.some((w) => w.projectId === projectId && w.working))
-  if (here) return { id: here.id, why: 'ya trabaja en ese proyecto: lo leerá en su próximo paso' }
+  if (here) return { id: here.id, why: t('ya trabaja en ese proyecto: lo leerá en su próximo paso') }
   const idle = usable.find((a) => a.windows.some((w) => w.projectId === projectId) && !a.windows.some((w) => w.working))
-  if (idle) return { id: idle.id, why: 'tiene su ventana abierta en ese proyecto: se le escribe ahí' }
+  if (idle) return { id: idle.id, why: t('tiene su ventana abierta en ese proyecto: se le escribe ahí') }
   const free = usable.filter((a) => !a.windows.some((w) => w.projectId !== projectId)).sort((a, b) => (b.weekFree ?? -1) - (a.weekFree ?? -1))[0]
-  if (free) return { id: free.id, why: `está libre${free.weekFree != null ? ` y le queda el ${free.weekFree} % de la semana` : ''}` }
+  if (free) return { id: free.id, why: t('está libre{v0}', { v0: free.weekFree != null ? ` y le queda el ${free.weekFree} % de la semana` : '' }) }
   return undefined
 }

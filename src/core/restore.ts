@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Restoring a backup of the app's database (EV13). The app makes one a day (db.ts › backupDb, the last 14 kept) but had no
 // way back. Restoring replaces the database while it is open, so it is done in two steps: the user picks a copy (after
 // a confirmation, and a copy of how things are now is made first, so nothing is lost), the app writes which one in
@@ -21,7 +22,7 @@ const marker = (root: string) => join(root, 'restore.json')
 
 /** Step one: says which copy to put in place at the next start. Only a copy from the backups folder. */
 export function requestRestore(file: string, root: string, backups = paths.backupsDir()): void {
-  if (!file.toLowerCase().startsWith(backups.toLowerCase()) || !existsSync(file)) throw new Error('Esa copia no está en la carpeta de copias')
+  if (!file.toLowerCase().startsWith(backups.toLowerCase()) || !existsSync(file)) throw new Error(t('Esa copia no está en la carpeta de copias'))
   writeFileSync(marker(root), JSON.stringify({ file, at: Date.now() }))
 }
 

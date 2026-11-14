@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // What Mission Control needs to work on this machine, and whether each thing it reads from Claude Code still reads
 // (EV12). Claude Code changes its files without notice: when a reading stops, the app showed «sin datos» and nobody knew
 // why. Here every piece says in plain words whether it is there, and what to do if it is not. Nothing is installed.
@@ -31,22 +32,22 @@ export function checkTools(i: HealthInput): Check[] {
   const exists = i.exists ?? existsSync
   const out: Check[] = []
   const claude = i.claudePath !== 'claude' && exists(i.claudePath) ? version(exec, i.claudePath) ?? 'instalado' : version(exec, 'claude')
-  out.push({ name: 'Claude Code', ok: Boolean(claude), detail: claude ?? 'no se encuentra', fix: 'Instala Claude Code (claude.com/claude-code) y abre de nuevo Mission Control', needed: true })
+  out.push({ name: 'Claude Code', ok: Boolean(claude), detail: claude ?? t('no se encuentra'), fix: 'Instala Claude Code (claude.com/claude-code) y abre de nuevo Mission Control', needed: true })
   const git = version(exec, 'git')
-  out.push({ name: 'Git', ok: Boolean(git), detail: git ?? 'no se encuentra', fix: 'Instala Git (git-scm.com): sin él no hay ramas, copias de trabajo ni historial de cambios', needed: true })
+  out.push({ name: 'Git', ok: Boolean(git), detail: git ?? t('no se encuentra'), fix: 'Instala Git (git-scm.com): sin él no hay ramas, copias de trabajo ni historial de cambios', needed: true })
   const node = version(exec, 'node')
-  out.push({ name: 'Node', ok: Boolean(node), detail: node ?? 'no se encuentra', fix: 'Instala Node 22 o posterior (nodejs.org): las órdenes pmc y los avisos a los Claude lo usan', needed: true })
+  out.push({ name: 'Node', ok: Boolean(node), detail: node ?? t('no se encuentra'), fix: 'Instala Node 22 o posterior (nodejs.org): las órdenes pmc y los avisos a los Claude lo usan', needed: true })
   const unity = i.projectRoots.some((r) => exists(join(r, 'ProjectSettings', 'ProjectVersion.txt')))
   if (unity) {
     const hub = ['C:\\Program Files\\Unity\\Hub\\Editor', 'C:\\Program Files\\Unity Hub'].find((p) => exists(p))
-    out.push({ name: 'Unity', ok: Boolean(hub), detail: hub ? `editores en ${hub}` : 'no se encuentra en su carpeta habitual', fix: 'Un proyecto es de Unity: instala Unity Hub y la versión que pide su ProjectSettings/ProjectVersion.txt', needed: false })
+    out.push({ name: 'Unity', ok: Boolean(hub), detail: hub ? t('editores en {hub}', { hub: hub }) : t('no se encuentra en su carpeta habitual'), fix: 'Un proyecto es de Unity: instala Unity Hub y la versión que pide su ProjectSettings/ProjectVersion.txt', needed: false })
   }
   const blenderUsed = i.projectRoots.some((r) => exists(join(r, 'ArtSource')))
   if (blenderUsed) {
     const base = 'C:\\Program Files\\Blender Foundation'
     let found: string | undefined
     try { found = exists(base) ? readdirSync(base).filter((d) => /^Blender/i.test(d)).sort().pop() : undefined } catch { /* not there */ }
-    out.push({ name: 'Blender', ok: Boolean(found), detail: found ?? 'no se encuentra en su carpeta habitual', fix: 'Un proyecto genera sus modelos con Blender: instálalo (blender.org)', needed: false })
+    out.push({ name: 'Blender', ok: Boolean(found), detail: found ?? t('no se encuentra en su carpeta habitual'), fix: 'Un proyecto genera sus modelos con Blender: instálalo (blender.org)', needed: false })
   }
   return out
 }
@@ -60,7 +61,7 @@ export function checkReadings(i: HealthInput): Check[] {
   const out: Check[] = []
   for (const a of i.accounts) {
     const n = `Claude ${a.id.slice(6)}`
-    if (!exists(a.configDir)) { out.push({ name: n, ok: false, detail: `su carpeta no existe: ${a.configDir}`, fix: 'Quita la cuenta en Ajustes › Cuentas o vuelve a añadirla con su carpeta', needed: true }); continue }
+    if (!exists(a.configDir)) { out.push({ name: n, ok: false, detail: t('su carpeta no existe: {configDir}', { configDir: a.configDir }), fix: 'Quita la cuenta en Ajustes › Cuentas o vuelve a añadirla con su carpeta', needed: true }); continue }
     const parts: string[] = []
     const bad: string[] = []
     if (a.statusLine) parts.push('lee el uso'); else bad.push('no lee el uso (activa la lectura de consumo)')

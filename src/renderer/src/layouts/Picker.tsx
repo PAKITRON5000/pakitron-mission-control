@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131: Ajustes › Apariencia › «Forma de la app»: the eight shapes, each with a drawing of where everything goes, one
 // press to change (nothing is lost: the same screens and data, and the colour theme stays).
 import { Check } from 'lucide-react'
@@ -22,10 +23,10 @@ export function LayoutPicker() {
   const current = state?.settings.layout ?? 'pestanas'
   const choose = async (l: LayoutMeta) => {
     if (l.id === current) return
-    try { await api('setSettings', { layout: l.id }); await refresh(); toast(`Forma «${l.name}»: puedes volver a la de antes aquí mismo`) } catch (e) { toast((e as Error).message) }
+    try { await api('setSettings', { layout: l.id }); await refresh(); toast(t('Forma «{name}»: puedes volver a la de antes aquí mismo', { name: l.name })) } catch (e) { toast((e as Error).message) }
   }
   return (
-    <div className="grid gap-3" role="radiogroup" aria-label="Forma de la app" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(200px, 100%), 1fr))' }}>
+    <div className="grid gap-3" role="radiogroup" aria-label={t('Forma de la app')} style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(200px, 100%), 1fr))' }}>
       {LAYOUTS.map((l) => {
         const on = l.id === current
         return (

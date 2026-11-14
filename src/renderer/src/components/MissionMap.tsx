@@ -3,6 +3,7 @@
 // 5 hours and its week) that slides along the line to the project where it works, waits on the wheel for its turn, or
 // rests until its usage comes back. Everything from what the app already knows; nothing spends usage. The user, 13-11,
 // after seeing drawn characters and a battle: «lo que mejor se entienda para el usuario… que quede bien y ya».
+import { t, tn } from '../../../core/i18n'
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { X } from 'lucide-react'
 import { useStore, useAsync, type Route } from '../lib/store'
@@ -44,7 +45,7 @@ function Pilot({ m, a, doing, path, at, style, compact }: { m: CastMember; a?: A
       <span className={`mm-plate ${m.holder ? 'turn' : ''}`}>
         <b>{short(m.id)}</b>
         <span className="mm-label" style={{ color: TONE[m.tone] }}>{m.label}</span>
-        {m.mood === 'duerme' && m.backAt && <span className="mm-doing">vuelve a las {clock(m.backAt)}</span>}
+        {m.mood === 'duerme' && m.backAt && <span className="mm-doing">{t('vuelve a las {v0}', { v0: clock(m.backAt) })}</span>}
         {doing && <span className="mm-doing">{doing}</span>}
       </span>
     </button>
@@ -62,7 +63,7 @@ function Panel({ pid, wheels, tasks, onClose, inline }: { pid: string; wheels?: 
   const next = list.filter((t) => t.status !== 'terminada').slice(0, 3)
   const pend = state.pending?.[pid]
   const open = async (route?: Route) => {
-    if (state.activeProjectId !== pid) { await api('setActiveProject', pid); toast(`Viendo ${p.name}`) }
+    if (state.activeProjectId !== pid) { await api('setActiveProject', pid); toast(t('Viendo {name}', { name: p.name })) }
     if (route) go(route)
     onClose()
   }
@@ -71,30 +72,30 @@ function Panel({ pid, wheels, tasks, onClose, inline }: { pid: string; wheels?: 
       <div className="flex items-center gap-2">
         <span className="mm-dot" style={{ background: p.color }} />
         <b className="t-head flex-1 truncate">{p.name}</b>
-        <button className="btn btn-sm btn-ghost" onClick={onClose} aria-label="Cerrar"><X size={15} /></button>
+        <button className="btn btn-sm btn-ghost" onClick={onClose} aria-label={t('Cerrar')}><X size={15} /></button>
       </div>
       <div className="mm-box">
-        <div className="mm-k">{section ? `Misión: ${section}` : 'Tareas'}</div>
+        <div className="mm-k">{section ? t('Misión: {section}', { section: section }) : t('Tareas')}</div>
         <div className="mm-xp"><i style={{ width: `${list.length ? (done / list.length) * 100 : 0}%`, background: p.color }} /></div>
-        <div className="t-small c3">{done} de {list.length} hechas{section && chain?.until?.next ? `. Después, la rueda pasa a ${state.projects.find((x) => x.id === chain.until!.next)?.name ?? chain.until.next}` : ''}</div>
-        {next.length > 0 && <div className="t-small c2 mt-1.5">Siguiente: {next.map((t) => `${t.extId ? t.extId + ' · ' : ''}${t.title.replace(/\*+/g, '').slice(0, 60)}`).join(' · ')}</div>}
+        <div className="t-small c3">{t('{done} de {length} hechas', { done: done, length: list.length })}{section && chain?.until?.next ? t('. Después, la rueda pasa a {name}', { name: state.projects.find((x) => x.id === chain.until!.next)?.name ?? chain.until.next }) : ''}</div>
+        {next.length > 0 && <div className="t-small c2 mt-1.5">{t('Siguiente:')} {next.map((t) => `${t.extId ? t.extId + ' · ' : ''}${t.title.replace(/\*+/g, '').slice(0, 60)}`).join(' · ')}</div>}
       </div>
       <div className="mm-box">
-        <div className="mm-k">Rueda de relevos</div>
+        <div className="mm-k">{t('Rueda de relevos')}</div>
         {chain?.on && chain.order.length ? (
-          <div className="t-small c2">{chain.order.map((id, k) => <span key={id}>{k ? ' → ' : ''}<b style={{ color: chain.holder === id ? 'var(--orange)' : undefined }}>{chain.holder === id ? '★ ' : ''}{short(id)}</b></span>)}{chain.phase === 'espera' ? '. Esperando a que alguien recupere su uso' : ''}{chain.outgoing ? `. ${short(chain.outgoing)} remata lo pequeño` : ''}</div>
-        ) : <div className="t-small c3">Apagada: aquí solo se trabaja cuando tú abres un Claude.</div>}
+          <div className="t-small c2">{chain.order.map((id, k) => <span key={id}>{k ? ' → ' : ''}<b style={{ color: chain.holder === id ? 'var(--orange)' : undefined }}>{chain.holder === id ? '★ ' : ''}{short(id)}</b></span>)}{chain.phase === 'espera' ? t('. Esperando a que alguien recupere su uso') : ''}{chain.outgoing ? t('. {v0} remata lo pequeño', { v0: short(chain.outgoing) }) : ''}</div>
+        ) : <div className="t-small c3">{t('Apagada: aquí solo se trabaja cuando tú abres un Claude.')}</div>}
       </div>
       {pend && (pend.decisions || pend.review || pend.comments) ? (
         <button className="mm-box mm-alert text-left" onClick={() => void open(pend.decisions ? 'decisiones' : pend.review ? 'tareas' : 'revisiones')}>
-          <div className="mm-k" style={{ color: 'var(--red)' }}>Te espera</div>
-          <div className="t-small c2">{[pend.decisions && plural(pend.decisions, 'pregunta en Decidir', 'preguntas en Decidir'), pend.review && plural(pend.review, 'tarea para revisar', 'tareas para revisar'), pend.comments && plural(pend.comments, 'corrección', 'correcciones')].filter(Boolean).join(' · ')}</div>
+          <div className="mm-k" style={{ color: 'var(--red)' }}>{t('Te espera')}</div>
+          <div className="t-small c2">{[pend.decisions && tn(pend.decisions, '{n} pregunta en Decidir', '{n} preguntas en Decidir'), pend.review && tn(pend.review, '{n} tarea para revisar', '{n} tareas para revisar'), pend.comments && tn(pend.comments, '{n} corrección', '{n} correcciones')].filter(Boolean).join(' · ')}</div>
         </button>
       ) : null}
       <div className="flex gap-2 flex-wrap mt-auto pt-1">
-        {state.activeProjectId !== pid && <button className="btn btn-sm btn-primary" onClick={() => void open()}>Ver este proyecto</button>}
-        <button className="btn btn-sm" onClick={() => void open('relevos')}>Relevos</button>
-        <button className="btn btn-sm" onClick={() => void open('tareas')}>Tareas</button>
+        {state.activeProjectId !== pid && <button className="btn btn-sm btn-primary" onClick={() => void open()}>{t('Ver este proyecto')}</button>}
+        <button className="btn btn-sm" onClick={() => void open('relevos')}>{t('Relevos')}</button>
+        <button className="btn btn-sm" onClick={() => void open('tareas')}>{t('Tareas')}</button>
       </div>
     </div>
   )
@@ -147,7 +148,7 @@ export function MissionMap() {
   }
   const busy = new Set(cast.filter((m) => m.where === 'proyecto').map((m) => m.projectId))
   const wheel = state.projects.map((p) => wheels.data?.[p.id]?.chain).find((c) => c?.on && c.order.length)
-  const baseText = wheel ? <>Rueda: {wheel.order.map((id) => id.replace(/\D/g, '')).join(' → ')}{wheel.holder ? <> · turno de <b>{short(wheel.holder)}</b></> : null}</> : 'Base: aquí esperan los que no trabajan'
+  const baseText = wheel ? <>{t('Rueda:')} {wheel.order.map((id) => id.replace(/\D/g, '')).join(' → ')}{wheel.holder ? <> {t('· turno de')} <b>{short(wheel.holder)}</b></> : null}</> : t('Base: aquí esperan los que no trabajan')
   const nodeBody = (p: (typeof projects)[number]) => {
     const chain = wheels.data?.[p.id]?.chain
     const section = chain?.until?.section
@@ -157,11 +158,11 @@ export function MissionMap() {
     const n = (pend?.decisions ?? 0) + (pend?.review ?? 0) + (pend?.comments ?? 0)
     return (
       <>
-        {n > 0 && <span className="mm-flag" title="Te espera en este proyecto">{n}</span>}
+        {n > 0 && <span className="mm-flag" title={t('Te espera en este proyecto')}>{n}</span>}
         <span className="flex items-center gap-2 min-w-0"><span className="mm-dot" style={{ background: p.color }} /><b className="truncate">{p.name}</b></span>
-        <span className="t-small c3 block truncate mt-0.5">{section ? `Misión: ${section}` : busy.has(p.id) ? 'Alguien trabaja aquí' : 'Nadie trabaja aquí ahora'}</span>
+        <span className="t-small c3 block truncate mt-0.5">{section ? t('Misión: {section}', { section: section }) : busy.has(p.id) ? t('Alguien trabaja aquí') : t('Nadie trabaja aquí ahora')}</span>
         <span className="mm-xp block"><i style={{ width: `${list.length ? (done / list.length) * 100 : 0}%`, background: p.color }} /></span>
-        <span className="t-small c3 flex justify-between mt-1"><span>{tasks.data ? `${done} de ${list.length} hechas` : '…'}</span><span className="num">{list.length ? `${Math.round((done / list.length) * 100)} %` : ''}</span></span>
+        <span className="t-small c3 flex justify-between mt-1"><span>{tasks.data ? t('{done} de {length} hechas', { done: done, length: list.length }) : '…'}</span><span className="num">{list.length ? `${Math.round((done / list.length) * 100)} %` : ''}</span></span>
       </>
     )
   }
@@ -189,7 +190,7 @@ export function MissionMap() {
           <div className="mm-c-crew">{atBase.map((m) => <Pilot key={m.id} m={m} a={agent(m.id)} compact />)}</div>
         </div>
       )}
-      <div className="t-small c3">Anillos: fuera la semana, dentro las 5 horas. Pulsa un proyecto o un Claude para ver su ficha.</div>
+      <div className="t-small c3">{t('Anillos: fuera la semana, dentro las 5 horas. Pulsa un proyecto o un Claude para ver su ficha.')}</div>
     </div>
   )
 
@@ -222,7 +223,7 @@ export function MissionMap() {
       )))}
 
       {sel && <Panel pid={sel} wheels={wheels.data} tasks={tasks.data?.[sel]} onClose={() => setSel(undefined)} />}
-      <div className="mm-legend"><span><i className="hot" /> trabajando ahora</span><span><i /> nadie ahora</span><span>Anillos: fuera la semana, dentro las 5 horas</span><span>Pulsa un proyecto o un Claude para ver su ficha</span></div>
+      <div className="mm-legend"><span><i className="hot" /> {t('trabajando ahora')}</span><span><i /> {t('nadie ahora')}</span><span>{t('Anillos: fuera la semana, dentro las 5 horas')}</span><span>{t('Pulsa un proyecto o un Claude para ver su ficha')}</span></div>
     </div>
   )
 }

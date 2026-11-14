@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Things only one job can use at a time, whatever the project: the Unity editor of a copy, the graphics card (16 GB,
 // shared by every project), a player build (11-11: one was killed for memory). Until now this was a hand-written line in
 // RELEVO.md («el usuario tiene Premiere abierto: nada pesado»). Two halves:
@@ -99,13 +100,13 @@ export const isLoaded = (l: Load): boolean => l.cpuPct >= 75 || l.freeMb / l.tot
 /** What a process is doing, in words, from its name and command line. */
 export function doingOf(p: { name: string; cmd: string }): string {
   const n = p.name.toLowerCase()
-  if (n.startsWith('ffmpeg')) return 'convirtiendo o exportando vídeo'
-  if (n.includes('media encoder')) return 'exportando vídeo (Media Encoder)'
-  if (n.startsWith('python')) { const s = p.cmd.match(/([\w-]+\.py)/)?.[1]; return s ? `ejecutando ${s}` : 'un programa de Python' }
-  if (n.startsWith('node')) return 'un proceso de Node'
+  if (n.startsWith('ffmpeg')) return t('convirtiendo o exportando vídeo')
+  if (n.includes('media encoder')) return t('exportando vídeo (Media Encoder)')
+  if (n.startsWith('python')) { const s = p.cmd.match(/([\w-]+\.py)/)?.[1]; return s ? `ejecutando ${s}` : t('un programa de Python') }
+  if (n.startsWith('node')) return t('un proceso de Node')
   if (n === 'unity.exe') return 'Unity'
   if (n === 'blender.exe') return 'Blender'
-  if (n === 'claude.exe') return 'una ventana de Claude'
+  if (n === 'claude.exe') return t('una ventana de Claude')
   return p.name.replace(/\.exe$/i, '')
 }
 
@@ -123,7 +124,7 @@ export function loadText(l: Load): string {
     const parts = [doing === name ? '' : doing, cpu, ram].filter(Boolean)
     return `${who}: ${name}${parts.length ? ` (${parts.join(', ')})` : ''}`
   })
-  return top.length ? `${head}. Lo que más gasta: ${top.join('; ')}.` : `${head}.`
+  return top.length ? t('{head}. Lo que más gasta: {v0}.', { head: head, v0: top.join('; ') }) : `${head}.`
 }
 
 const clean = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9ñ._-]+/g, '-').replace(/^-|-$/g, '')

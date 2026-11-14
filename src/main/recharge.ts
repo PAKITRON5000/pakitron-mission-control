@@ -1,3 +1,4 @@
+import { t } from '../core/i18n'
 // Smart recharge, the part that acts (EV96; the decision and the reading are core/recharge.ts). At an account's limit the
 // app looks at its window for Claude Code's own `/limit-reset` offer; every two minutes it asks whether this is the moment
 // to use it and, when it is (and the user left it to the app, Decidir #130 «B»), types the command in that window and
@@ -55,7 +56,7 @@ export function createRecharge(d: RechargeDeps) {
     save(account, { ...offer, seenAt: Date.now(), ...(offer.available ? { noneAt: undefined } : { noneAt: Date.now() }) })
     if (offer.available) {
       const day = new Date().toDateString()
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} tiene una recarga de Claude Code a mano${offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ' (5 horas)'}${offer.useBy ? `, hasta ${offer.useBy}` : ''}`, source: 'Mission Control', dedupe: `rc:${account}:${day}` })
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} tiene una recarga de Claude Code a mano{v1}{v2}', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ' (5 horas)', v2: offer.useBy ? `, hasta ${offer.useBy}` : '' }), source: 'Mission Control', dedupe: `rc:${account}:${day}` })
     }
     return offer
   }
@@ -142,19 +143,19 @@ export function createRecharge(d: RechargeDeps) {
         // The app counts it back in the turn at once (the same as «Ya está recargada»).
         service.setSettings({ recharged: { ...(service.settings.recharged ?? {}), [account]: Date.now() } })
         if (/send a message to continue/i.test(screen)) await d.typeText(pid, 'Mission Control: se ha usado tu recarga de Claude Code; sigue exactamente donde lo dejaste, sin repetir lo hecho.')
-        addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} ha usado su recarga${kind ? ` (${kind})` : ''} y sigue trabajando`, source: 'Mission Control' })
+        addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} ha usado su recarga{v1} y sigue trabajando', { v0: who(account), v1: kind ? ` (${kind})` : '' }), source: 'Mission Control' })
         d.notify(`${who(account)} ha usado su recarga`, 'Era el mejor momento: estaba parada con trabajo y nadie más podía seguir. Sigue trabajando.')
         void service.refreshAgents()
         return 'hecho'
       }
       if (step === 'sin-recarga') {
         save(account, { available: false, noneAt: Date.now() })
-        addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} no tiene recarga disponible ahora (Claude Code lo dice)`, source: 'Mission Control' })
+        addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} no tiene recarga disponible ahora (Claude Code lo dice)', { v0: who(account) }), source: 'Mission Control' })
         return 'sin recarga'
       }
       // Esc only closes a chooser left open; on a plain line it would cancel Claude Code's automatic continue (13-11).
       if (/Use an? [\w -]+ \(|Enter to confirm|esc to (?:go back|exit)/i.test(screen)) { try { await d.typeKey(pid, 'esc') } catch { /* closed */ } }
-      addEvent(service.db, { at: Date.now(), account, kind: 'aviso', title: `No se ha usado la recarga de ${who(account)}: la ventana no mostraba lo esperado${step === 'peligro' ? ' (hablaba de créditos o de pago: nunca se pulsa ahí)' : ''}`, detail: screen.slice(-1500), source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account, kind: 'aviso', title: t('No se ha usado la recarga de {v0}: la ventana no mostraba lo esperado{v1}', { v0: who(account), v1: step === 'peligro' ? ' (hablaba de créditos o de pago: nunca se pulsa ahí)' : '' }), detail: screen.slice(-1500), source: 'Mission Control' })
       return step === 'peligro' ? 'la pantalla hablaba de pagar: no se ha tocado' : 'no se ha podido confirmar'
     } catch (e) {
       return (e as Error).message
@@ -195,7 +196,7 @@ export function createRecharge(d: RechargeDeps) {
       const limited = Boolean(a?.usage.activeLimit && a.usage.activeLimit.resetsAt > Date.now())
       if (!offer || (!offer.available && !limited)) return 'Claude Code no enseña sus recargas fuera del límite: se sabrá cuando llegue a él'
       save(account, { ...offer, seenAt: Date.now() })
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: offer.available ? `${who(account)} tiene recarga${offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ''}${offer.useBy ? `, hasta ${offer.useBy}` : ''} (revisado sin usarla)` : `${who(account)} no tiene recarga ahora`, source: 'Mission Control', dedupe: `rp:${account}:${new Date().toDateString()}:${offer.available}` })
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: offer.available ? t('{v0} tiene recarga{v1}{v2} (revisado sin usarla)', { v0: who(account), v1: offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : '', v2: offer.useBy ? `, hasta ${offer.useBy}` : '' }) : t('{v0} no tiene recarga ahora', { v0: who(account) }), source: 'Mission Control', dedupe: `rp:${account}:${new Date().toDateString()}:${offer.available}` })
       return offer.available ? `tiene recarga${offer.kinds?.length ? ` (${offer.kinds.join(', ')})` : ''}${offer.useBy ? `, hasta ${offer.useBy}` : ''}` : 'no tiene recarga ahora'
     } finally {
       busy.delete(account)
@@ -224,13 +225,13 @@ export function createRecharge(d: RechargeDeps) {
     const w = windowOf(account, sessionId)
     // Only where the app drives the work (autonomous mode or a wheel): a window the user is using is left to the user.
     if (!w?.pid || !(s.autonomous || inWheel)) {
-      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} se ha quedado sin Fable hasta ${new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}: sus ventanas nuevas irán con Opus`, source: 'Mission Control' })
+      addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable hasta {v1}: sus ventanas nuevas irán con Opus', { v0: who(account), v1: new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
       return 'marcada sin Fable'
     }
     await d.typeText(w.pid, '/model opus')
     await sleep(2500)
     await d.typeText(w.pid, 'Mission Control: se ha acabado tu límite de Fable y no hay cupón de Fable; sigue con Opus exactamente donde lo dejaste, sin repetir lo hecho.')
-    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} se ha quedado sin Fable: sigue con Opus en la misma conversación (Fable vuelve ${new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })})`, source: 'Mission Control' })
+    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} se ha quedado sin Fable: sigue con Opus en la misma conversación (Fable vuelve {v1})', { v0: who(account), v1: new Date(until).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }), source: 'Mission Control' })
     service.push()
     return 'sigue con Opus'
   }
@@ -241,7 +242,7 @@ export function createRecharge(d: RechargeDeps) {
     const rest = { ...s.fableAuto }
     delete rest[account]
     service.setSettings({ noFable: (s.noFable ?? []).filter((x) => x !== account), fableAuto: rest })
-    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: `${who(account)} vuelve a tener Fable`, source: 'Mission Control' })
+    addEvent(service.db, { at: Date.now(), account, kind: 'recarga', title: t('{v0} vuelve a tener Fable', { v0: who(account) }), source: 'Mission Control' })
   }
 
   /** Every two minutes, and after each limit: the accounts stopped by their limit with a reset at hand. */
@@ -260,7 +261,7 @@ export function createRecharge(d: RechargeDeps) {
         if (warned.get(a.id) === at) continue
         warned.set(a.id, at)
         d.notify(`Buen momento para la recarga de ${who(a.id)}`, `${dec.why}. Ábrela en Inicio o escribe /limit-reset en su ventana.`)
-        addEvent(service.db, { at: now, account: a.id, kind: 'recarga', title: `Buen momento para usar la recarga de ${who(a.id)}: ${dec.why}`, source: 'Mission Control' })
+        addEvent(service.db, { at: now, account: a.id, kind: 'recarga', title: t('Buen momento para usar la recarga de {v0}: {why}', { v0: who(a.id), why: dec.why }), source: 'Mission Control' })
       }
     }
   }

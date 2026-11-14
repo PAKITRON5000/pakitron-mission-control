@@ -1,4 +1,5 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Fragment, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { pickLang, setLang } from '../../core/i18n'
 import { MotionConfig } from 'motion/react'
 import { StoreProvider, useStore } from './lib/store'
 import { api } from './lib/api'
@@ -171,7 +172,17 @@ function TabsShape() {
 export function App() {
   return (
     <StoreProvider>
-      <Shell />
+      <LangGate><Shell /></LangGate>
     </StoreProvider>
   )
+}
+
+/** EV161: the app's language (Ajustes › General › Idioma; with none chosen, the system's), set before anything draws. */
+function LangGate({ children }: { children: ReactNode }) {
+  const { state } = useStore()
+  const lang = pickLang(state?.settings?.lang, navigator.language)
+  setLang(lang)
+  useEffect(() => { document.documentElement.lang = lang }, [lang])
+  // A new key draws everything again in the new language (texts made outside render, like the menu's, included).
+  return <Fragment key={lang}>{children}</Fragment>
 }

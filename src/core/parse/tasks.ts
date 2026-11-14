@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 // Reads a project's TASKS.md (the format the four accounts already use in the game project):
 //   - [ ] C1a · Title: detail      - [~] F10 · **Bold title** detail      - [x] PJ2: detail
 // It never writes the file. A checkbox says what the agent claims; "verified" is only set by the user in the app.
@@ -200,7 +201,7 @@ export function parseTasks(markdown: string): ParsedTask[] {
     out.push({
       key,
       extId,
-      title: title || '(sin título)',
+      title: title || t('(sin título)'),
       detail,
       mark,
       status: statusFor(mark, body),

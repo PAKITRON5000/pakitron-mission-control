@@ -1,0 +1,28 @@
+// EV162: Cuentas (screens/Accounts.tsx). Keyed by the Spanish text.
+export const accounts: Record<string, string> = {
+  'Nombre de {v0}': 'Name of {v0}',
+  'Guardar': 'Save',
+  '{v0} vuelve a usarse': '{v0} is in use again',
+  '{v0} apartada: no se usa ni se le deja trabajo': '{v0} set aside: not used and no work is left for it',
+  '{v0} de baja': '{v0} retired',
+  '{v0} se abrirá sola en {v1} cuando todas las demás estén sin uso': '{v0} will open by itself in {v1} when all the others are out of usage',
+  '{v0} ya no se abre sola en {v1}': '{v0} no longer opens by itself in {v1}',
+  'De reserva para {v0}:': 'Backup for {v0}:',
+  'se abre sola allí cuando todas las demás cuentas en uso están sin uso{v0}.': 'it opens by itself there when every other account in use is out of usage{v0}.',
+  ', aunque esté en «No usar»': ', even when set to "Do not use"',
+  'Ver su ficha': 'See its card',
+  'El correo con el que está iniciada esta cuenta': 'The email this account is signed in with',
+  'Rueda de {wheelName}:': '{wheelName} wheel:',
+  '· último relevo {v0}': '· last handover {v0}',
+  '· activa {v0}': '· active {v0}',
+  'Su ficha': 'Its card',
+  'Cada cuenta entera: cuánto uso le queda, qué hace, en qué proyecto y ventana, y qué puedes hacer con ella. Pulsa el nombre para cambiarlo.':
+    'Each account in full: how much usage it has left, what it is doing, in which project and window, and what you can do with it. Click the name to change it.',
+  'Quién releva a quién': 'Who takes over from whom',
+  'Tu primera cuenta': 'Your first account',
+  'Aún no hay ninguna cuenta con la sesión iniciada en este PC': 'There is no account signed in on this PC yet',
+  'Sin usar': 'Unused',
+  '{label}: Claude Code no dice cuánto uso queda.': '{label}: Claude Code does not say how much usage is left.',
+  'Las conversaciones{v0}, abiertas y guardadas, están en Chats': 'The conversations{v0}, open and saved, are in Chats',
+  ' de {name}': ' of {name}',
+}

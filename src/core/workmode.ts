@@ -4,25 +4,28 @@
 // each one sets the switches underneath. Whatever the mode, every window the app opens goes through core/dispatch.ts.
 // No node imports: the screens use it too.
 
+import { t } from './i18n'
+
 export type WorkMode = 'manual' | 'cada-uno' | 'relevos'
 
 export interface WorkModeInfo { id: WorkMode; label: string; sub: string; happens: string }
 
+// EV162: getters, so each text comes out in the language chosen when it is read (like the menu, NAV).
 export const WORK_MODES: WorkModeInfo[] = [
   {
-    id: 'manual', label: 'Solo cuando yo lo diga',
-    sub: 'Cada Claude trabaja mientras tenga su ventana abierta. Mission Control no abre ni retoma nada.',
-    happens: 'Cuando una cuenta se queda sin uso, se queda parada hasta que tú la abras.'
+    id: 'manual', get label() { return t('Solo cuando yo lo diga') },
+    get sub() { return t('Cada Claude trabaja mientras tenga su ventana abierta. Mission Control no abre ni retoma nada.') },
+    get happens() { return t('Cuando una cuenta se queda sin uso, se queda parada hasta que tú la abras.') }
   },
   {
-    id: 'cada-uno', label: 'Cada uno sigue con lo suyo',
-    sub: 'Cada cuenta sigue con su proyecto sin parar y, al volver su uso, lo retoma en su misma conversación. Lo pesado (Unity, Blender) va por turnos.',
-    happens: 'Cuando una cuenta se queda sin uso, las demás siguen con lo suyo y ella sigue al volver, en su misma conversación.'
+    id: 'cada-uno', get label() { return t('Cada uno sigue con lo suyo') },
+    get sub() { return t('Cada cuenta sigue con su proyecto sin parar y, al volver su uso, lo retoma en su misma conversación. Lo pesado (Unity, Blender) va por turnos.') },
+    get happens() { return t('Cuando una cuenta se queda sin uso, las demás siguen con lo suyo y ella sigue al volver, en su misma conversación.') }
   },
   {
-    id: 'relevos', label: 'Se relevan entre ellos',
-    sub: 'Cuando una se queda sin uso, sigue su trabajo la siguiente libre del turno (con Fable si iba con Fable).',
-    happens: 'Cuando una cuenta se queda sin uso, se abre la siguiente libre del turno en ese proyecto; si ya tiene ventana, se le escribe ahí.'
+    id: 'relevos', get label() { return t('Se relevan entre ellos') },
+    get sub() { return t('Cuando una se queda sin uso, sigue su trabajo la siguiente libre del turno (con Fable si iba con Fable).') },
+    get happens() { return t('Cuando una cuenta se queda sin uso, se abre la siguiente libre del turno en ese proyecto; si ya tiene ventana, se le escribe ahí.') }
   }
 ]
 
@@ -49,10 +52,10 @@ export interface TeamAdvice { mode: WorkMode; fronts: number; title: string; why
 
 export function teamAdvice(usable: number, heavyMain = false, rulesOk = true): TeamAdvice {
   // EV140: until the user has read Anthropic's rules, several accounts each go on with their own work, never handing over.
-  if (usable >= 2 && !rulesOk) return { mode: 'cada-uno', fronts: 1, title: `Tienes ${usable} Claude: cada uno con lo suyo`, why: 'Cada cuenta sigue con su proyecto y retoma lo suyo al volver su uso. Para que se releven entre ellas, elige «Se relevan entre ellos» abajo: antes verás lo que dicen las normas de Anthropic.' }
-  if (usable <= 1) return { mode: 'cada-uno', fronts: 1, title: 'Tienes un Claude: que siga solo con lo suyo', why: 'No hay a quién pasar el turno: trabaja sin parar, guarda a menudo y, cuando vuelve su uso, retoma su misma conversación.' }
-  if (usable <= 3) return { mode: 'relevos', fronts: 1, title: `Tienes ${usable} Claude: que se releven`, why: 'Uno trabaja cada vez en lo importante y, al quedarse sin uso, sigue el siguiente con lo que dejó (la rueda de Relevos, con unos minutos de solape). Así no se pisan ni se pierde nada.' }
-  return { mode: 'relevos', fronts: heavyMain ? 1 : 2, title: `Tienes ${usable} Claude: rueda y dos a la vez`, why: heavyMain ? 'El proyecto principal usa algo que no se comparte (Unity o la gráfica): uno cada vez allí, en rueda, y los demás en otros proyectos por turnos.' : 'Rueda en el proyecto principal con dos cuentas a la vez en partes distintas (cada una reserva su tarea), y las demás en otros proyectos por turnos.' }
+  if (usable >= 2 && !rulesOk) return { mode: 'cada-uno', fronts: 1, title: t('Tienes {usable} Claude: cada uno con lo suyo', { usable }), why: t('Cada cuenta sigue con su proyecto y retoma lo suyo al volver su uso. Para que se releven entre ellas, elige «Se relevan entre ellos» abajo: antes verás lo que dicen las normas de Anthropic.') }
+  if (usable <= 1) return { mode: 'cada-uno', fronts: 1, title: t('Tienes un Claude: que siga solo con lo suyo'), why: t('No hay a quién pasar el turno: trabaja sin parar, guarda a menudo y, cuando vuelve su uso, retoma su misma conversación.') }
+  if (usable <= 3) return { mode: 'relevos', fronts: 1, title: t('Tienes {usable} Claude: que se releven', { usable }), why: t('Uno trabaja cada vez en lo importante y, al quedarse sin uso, sigue el siguiente con lo que dejó (la rueda de Relevos, con unos minutos de solape). Así no se pisan ni se pierde nada.') }
+  return { mode: 'relevos', fronts: heavyMain ? 1 : 2, title: t('Tienes {usable} Claude: rueda y dos a la vez', { usable }), why: heavyMain ? t('El proyecto principal usa algo que no se comparte (Unity o la gráfica): uno cada vez allí, en rueda, y los demás en otros proyectos por turnos.') : t('Rueda en el proyecto principal con dos cuentas a la vez en partes distintas (cada una reserva su tarea), y las demás en otros proyectos por turnos.') }
 }
 
 /** The mode the switches amount to; undefined when they were set one by one to something none of the three is. */
@@ -79,7 +82,7 @@ export function fitTeam(s: ModeSettings & { workModeBy?: 'app' | 'usuario'; maxF
 // keeps it off; whoever turns it on reads this first and takes it on himself.
 
 export const RELAY_RULES = {
-  title: 'Antes de que tus cuentas se releven',
+  get title() { return t('Antes de que tus cuentas se releven') },
   points: [
     'Con esto, cuando una cuenta se queda sin uso, sigue el trabajo otra de tus cuentas.',
     'Las normas de Anthropic dicen que los límites de Pro y Max «suponen un uso normal e individual» de Claude Code. No aclaran si una misma persona puede juntar varias suscripciones así.',

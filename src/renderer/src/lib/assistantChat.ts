@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // The conversation with the assistant (EV85), one for the whole app: the bubble and its own screen show the same one.
 // Kept in this window's storage (the last 40 messages): a convenience, it can come back empty.
 import { useEffect, useState } from 'react'
@@ -53,7 +54,7 @@ export async function ask(text: string, projectId?: string): Promise<void> {
     await new Promise((ok) => setTimeout(ok, Math.max(0, BEAT - (Date.now() - t0))))
     patch(wait.id, { pending: false, text: r.text, reply: r, at: Date.now() })
   } catch (e) {
-    patch(wait.id, { pending: false, text: `No he podido mirarlo: ${(e as Error).message}` })
+    patch(wait.id, { pending: false, text: t('No he podido mirarlo: {message}', { message: (e as Error).message }) })
   }
 }
 
@@ -69,7 +70,7 @@ export async function sendPlan(id: number): Promise<void> {
     patch(wait.id, { pending: false, text: r.text, reply: r })
   } catch (e) {
     patch(id, { done: undefined })
-    patch(wait.id, { pending: false, text: `No se ha podido enviar: ${(e as Error).message}` })
+    patch(wait.id, { pending: false, text: t('No se ha podido enviar: {message}', { message: (e as Error).message }) })
   }
 }
 
@@ -90,7 +91,7 @@ export async function askClaude(id: number, projectId?: string): Promise<void> {
     patch(wait.id, { pending: false, text: r.text, reply: r })
   } catch (e) {
     patch(id, { done: undefined })
-    patch(wait.id, { pending: false, text: `Claude no ha podido contestar: ${(e as Error).message}` })
+    patch(wait.id, { pending: false, text: t('Claude no ha podido contestar: {message}', { message: (e as Error).message }) })
   }
 }
 

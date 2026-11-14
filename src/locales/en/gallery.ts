@@ -1,0 +1,32 @@
+// EV162: Galería (screens/Gallery.tsx). Keyed by the Spanish text.
+export const gallery: Record<string, string> = {
+  'Sueltas': 'Loose',
+  'Este archivo está igual en {copies} copias del proyecto': 'This file is the same in {copies} copies of the project',
+  'Pausa': 'Pause',
+  'Escuchar': 'Listen',
+  'Todo{v0}': 'All{v0}',
+  'Imágenes · {v0}': 'Images · {v0}',
+  'Vídeos · {v0}': 'Videos · {v0}',
+  'Modelos 3D · {v0}': '3D models · {v0}',
+  'Audio · {v0}': 'Audio · {v0}',
+  'Inicio de la galería': 'Gallery home',
+  'De dónde sale': 'Where it comes from',
+  'Qué es': 'What it is',
+  'Con notas abiertas': 'With open notes',
+  'Ver también las copias iguales': 'Also show identical copies',
+  'Busca en todo: «racha águila», «castle»…': 'Search everything: "eagle streak", "castle"…',
+  'Por fecha': 'By date',
+  'Por carpeta': 'By folder',
+  'Por nombre': 'By name',
+  'Hay archivos nuevos': 'There are new files',
+  'Aún no hay imágenes, vídeos ni modelos en este proyecto': 'There are no images, videos or models in this project yet',
+  'Aparecen solos cuando los Claude los crean en la carpeta del proyecto. Si están en otra carpeta, añádela en Ajustes › Proyecto › Carpetas de la galería.':
+    "They appear by themselves when the Claudes create them in the project's folder. If they are in another folder, add it in Settings › Project › Gallery folders.",
+  'Lo más nuevo': 'Newest',
+  'Ver todo por fecha': 'See everything by date',
+  'Carpetas': 'Folders',
+  'Nada que mostrar': 'Nothing to show',
+  'No hay archivos con estos filtros. Prueba a quitar alguno, o añade una carpeta en Ajustes › Proyecto.':
+    'No files match these filters. Try removing one, or add a folder in Settings › Project.',
+  'Eso es todo: {v0}.': "That's all: {v0}.",
+}

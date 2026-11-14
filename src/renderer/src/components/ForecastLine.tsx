@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 import { useMemo } from 'react'
 import { Hourglass } from 'lucide-react'
 import { useStore, useAsync } from '../lib/store'
@@ -38,7 +39,7 @@ export function ForecastLine({ projectId }: { projectId?: string }) {
   const r = useWheelForecast(projectId)
   if (!r) return null
   return (
-    <div className="flex items-start gap-2 t-body" style={{ color: r.f.short ? 'var(--orange)' : 'var(--label-2)' }} title="Al ritmo de cada cuenta en los últimos días (lo que gasta de su semana por hora de trabajo); sin datos, un ritmo típico">
+    <div className="flex items-start gap-2 t-body" style={{ color: r.f.short ? 'var(--orange)' : 'var(--label-2)' }} title={t('Al ritmo de cada cuenta en los últimos días (lo que gasta de su semana por hora de trabajo); sin datos, un ritmo típico')}>
       <Hourglass size={16} className="flex-none mt-0.5" />
       <span>{nameify(r.text)}</span>
     </div>

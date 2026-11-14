@@ -1,7 +1,7 @@
 // EV157: pictures of the app with invented data, for the README (and anyone who must show it without their own).
 // Builds scripts/demo/seed.ts, makes the demo world in a folder (default %TEMP%\pmc-demo), and opens the installed app
 // (or -- --exe <build>) in capture mode on it, with its own user folder: nothing of this PC's accounts or projects shows.
-// Usage: node scripts/demo.mjs [--out <carpeta>] [--exe <app.exe>] [--sizes 1480x920] [--routes inicio,tareas]
+// Usage: node scripts/demo.mjs [--out <carpeta>] [--exe <app.exe>] [--sizes 1480x920] [--routes inicio,tareas] [--lang en]
 import { build } from 'vite'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, readdirSync } from 'node:fs'
@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os'
 
 const arg = (name, def) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : def }
 // Read before the seed runs: it takes over process.argv.
+// --lang en: the demo in English (EV161).
+process.env.PMC_DEMO_LANG = arg('lang', 'es')
 const opts = { sizes: arg('sizes', '1480x920'), routes: arg('routes', 'inicio,tareas,decisiones,relevos,agentes,memoria'), steps: arg('steps', '[]') }
 const out = resolve(arg('out', join(tmpdir(), 'pmc-demo')))
 const exe = resolve(arg('exe', join(process.env.LOCALAPPDATA, 'Programs', 'Pakitron Mission Control', 'Pakitron Mission Control.exe')))

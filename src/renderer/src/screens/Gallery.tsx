@@ -1,3 +1,4 @@
+import { t, tn } from '../../../core/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ScreenIcon } from '../components/Sidebar'
 import { Search, Film, Box, AudioLines, MessageSquare, Images, ChevronRight, RefreshCw, Copy, LayoutGrid, Gamepad2, Palette, FlaskConical, FileText, FolderPlus, PenTool, Play, Pause } from 'lucide-react'
@@ -14,7 +15,7 @@ interface HomeGroup { source: string; label: string; hint: string; n: number; al
 interface Facets { total: number; copies: number; kinds: { kind: string; n: number }[]; categories: { category: string; n: number }[]; sources: { source: string; label: string; hint: string; n: number }[] }
 interface FolderView { path: string; crumbs: { path: string; name: string }[]; albums: Album[]; own: number }
 
-const KIND_LABEL: Record<string, [string, string]> = { image: ['imagen', 'imágenes'], video: ['vídeo', 'vídeos'], model: ['modelo 3D', 'modelos 3D'], audio: ['audio', 'audios'] }
+const kindCount = (kind: string, n: number): string => kind === 'image' ? tn(n, '{n} imagen', '{n} imágenes') : kind === 'video' ? tn(n, '{n} vídeo', '{n} vídeos') : kind === 'model' ? tn(n, '{n} modelo 3D', '{n} modelos 3D') : kind === 'audio' ? tn(n, '{n} audio', '{n} audios') : ` `
 const SOURCE_ICON: Record<string, typeof Images> = { juego: Gamepad2, astra: PenTool, arte: Palette, pruebas: FlaskConical, docs: FileText, otros: FolderPlus }
 const SOURCE_COLOR: Record<string, string> = { juego: 'var(--green)', astra: 'var(--pink)', arte: 'var(--purple)', pruebas: 'var(--blue)', docs: 'var(--gray)', otros: 'var(--orange)' }
 const es = (n: number) => n.toLocaleString('es-ES')
@@ -25,10 +26,10 @@ export function prettyName(name: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : name
 }
 
-const kindsText = (k: Record<string, number>) => Object.entries(k).sort((a, b) => b[1] - a[1]).map(([x, n]) => `${es(n)} ${n === 1 ? KIND_LABEL[x]?.[0] : KIND_LABEL[x]?.[1]}`).join(' · ')
+const kindsText = (k: Record<string, number>) => Object.entries(k).sort((a, b) => b[1] - a[1]).map(([x, n]) => kindCount(x, n)).join(' · ')
 
 function folderLabel(folder: string | undefined, crumbs: Map<string, string>): string {
-  if (!folder) return 'Sueltas'
+  if (!folder) return t('Sueltas')
   return crumbs.get(folder) ?? folder.split('/').map((p) => p.replace(/^_+/, '').replace(/[_-]+/g, ' ')).slice(-2).join(' › ')
 }
 
@@ -72,7 +73,7 @@ export function Tile({ a, onOpen, size, caption }: { a: Item; onOpen: () => void
       {caption && (
         <div className="px-0.5 pt-1.5 pb-1 min-w-0">
           <div className="t-small truncate" style={{ fontWeight: 560 }} title={a.name}>{prettyName(a.name)}</div>
-          <div className="t-small c3 truncate" title={a.rel}>{where || a.category}{(a.copies ?? 1) > 1 ? <span title={`Este archivo está igual en ${a.copies} copias del proyecto`}> · <Copy size={10} className="inline -mt-0.5" /> {a.copies}</span> : null}</div>
+          <div className="t-small c3 truncate" title={a.rel}>{where || a.category}{(a.copies ?? 1) > 1 ? <span title={t('Este archivo está igual en {copies} copias del proyecto', { copies: a.copies })}> · <Copy size={10} className="inline -mt-0.5" /> {a.copies}</span> : null}</div>
         </div>
       )}
     </div>
@@ -87,13 +88,13 @@ function SoundTile({ a, onOpen }: { a: Item; onOpen: () => void }) {
     <div className="gal-item min-w-0">
       <div className="tile aspect-[4/3] w-full flex items-center justify-center" id={`asset-${a.id}`} style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--purple) 30%, var(--fill)), var(--fill))' }}>
         <audio ref={ref} src={fileUrl(a.id)} preload="none" onPlay={() => { document.querySelectorAll('audio').forEach((x) => { if (x !== ref.current) x.pause() }); setOn(true) }} onPause={() => setOn(false)} onEnded={() => setOn(false)} />
-        <button className="w-12 h-12 rounded-full border-0 flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }} aria-label={on ? 'Pausa' : 'Escuchar'} onClick={() => { const el = ref.current; if (el) { if (el.paused) void el.play(); else el.pause() } }}>
+        <button className="w-12 h-12 rounded-full border-0 flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }} aria-label={on ? t('Pausa') : t('Escuchar')} onClick={() => { const el = ref.current; if (el) { if (el.paused) void el.play(); else el.pause() } }}>
           {on ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" style={{ marginLeft: 2 }} />}
         </button>
       </div>
       <button className="px-0.5 pt-1.5 pb-1 min-w-0 w-full text-left border-0 bg-transparent" onClick={onOpen} title={a.rel}>
         <div className="t-small truncate" style={{ fontWeight: 560 }}>{prettyName(a.name)}</div>
-        <div className="t-small c3 truncate">{a.folder?.split('/').pop()?.replace(/[_-]+/g, ' ') || 'Audio'}</div>
+        <div className="t-small c3 truncate">{a.folder?.split('/').pop()?.replace(/[_-]+/g, ' ') || t('Audio')}</div>
       </button>
     </div>
   )
@@ -229,14 +230,14 @@ export function Gallery() {
   const f = facets.data
   const countKind = (k: string) => f?.kinds.find((x) => x.kind === k)?.n ?? 0
   const KINDS = [
-    { value: '', label: `Todo${f ? ' · ' + es(f.kinds.reduce((s, x) => s + x.n, 0)) : ''}` },
-    { value: 'image', label: `Imágenes · ${es(countKind('image'))}` },
-    { value: 'video', label: `Vídeos · ${es(countKind('video'))}` },
-    { value: 'model', label: `Modelos 3D · ${es(countKind('model'))}` },
-    { value: 'audio', label: `Audio · ${es(countKind('audio'))}` }
+    { value: '', label: t('Todo{v0}', { v0: f ? ' · ' + es(f.kinds.reduce((s, x) => s + x.n, 0)) : '' }) },
+    { value: 'image', label: t('Imágenes · {v0}', { v0: es(countKind('image')) }) },
+    { value: 'video', label: t('Vídeos · {v0}', { v0: es(countKind('video')) }) },
+    { value: 'model', label: t('Modelos 3D · {v0}', { v0: es(countKind('model')) }) },
+    { value: 'audio', label: t('Audio · {v0}', { v0: es(countKind('audio')) }) }
   ]
   const srcLabel = f?.sources.find((s) => s.source === source)?.label ?? ''
-  const title = dq ? `Buscando «${dq}»` : folder ? view.data?.crumbs[view.data.crumbs.length - 1]?.name ?? 'Carpeta' : source ? srcLabel : cat || (status === 'comentados' ? 'Con notas abiertas' : status === 'duplicados' ? 'Repetidos' : seeFiles ? 'Todo, lo último primero' : 'Galería')
+  const title = dq ? t('Buscando «{dq}»', { dq: dq }) : folder ? view.data?.crumbs[view.data.crumbs.length - 1]?.name ?? t('Carpeta') : source ? srcLabel : cat || (status === 'comentados' ? t('Con notas abiertas') : status === 'duplicados' ? t('Repetidos') : seeFiles ? t('Todo, lo último primero') : t('Galería'))
   const onlySound = kind === 'audio'
 
   return (
@@ -244,13 +245,13 @@ export function Gallery() {
       <aside className="gal-rail">
         <button className={`gal-rail-row ${!filtered && !seeFiles ? 'on' : ''}`} onClick={clear}>
           <span className="icon-sq" style={{ background: 'var(--accent)' }}><LayoutGrid size={13} /></span>
-          <span className="flex-1 truncate">Inicio de la galería</span>
+          <span className="flex-1 truncate">{t('Inicio de la galería')}</span>
         </button>
         <button className={`gal-rail-row ${!filtered && seeFiles ? 'on' : ''}`} onClick={() => { clear(); setSeeFiles(true); setOrder('fecha') }}>
           <span className="icon-sq" style={{ background: 'var(--gray)' }}><Images size={13} /></span>
-          <span className="flex-1 truncate">Todo</span>
+          <span className="flex-1 truncate">{t('Todo')}</span>
         </button>
-        <div className="t-micro c3 px-2 pt-4 pb-1">De dónde sale</div>
+        <div className="t-micro c3 px-2 pt-4 pb-1">{t('De dónde sale')}</div>
         {(f?.sources ?? []).map((s) => {
           const Icon = SOURCE_ICON[s.source] ?? FolderPlus
           return (
@@ -261,17 +262,17 @@ export function Gallery() {
             </button>
           )
         })}
-        <div className="t-micro c3 px-2 pt-4 pb-1">Qué es</div>
+        <div className="t-micro c3 px-2 pt-4 pb-1">{t('Qué es')}</div>
         {(f?.categories ?? []).map((c) => (
           <button key={c.category} className={`gal-rail-row ${cat === c.category ? 'on' : ''}`} onClick={() => { setCat(cat === c.category ? '' : c.category); setFolder(''); setSource(''); setSeeFiles(false); setOrder('carpeta'); top.current?.scrollIntoView() }}>
             <span className="flex-1 truncate pl-1">{c.category}</span>
             <span className="num c3 t-small">{es(c.n)}</span>
           </button>
         ))}
-        <div className="t-micro c3 px-2 pt-4 pb-1">Más</div>
-        <button className={`gal-rail-row ${status === 'comentados' ? 'on' : ''}`} onClick={() => setStatus(status === 'comentados' ? '' : 'comentados')}><span className="flex-1 truncate pl-1">Con notas abiertas</span></button>
-        <button className={`gal-rail-row ${all ? 'on' : ''}`} title="El mismo archivo suele estar en varias copias del proyecto; normalmente se enseña una vez" onClick={() => setAll(!all)}>
-          <span className="flex-1 truncate pl-1">Ver también las copias iguales</span>
+        <div className="t-micro c3 px-2 pt-4 pb-1">{t('Más')}</div>
+        <button className={`gal-rail-row ${status === 'comentados' ? 'on' : ''}`} onClick={() => setStatus(status === 'comentados' ? '' : 'comentados')}><span className="flex-1 truncate pl-1">{t('Con notas abiertas')}</span></button>
+        <button className={`gal-rail-row ${all ? 'on' : ''}`} title={t('El mismo archivo suele estar en varias copias del proyecto; normalmente se enseña una vez')} onClick={() => setAll(!all)}>
+          <span className="flex-1 truncate pl-1">{t('Ver también las copias iguales')}</span>
           {!all && f?.copies ? <span className="num c3 t-small">{es(f.copies)}</span> : null}
         </button>
       </aside>
@@ -282,43 +283,43 @@ export function Gallery() {
           <div className="min-w-0">
             {(folder || source) && (
               <div className="flex items-center gap-1 t-small c3 mb-1 flex-wrap">
-                <button className="border-0 bg-transparent p-0 c3 hover:underline" onClick={clear}>Galería</button>
+                <button className="border-0 bg-transparent p-0 c3 hover:underline" onClick={clear}>{t('Galería')}</button>
                 {source && <><ChevronRight size={12} /><button className="border-0 bg-transparent p-0 c3 hover:underline" onClick={() => setFolder('')}>{srcLabel}</button></>}
                 {(view.data?.crumbs ?? []).map((c) => <span key={c.path} className="flex items-center gap-1"><ChevronRight size={12} /><button className="border-0 bg-transparent p-0 c3 hover:underline" onClick={() => setFolder(c.path)}>{c.name}</button></span>)}
               </div>
             )}
             <h1 className="t-display truncate flex items-center gap-3"><ScreenIcon route="galeria" /><span className="truncate">{title}</span></h1>
             <div className="t-small c3 mt-1 num">
-              {landing ? `${es(f?.total ?? 0)} archivos distintos · ${es(f?.copies ?? 0)} copias iguales no se repiten` : `${es(total)} ${total === 1 ? 'archivo' : 'archivos'}${f?.sources.find((s) => s.source === source)?.hint && !folder ? ' · ' + f!.sources.find((s) => s.source === source)!.hint : ''}`}
+              {landing ? t('{v0} archivos distintos · {v1} copias iguales no se repiten', { v0: es(f?.total ?? 0), v1: es(f?.copies ?? 0) }) : `${es(total)} ${total === 1 ? 'archivo' : 'archivos'}${f?.sources.find((s) => s.source === source)?.hint && !folder ? ' · ' + f!.sources.find((s) => s.source === source)!.hint : ''}`}
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 c3" />
-              <input className="field pl-8 w-64" placeholder="Busca en todo: «racha águila», «castle»…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <input className="field pl-8 w-64" placeholder={t('Busca en todo: «racha águila», «castle»…')} value={q} onChange={(e) => setQ(e.target.value)} />
             </div>
             <Segmented value={size} onChange={setSize} options={[{ value: 's', label: 'S' }, { value: 'm', label: 'M' }, { value: 'l', label: 'L' }]} />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-5">
           <Segmented value={kind} onChange={setKind} options={KINDS} />
-          {!landing && <Segmented value={order} onChange={setOrder} options={[{ value: 'fecha', label: 'Por fecha' }, { value: 'carpeta', label: 'Por carpeta' }, { value: 'nombre', label: 'Por nombre' }]} />}
-          {fresh && <button className="btn btn-sm btn-primary ml-auto" onClick={() => { setReload((r) => r + 1); top.current?.scrollIntoView() }}><RefreshCw size={13} /> Hay archivos nuevos</button>}
+          {!landing && <Segmented value={order} onChange={setOrder} options={[{ value: 'fecha', label: t('Por fecha') }, { value: 'carpeta', label: t('Por carpeta') }, { value: 'nombre', label: t('Por nombre') }]} />}
+          {fresh && <button className="btn btn-sm btn-primary ml-auto" onClick={() => { setReload((r) => r + 1); top.current?.scrollIntoView() }}><RefreshCw size={13} /> {t('Hay archivos nuevos')}</button>}
         </div>
 
         {/* EV118: an empty gallery says why and what to do, instead of blank sections. */}
         {landing && f && !f.total && (
           <div className="card p-6 flex flex-col items-center text-center gap-2 mb-8">
-            <b className="t-head">Aún no hay imágenes, vídeos ni modelos en este proyecto</b>
-            <span className="t-small c3 max-w-[560px]">Aparecen solos cuando los Claude los crean en la carpeta del proyecto. Si están en otra carpeta, añádela en Ajustes › Proyecto › Carpetas de la galería.</span>
+            <b className="t-head">{t('Aún no hay imágenes, vídeos ni modelos en este proyecto')}</b>
+            <span className="t-small c3 max-w-[560px]">{t('Aparecen solos cuando los Claude los crean en la carpeta del proyecto. Si están en otra carpeta, añádela en Ajustes › Proyecto › Carpetas de la galería.')}</span>
           </div>
         )}
         {landing && Boolean(f?.total) && (
           <>
             <section className="mb-8">
               <div className="flex items-baseline gap-3 mb-2.5">
-                <h2 className="t-title">Lo más nuevo</h2>
-                <button className="btn btn-sm btn-ghost" onClick={() => setSeeFiles(true)}>Ver todo por fecha <ChevronRight size={13} /></button>
+                <h2 className="t-title">{t('Lo más nuevo')}</h2>
+                <button className="btn btn-sm btn-ghost" onClick={() => setSeeFiles(true)}>{t('Ver todo por fecha')} <ChevronRight size={13} /></button>
               </div>
               <div className="grid gap-2" style={grid}>
                 {items.slice(0, size === 's' ? 18 : 12).map((a) => a.kind === 'audio' ? <SoundTile key={a.id} a={a} onOpen={() => open(a)} /> : <Tile key={a.id} a={a} caption={size !== 's'} onOpen={() => open(a)} size={size === 'l' ? 640 : 420} />)}
@@ -332,7 +333,7 @@ export function Gallery() {
                     <span className="icon-sq" style={{ background: SOURCE_COLOR[g.source] }}><Icon size={13} /></span>
                     <h2 className="t-title">{g.label}</h2>
                     <span className="t-small c3 num">{es(g.n)}</span>
-                    <button className="btn btn-sm btn-ghost ml-auto" onClick={() => { setSource(g.source); setFolder('') }}>{g.more ? `Ver sus ${g.albums.length + g.more} carpetas` : 'Abrir'} <ChevronRight size={13} /></button>
+                    <button className="btn btn-sm btn-ghost ml-auto" onClick={() => { setSource(g.source); setFolder('') }}>{g.more ? t('Ver sus {v0} carpetas', { v0: g.albums.length + g.more }) : t('Abrir')} <ChevronRight size={13} /></button>
                   </div>
                   <div className="t-small c3 mb-3">{g.hint}</div>
                   <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' }}>
@@ -346,14 +347,14 @@ export function Gallery() {
 
         {!landing && (view.data?.albums.length ?? 0) > 0 && !dq && (
           <section className="mb-8">
-            <h2 className="t-head mb-2.5">Carpetas <span className="t-small c3 num">· {view.data!.albums.length}</span></h2>
+            <h2 className="t-head mb-2.5">{t('Carpetas')} <span className="t-small c3 num">· {view.data!.albums.length}</span></h2>
             <div className="grid gap-x-3 gap-y-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))' }}>
               {view.data!.albums.map((al) => <AlbumCard key={al.path} al={al} onOpen={() => openAlbum(source, al.path)} />)}
             </div>
           </section>
         )}
 
-        {!landing && !loading && items.length === 0 && <Empty icon={<Images size={28} />} title="Nada que mostrar" text="No hay archivos con estos filtros. Prueba a quitar alguno, o añade una carpeta en Ajustes › Proyecto." />}
+        {!landing && !loading && items.length === 0 && <Empty icon={<Images size={28} />} title={t('Nada que mostrar')} text={t('No hay archivos con estos filtros. Prueba a quitar alguno, o añade una carpeta en Ajustes › Proyecto.')} />}
         {!landing && groups.map(([k, g]) => {
           const label = order === 'carpeta' ? folderLabel(k, crumbsMap) : order === 'nombre' ? k : dayLabel(g[0].mtime)
           const n = order === 'nombre' ? g.length : groupsN[k] ?? g.length
@@ -361,7 +362,7 @@ export function Gallery() {
             <section key={k} className="mb-7">
               <div className="t-head mb-2.5 flex items-baseline gap-2">
                 {order === 'carpeta' && k ? <button className="border-0 bg-transparent p-0 t-head hover:underline text-left" onClick={() => { const s = g[0].source ?? ''; openAlbum(s, k) }}>{label}</button> : <span>{label}</span>}
-                <span className="t-small c3 num">· {g.length < n ? `${es(g.length)} de ${es(n)}` : es(n)}</span>
+                <span className="t-small c3 num">· {g.length < n ? t('{shown} de {total}', { shown: es(g.length), total: es(n) }) : es(n)}</span>
               </div>
               {onlySound ? (
                 <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
@@ -377,7 +378,7 @@ export function Gallery() {
         })}
         <div ref={sentinel} className="h-10" />
         {!landing && loading && <div className="grid gap-2" style={grid}>{Array.from({ length: 12 }).map((_, i) => <div key={i} className="skeleton aspect-[4/3] rounded-xl" />)}</div>}
-        {!landing && !loading && items.length > 0 && items.length >= total && <div className="t-small c3 text-center py-6">Eso es todo: {plural(total, 'archivo', 'archivos')}.</div>}
+        {!landing && !loading && items.length > 0 && items.length >= total && <div className="t-small c3 text-center py-6">{t('Eso es todo: {v0}.', { v0: tn(total, '{n} archivo', '{n} archivos') })}</div>}
       </div>
     </div>
   )

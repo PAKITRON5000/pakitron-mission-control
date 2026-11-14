@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // Skills set aside (EV95: «cuáles llevan 2 semanas sin usarse, con un botón para apartarlas»). Every skill a session can
 // load adds its description to every session; one not used in a project can be moved out of `skills` into
 // `skills-apartadas`, next to it, where Claude Code does not look, and brought back the same way. Nothing is deleted.
@@ -6,10 +7,10 @@ import { basename, dirname, join } from 'node:path'
 
 const swap = (dir: string, from: string, to: string): string => {
   const parent = dirname(dir)
-  if (basename(parent).toLowerCase() !== from) throw new Error(`No es una carpeta de ${from}`)
-  if (!existsSync(dir)) throw new Error('Esa skill ya no está ahí')
+  if (basename(parent).toLowerCase() !== from) throw new Error(t('No es una carpeta de {from}', { from: from }))
+  if (!existsSync(dir)) throw new Error(t('Esa skill ya no está ahí'))
   const target = join(dirname(parent), to, basename(dir))
-  if (existsSync(target)) throw new Error(`Ya hay una con ese nombre en ${to}`)
+  if (existsSync(target)) throw new Error(t('Ya hay una con ese nombre en {to}', { to: to }))
   mkdirSync(dirname(target), { recursive: true })
   renameSync(dir, target)
   return target

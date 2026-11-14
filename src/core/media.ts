@@ -1,3 +1,4 @@
+import { t } from './i18n'
 // The gallery's index: images, videos, 3D models and audio in a project's media folders. Files are never copied or
 // moved; the database keeps path, size, date and a quick fingerprint (size + first/last 64 KB) to spot duplicates.
 // Each file also knows its folder without the copy it is in (the same folder in four copies is one folder for the user),
@@ -22,12 +23,12 @@ export function kindOf(file: string): AssetKind | undefined {
 export type AssetSource = 'juego' | 'arte' | 'astra' | 'pruebas' | 'docs' | 'otros'
 
 export const SOURCES: { id: AssetSource; label: string; hint: string }[] = [
-  { id: 'juego', label: 'En el juego', hint: 'Lo que el juego usa de verdad: imágenes, películas, música y modelos' },
-  { id: 'astra', label: 'De Astra', hint: 'Lo que ha dibujado Astra: fichas, referencias y piezas' },
-  { id: 'arte', label: 'Arte de origen', hint: 'Los originales de los que sale el arte del juego' },
-  { id: 'pruebas', label: 'Pruebas de los Claude', hint: 'Capturas y comprobaciones hechas mientras trabajan' },
-  { id: 'docs', label: 'Documentos', hint: 'Imágenes guardadas con las notas del proyecto' },
-  { id: 'otros', label: 'Otras carpetas', hint: 'Carpetas que has añadido tú' }
+  { id: 'juego', get label() { return t('En el juego') }, get hint() { return t('Lo que el juego usa de verdad: imágenes, películas, música y modelos') } },
+  { id: 'astra', get label() { return t('De Astra') }, get hint() { return t('Lo que ha dibujado Astra: fichas, referencias y piezas') } },
+  { id: 'arte', get label() { return t('Arte de origen') }, get hint() { return t('Los originales de los que sale el arte del juego') } },
+  { id: 'pruebas', get label() { return t('Pruebas de los Claude') }, get hint() { return t('Capturas y comprobaciones hechas mientras trabajan') } },
+  { id: 'docs', get label() { return t('Documentos') }, get hint() { return t('Imágenes guardadas con las notas del proyecto') } },
+  { id: 'otros', get label() { return t('Otras carpetas') }, get hint() { return t('Carpetas que has añadido tú') } }
 ]
 
 /** Words of a path: "Logs/rachas_lab/heroKing.png" → logs, rachas, lab, hero, king, png. */
@@ -62,8 +63,8 @@ export function categoryOf(rel: string, kind: AssetKind): string {
   for (const [re, cat] of CATEGORY_RULES) if (words.some((w) => re.test(w))) return cat
   if (kind === 'video') return 'Vídeos'
   if (kind === 'model') return 'Modelos 3D'
-  if (kind === 'audio') return 'Sonidos y voces'
-  return 'Otras imágenes'
+  if (kind === 'audio') return t('Sonidos y voces')
+  return t('Otras imágenes')
 }
 
 const NAMES: Record<string, string> = {

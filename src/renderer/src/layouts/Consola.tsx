@@ -1,3 +1,4 @@
+import { t } from '../../../core/i18n'
 // EV131 · «Consola»: dense and in fixed-width letters, for working with the keyboard. The sections as numbered orders down
 // the left (Ctrl + their number), where you are as a prompt line, and a status line at the bottom with every Claude.
 import { useStore } from '../lib/store'
@@ -17,9 +18,9 @@ export default function Consola() {
   const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-')
   return (
     <div className="app lay-consola">
-      <TitleBar tabs={false} middle={<span className="con-prompt no-drag truncate" title="Ctrl + K para buscar o ir a cualquier sitio" onClick={() => setPalette(true)}>~/{slug(project?.name ?? 'sin-proyecto')} <b>›</b> {here ? slug(here.label) : 'inicio'}<span className="con-caret" aria-hidden /></span>} />
+      <TitleBar tabs={false} middle={<span className="con-prompt no-drag truncate" title={t('Ctrl + K para buscar o ir a cualquier sitio')} onClick={() => setPalette(true)}>~/{slug(project?.name ?? 'sin-proyecto')} <b>›</b> {here ? slug(here.label) : 'inicio'}<span className="con-caret" aria-hidden /></span>} />
       <div className="con-body">
-        <nav className="con-nav" aria-label="Órdenes">
+        <nav className="con-nav" aria-label={t('Órdenes')}>
           {numbered.map((n, i) => (
             <button key={n.route} className={`con-item ${route === n.route ? 'on' : ''}`} onClick={() => go(n.route)} aria-current={route === n.route ? 'page' : undefined} title={`${n.label}${i < 9 ? ` · Ctrl + ${i + 1}` : ''}`}>
               <span className="con-key">{i < 9 ? i + 1 : '·'}</span>
@@ -33,7 +34,7 @@ export default function Consola() {
         </nav>
         <ScreenBox route={route} className="con-content" />
       </div>
-      <footer className="con-status" aria-label="Estado de los Claude">
+      <footer className="con-status" aria-label={t('Estado de los Claude')}>
         {agents.map((a) => (
           <button key={a.id} className="con-agent" onClick={() => setAgentOpen(a.id)} title={a.stateReason}>
             <span style={{ color: STATE_META[a.state].color }}>{a.state === 'trabajando' ? '●' : '○'}</span> {accName(a.id).toLowerCase().replace(/\s+/g, '')} <span className="c3">{STATE_META[a.state].label.toLowerCase()}</span>
