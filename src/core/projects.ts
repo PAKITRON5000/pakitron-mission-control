@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { CopyStatus, DocSource, ProjectConfig, Settings } from './types'
 import type { DB } from './db'
+import { isInside, pathKey } from './paths'
 import { findMediaDirs } from './profile'
 import { BOOKKEEPING, parseDiff, TASK_ID, taskOfSubject, type TaskCommit } from './taskdiff'
 
@@ -25,7 +26,7 @@ export async function listWorktrees(root: string): Promise<{ path: string; branc
     let cur: { path: string; branch?: string; head?: string } | undefined
     for (const line of out.split(/\r?\n/)) {
       if (line.startsWith('worktree ')) {
-        cur = { path: line.slice(9).replace(/\//g, '\\') }
+        cur = { path: process.platform === 'win32' ? line.slice(9).replace(/\//g, '\\') : line.slice(9) }
         list.push(cur)
       } else if (cur && line.startsWith('branch ')) cur.branch = line.slice(7).replace('refs/heads/', '')
       else if (cur && line.startsWith('HEAD ')) cur.head = line.slice(5)
@@ -114,7 +115,7 @@ export function newestDoc(project: ProjectConfig, name: string): DocSource | und
       const st = statSync(file)
       if (!best || st.mtimeMs > best.mtime) {
         const copy = project.copies
-          .filter((c) => dir.toLowerCase().startsWith(c.path.toLowerCase() + '\\'))
+          .filter((c) => isInside(dir, c.path) && pathKey(dir) !== pathKey(c.path))
           .sort((a, b) => b.path.length - a.path.length)[0]
         best = { file, mtime: st.mtimeMs, copy: copy?.label ?? basename(dir) }
       }
@@ -170,7 +171,7 @@ export async function detectProject(root: string, name?: string, id?: string, co
   }
   // And every other folder of each copy with pictures, videos, sounds or models in it (core/profile.ts): no project
   // needs its gallery placed by hand. Cached for half an hour: on a big game the looking takes about a second.
-  for (const c of copies) for (const d of cachedMediaDirs(c.path)) if (!mediaDirs.some((m) => m.toLowerCase() === d.toLowerCase() || d.toLowerCase().startsWith(m.toLowerCase() + '\\'))) mediaDirs.push(d)
+  for (const c of copies) for (const d of cachedMediaDirs(c.path)) if (!mediaDirs.some((m) => isInside(d, m))) mediaDirs.push(d)
   mediaDirs.push(...citedFolders(docsDirs))
   const slug = (id ?? (name ?? basename(root)).toLowerCase().normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '')) || 'proyecto'
   return {
@@ -252,7 +253,14 @@ export function settingsWithoutProject(s: Settings, id: string, root: string): P
  * EV169: whether a project's folder may go to the bin along with it. Never a drive, the user's folder, its Downloads,
  * Documents or Desktop, nor the folder of this app (or one that holds it): only the project's own folder.
  */
-export function binnable(root: string, appDir: string, home = homedir()): boolean {
+export function binnable(root: string, appDir: string, home = homedir(), platform = process.platform): boolean {
+  // macOS and Linux: never «/», a disk (/Volumes/X), /Users, the system's folders, the user's own nor those inside it.
+  if (platform !== 'win32') {
+    const r = root.replace(/\/+$/, '')
+    if (!r.startsWith('/') || r.split('/').filter(Boolean).length < 2 || /^\/volumes\/[^/]+$/i.test(r)) return false
+    const keep = [home, ...['Downloads', 'Documents', 'Desktop', 'Library', 'Applications', 'Pictures', 'Movies', 'Music'].map((d) => join(home, d)), '/Applications', '/System', '/Library', '/Users', '/usr', '/opt', appDir]
+    return !keep.some((k) => k && isInside(k, r))
+  }
   const r = root.replace(/\//g, '\\').toLowerCase().replace(/\\+$/, '')
   if (!/^[a-z]:\\[^\\]/.test(r)) return false // a drive itself, or not a folder on a drive
   const keep = [home, ...['Downloads', 'Documents', 'Desktop', 'OneDrive'].map((d) => join(home, d)), process.env.SystemRoot, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], appDir]
@@ -272,23 +280,15 @@ export async function refreshProjectCopies(db: DB, p: ProjectConfig): Promise<Pr
   return merged
 }
 
-/**
- * A path is the folder itself or something inside it; one that only starts the same is not («D:\Video App» is not
- * in «D:\Video», 13-11). Case, slashes and a trailing separator do not matter.
- */
-export function isInside(path: string, folder: string): boolean {
-  const norm = (s: string) => s.replace(/\//g, '\\').toLowerCase().replace(/\\+$/, '')
-  const p = norm(path)
-  const f = norm(folder)
-  return Boolean(f) && (p === f || p.startsWith(f + '\\'))
-}
+
+export { isInside, pathKey }
 
 export function projectForPath(projects: ProjectConfig[], path: string): { project?: ProjectConfig; copy?: string } {
-  const lower = path.toLowerCase().replace(/\//g, '\\')
+  const lower = pathKey(path)
   let best: { project?: ProjectConfig; copy?: string; len: number } = { len: -1 }
   for (const p of projects) {
     for (const c of [...p.copies, { path: p.root, label: t('Copia principal') }]) {
-      const cp = c.path.toLowerCase()
+      const cp = pathKey(c.path)
       if ((lower === cp || lower.startsWith(cp + '\\')) && cp.length > best.len) best = { project: p, copy: c.label, len: cp.length }
     }
   }

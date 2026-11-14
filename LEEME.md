@@ -2,7 +2,7 @@
 
 [Read in English](README.md) · [Invítame a un café](https://buymeacoffee.com/pakitron.exe)
 
-![Inicio de Mission Control con datos inventados: dos Claude trabajando, preguntas que esperan respuesta y el mapa de cuentas y proyectos](docs/img/inicio.png)
+![Inicio de Mission Control con datos inventados: dos Claude trabajando, preguntas que esperan respuesta y el mapa de cuentas y proyectos](docs/img/inicio-es.png)
 
 Una app de escritorio para Windows y macOS que coordina tus cuentas de **Claude Code** en tus proyectos: quién trabaja dónde, quién sigue cuando una se queda sin uso, qué te espera a ti y qué hicieron mientras no mirabas. Con una sola cuenta ya sirve. Con varias, cada una sigue con lo suyo y, si tú lo enciendes, se relevan entre ellas. Está en español.
 
@@ -35,6 +35,8 @@ Inicio enseña **Primeros pasos**: cuatro pasos, cada uno con su botón. La app 
 ## Cómo trabajan los Claude aquí
 
 Cada Claude usa la orden `pmc`, que la app deja preparada en cualquier ventana. Con `pmc parte` sabe en qué punto está el proyecto. `pmc claim` reserva una tarea para que nadie más la haga y `pmc guarda` deja el relevo al día al cerrar cada bloque. Cuando necesita que decidas algo, `pmc decide` deja la pregunta en **Decidir** y sigue con otra cosa; si no contestas a tiempo, se queda la opción por defecto. Tú lo ves todo en la app sin abrir un archivo.
+
+Cada proyecto que añades queda preparado para los Claude: la app ve qué tipo de proyecto es (un juego, una web, un vídeo…) y deja un `CLAUDE.md` corto con cómo se trabaja allí, unos ayudantes (para orientarse, revisar capturas, comprobar y dejar el relevo), la skill de Mission Control y qué modelo basta para cada tarea. Además busca sola en [skills.sh](https://skills.sh) las skills que le encajan, al añadirlo y una vez por semana, e Inicio te dice cuántas ha encontrado. Instalarlas es siempre un clic tuyo: una skill trabaja con todos los permisos.
 
 ## Atajos
 

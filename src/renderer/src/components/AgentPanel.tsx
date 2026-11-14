@@ -109,7 +109,7 @@ export function AgentPanel({ a, index }: { a: AgentCard; index: number }) {
       <div className="px-5 pt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 t-small c2">
         <span className="flex items-center gap-1.5 min-w-0"><Clock size={13} className="c3 flex-none" /><span className="truncate">{a.lastActivityAt ? ago(a.lastActivityAt, now) : t('Sin actividad')}</span></span>
         <span className="flex items-center gap-1.5 min-w-0"><Hourglass size={13} className="c3 flex-none" /><span className="truncate">{s?.startedAt ? t('Sesión de {v0}', { v0: duration(now - s.startedAt) }) : '—'}</span></span>
-        <span className="flex items-center gap-1.5 min-w-0"><FolderGit2 size={13} className="c3 flex-none" /><span className="truncate">{s?.worktree ?? (s ? s.cwd.split('\\').pop() : '—')}</span></span>
+        <span className="flex items-center gap-1.5 min-w-0"><FolderGit2 size={13} className="c3 flex-none" /><span className="truncate">{s?.worktree ?? (s ? s.cwd.split(/[\\/]/).pop() : '—')}</span></span>
         <span className="flex items-center gap-1.5 min-w-0"><Cpu size={13} className="c3 flex-none" /><span className="truncate">{modelName(a.model) ?? t('Modelo sin datos')}</span></span>
         {s?.branch && <span className="flex items-center gap-1.5 min-w-0 col-span-2"><GitBranch size={13} className="c3 flex-none" /><span className="truncate">{s.branch}</span></span>}
       </div>

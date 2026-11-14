@@ -34,3 +34,29 @@ describe('macOS', () => {
     expect(s.indexOf('puede-arrancar')).toBeLessThan(s.indexOf("'claude' 'sigue'"))
   })
 })
+
+import { projectForPath, binnable } from '../src/core/projects'
+import { isInside, pathKey } from '../src/core/paths'
+
+// 14-11, from a Mac: `pmc` said «Esta carpeta no pertenece a ningún proyecto» in every project, because only the folder
+// it was run in had its «/» turned into «\», never the project's stored folder.
+describe('macOS paths', () => {
+  const p = { id: 'subty', name: 'Subty', root: '/Users/ana/Claude/Subty', copies: [{ path: '/Users/ana/Claude/Subty/.claude/worktrees/rachas', label: 'rachas' }] } as never
+  it('a folder inside a project is that project, in its copy when it is in one', () => {
+    expect(projectForPath([p], '/Users/ana/Claude/Subty').project?.id).toBe('subty')
+    expect(projectForPath([p], '/Users/ana/Claude/Subty/src/app').project?.id).toBe('subty')
+    expect(projectForPath([p], '/Users/ana/Claude/Subty/.claude/worktrees/rachas/src').copy).toBe('rachas')
+    expect(projectForPath([p], '/Users/ana/Claude/Subtitles').project).toBeUndefined()
+  })
+  it('isInside and pathKey treat both separators alike', () => {
+    expect(isInside('/Users/ana/x/y', '/users/ana/x/')).toBe(true)
+    expect(isInside('/Users/ana/xy', '/Users/ana/x')).toBe(false)
+    expect(pathKey(String.raw`C:/A\b/`)).toBe(pathKey(String.raw`c:\a/B`))
+  })
+  it('only a project folder goes to the bin on a Mac', () => {
+    const home = '/Users/ana'
+    const app = '/Applications/Pakitron Mission Control.app'
+    expect(binnable('/Users/ana/Claude/Subty', app, home, 'darwin')).toBe(true)
+    for (const r of ['/', '/Users', '/Users/ana', '/Users/ana/Downloads', '/Volumes/Disco', '/Applications', 'Claude/Subty']) expect(binnable(r, app, home, 'darwin')).toBe(false)
+  })
+})

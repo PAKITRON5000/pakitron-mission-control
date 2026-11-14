@@ -1,0 +1,28 @@
+# The tests and the types on a Mac and on Windows, on every push: the app is written on Windows, and a Mac is where a
+# path written with «\» or a Windows-only program shows up first.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: npm ci || npm install
+      - name: Types
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Tests
+        run: npx vitest run --reporter=default

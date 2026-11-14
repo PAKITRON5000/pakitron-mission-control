@@ -35,7 +35,7 @@ export function Agents() {
     { label: t('5 horas'), get: (a) => <div className="min-w-[170px]"><UsageBar a={a} which="five" now={now} compact /></div> },
     { label: t('Semana'), get: (a) => <div className="min-w-[170px]"><UsageBar a={a} which="week" now={now} compact /></div> },
     { label: t('Lectura de consumo'), get: (a) => (state.statusLine[a.id]?.ours ? (a.usage.snapshot ? t('Línea de estado · {v0}', { v0: ago(a.usage.snapshot.capturedAt, now) }) : t('Instalada · esperando la primera respuesta')) : <span className="c3">{t('No instalada')}</span>) },
-    { label: t('Sesiones abiertas'), get: (a) => a.sessions.some((x) => x.pid || x.status === 'busy') ? a.sessions.filter((x) => x.pid || x.status === 'busy').map((s) => `${s.kind === 'background' ? 'fondo' : 'ventana'} · ${s.worktree ?? s.cwd.split('\\').pop()}`).join(', ') : <span className="c3">{t('Ninguna')}</span> },
+    { label: t('Sesiones abiertas'), get: (a) => a.sessions.some((x) => x.pid || x.status === 'busy') ? a.sessions.filter((x) => x.pid || x.status === 'busy').map((s) => `${s.kind === 'background' ? 'fondo' : 'ventana'} · ${s.worktree ?? s.cwd.split(/[\\/]/).pop()}`).join(', ') : <span className="c3">{t('Ninguna')}</span> },
     { label: t('Tareas a su nombre'), get: (a) => a.assigned.length || <span className="c3">0</span> },
     { label: t('Último relevo'), get: (a) => (a.heartbeat ? `${dateShort(a.heartbeat.at)} ${clock(a.heartbeat.at)}` : <span className="c3">—</span>) }
   ]
@@ -147,7 +147,7 @@ export function Reviews() {
               <span className="pill flex-none mt-0.5" style={{ background: `color-mix(in srgb, ${D[i.status][1]} 15%, transparent)`, color: D[i.status][1] }}>{D[i.status][0]}</span>
               <div className="min-w-0 flex-1">
                 <div className="t-body selectable">{i.body}</div>
-                <div className="t-small c3 mt-0.5">{i.kind} · {ago(i.createdAt)}{i.target ? t(' · para {v0}', { v0: accName(i.target) }) : ''}{i.channel ? ` · ${i.channel.split('\\').pop()}` : ''}{i.error ? ` · ${i.error}` : ''}</div>
+                <div className="t-small c3 mt-0.5">{i.kind} · {ago(i.createdAt)}{i.target ? t(' · para {v0}', { v0: accName(i.target) }) : ''}{i.channel ? ` · ${i.channel.split(/[\\/]/).pop()}` : ''}{i.error ? ` · ${i.error}` : ''}</div>
               </div>
               <div className="flex gap-1.5 flex-none">
                 {(i.status === 'guardada' || i.status === 'fallida') && i.kind !== 'nota' && <button className="btn btn-sm" disabled={!project?.allowBuzon} onClick={() => deliver(i.id)}><Send size={12} /> {t('Al Buzón')}</button>}
@@ -359,7 +359,7 @@ export function Memory() {
               <div key={i} className="flex gap-3 px-3 py-3">
                 {h.account ? <Avatar id={h.account} size={24} /> : <div className="w-6" />}
                 <div className="min-w-0">
-                  <div className="t-small c3">{dateShort(h.at)} {clock(h.at)} · {h.file.split('\\').slice(-3, -2)[0]}</div>
+                  <div className="t-small c3">{dateShort(h.at)} {clock(h.at)} · {h.file.split(/[\\/]/).slice(-3, -2)[0]}</div>
                   <div className="t-small c2 clamp-3 selectable">{h.text}</div>
                 </div>
               </div>
@@ -872,7 +872,7 @@ export function SettingsScreen() {
         <div className="group p-5 flex flex-col gap-3">
           <div className="t-small c2">{t('Todo lo de Mission Control vive en')} <b className="selectable">{state.dataDir}</b>{t(': base de datos (mission.db), lecturas de consumo, miniaturas y copias. Se hace una copia de la base de datos al día (se guardan 14). Actualizar la aplicación no borra estos datos.')}</div>
           <div className="flex gap-2">
-            <button className="btn btn-sm" onClick={() => api<string>('backupNow').then((f) => toast(t('Copia hecha: {v0}', { v0: f.split('\\').pop() })))}><HardDriveDownload size={13} /> {t('Copia ahora')}</button>
+            <button className="btn btn-sm" onClick={() => api<string>('backupNow').then((f) => toast(t('Copia hecha: {v0}', { v0: f.split(/[\\/]/).pop() })))}><HardDriveDownload size={13} /> {t('Copia ahora')}</button>
             <button className="btn btn-sm" onClick={() => api('openDataDir')}><FolderOpen size={13} /> {t('Abrir carpeta')}</button>
           </div>
           <Restore />

@@ -1,6 +1,6 @@
 import { t, tn } from '../../../core/i18n'
 import { motion } from 'motion/react'
-import { ChevronRight, CheckCircle2, Gauge, MessageSquareText, ListChecks, Hourglass, CircleAlert, Hand, GitCommitHorizontal, Images, MessageCircle, Send, Gavel } from 'lucide-react'
+import { ChevronRight, CheckCircle2, Gauge, MessageSquareText, ListChecks, Hourglass, CircleAlert, Hand, GitCommitHorizontal, Images, MessageCircle, Send, Gavel, Sparkles } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useStore, useAsync, type Route } from '../lib/store'
 import { api, thumbUrl, type AgentCard, type Asset, type Comment, type Instruction, type TimelineEvent, type Decision } from '../lib/api'
@@ -221,6 +221,8 @@ export function Home() {
   for (const d of disks.data ?? []) { if (diskLow(d.free, d.total)) todo.unshift(<Row key={'disk' + d.drive} icon={<CircleAlert size={17} />} color="var(--red)" title={t('Queda poco disco en {drive} ({v0})', { drive: d.drive, v0: diskWords(d.free, d.total) })} sub={t('Mira Ajustes › Proyecto › Limpieza: lo que sobra va a la papelera y lo dudoso se aparta, con vuelta atrás')} onClick={() => { if (d.projects[0] && d.projects[0] !== state.activeProjectId) void api('setActiveProject', d.projects[0]); go('ajustes', 'proyecto') }} />) }
   const toReview = (comments.data ?? []).filter((c) => c.status === 'esperando-revision' || c.status === 'corregido').length
   if (toReview) todo.push(<Row key="rev" icon={<MessageSquareText size={17} />} color="var(--yellow)" title={tn(toReview, '{n} corrección para revisar', '{n} correcciones para revisar')} onClick={() => go('revisiones')} />)
+  // EV167: skills the app found alone on skills.sh for this kind of project; installing them stays the user's click.
+  if (state.skills?.suggested && p) todo.push(<Row key="skills" icon={<Sparkles size={17} />} color="var(--pink)" title={tn(state.skills.suggested, '{n} skill recomendada para {name}', '{n} skills recomendadas para {name}', { name: p.name })} sub={t('Buscadas solas para lo que es el proyecto. Lee qué hace cada una y decides tú si instalarla.')} onClick={() => go('skills')} />)
   if (s.tasks.review) todo.push(<Row key="tr" icon={<ListChecks size={17} />} color="var(--orange)" title={tn(s.tasks.review, '{n} tarea espera tu visto bueno', '{n} tareas esperan tu visto bueno')} onClick={() => go('decisiones')} />)
   for (const a of agents.filter((x) => x.state === 'sin-uso' && x.assigned.length))
     crew.push(<Row key={'o' + a.id} icon={<Hourglass size={17} />} color="var(--red)" title={t('{v0} sin uso: {v1}', { v0: accName(a.id), v1: tn(a.assigned.length, '{n} tarea parada', '{n} tareas paradas') })} sub={a.usage.activeLimit ? t('Vuelve {v0}', { v0: whenFull(a.usage.activeLimit.resetsAt, now) }) : undefined} onClick={() => setAgentOpen(a.id)} />)

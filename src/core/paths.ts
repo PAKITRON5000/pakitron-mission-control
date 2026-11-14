@@ -29,3 +29,23 @@ export const paths = {
 }
 
 export const home = () => homedir()
+
+/** A path written the way this system writes it: «\» on Windows, untouched elsewhere (a Mac's paths keep their «/»). */
+export const nativePath = (p: string): string => (process.platform === 'win32' ? p.split('/').join('\\') : p)
+
+/**
+ * A folder as every comparison sees it: lower case, «\» between its parts, no separator at the end. Both sides of a
+ * comparison go through it: converting only one (14-11) made `pmc` see no project at all on a Mac, where the stored
+ * folders keep their «/».
+ */
+export const pathKey = (s: string): string => String(s).replace(/[\\/]+/g, '\\').toLowerCase().replace(/\\+$/, '')
+
+/**
+ * A path is the folder itself or something inside it; one that only starts the same is not («D:\Video App» is not
+ * in «D:\Video», 13-11). Case, slashes and a trailing separator do not matter.
+ */
+export function isInside(path: string, folder: string): boolean {
+  const p = pathKey(path)
+  const f = pathKey(folder)
+  return Boolean(f) && (p === f || p.startsWith(f + '\\'))
+}

@@ -718,4 +718,9 @@ export const rest: Record<string, string> = {
   'Pulsa para descargarla. Se instala encima y no pierdes nada.': 'Click to download it. It installs over this one and you lose nothing.',
   'Descarga el instalador. Se instala encima de esta versión y no pierdes nada.': 'Downloads the installer. It installs over this version and you lose nothing.',
   'Versión {v0} disponible': 'Version {v0} available',
+  // EV167: skills found alone for each project.
+  '{n} skill recomendada para {name}': '{n} recommended skill for {name}',
+  '{n} skills recomendadas para {name}': '{n} recommended skills for {name}',
+  'Buscadas solas para lo que es el proyecto. Lee qué hace cada una y decides tú si instalarla.': 'Found on their own for what the project is. Read what each one does and decide whether to install it.',
+  'Buscadas solas en skills.sh para lo que es el proyecto. Míralas en Skills: instalar es cosa tuya.': 'Found on their own on skills.sh for what the project is. See them in Skills: installing is up to you.',
 }

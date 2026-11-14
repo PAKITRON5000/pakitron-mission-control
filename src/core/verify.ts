@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AccountId, ProjectConfig } from './types'
 import type { DB } from './db'
-import { paths } from './paths'
+import { isInside, paths } from './paths'
 import { detectBusy, freeResource, holdResource, type Busy } from './resources'
 
 export interface Check {
@@ -56,8 +56,7 @@ export function readChecks(copyRoot: string): Check[] | undefined {
 }
 
 export function copyRootFor(project: ProjectConfig, cwd: string): string {
-  const c = cwd.toLowerCase().split('/').join('\\')
-  const hit = [...project.copies.map((x) => x.path), project.root].filter((p) => c === p.toLowerCase() || c.startsWith(p.toLowerCase() + '\\')).sort((a, b) => b.length - a.length)[0]
+  const hit = [...project.copies.map((x) => x.path), project.root].filter((p) => isInside(cwd, p)).sort((a, b) => b.length - a.length)[0]
   return hit ?? project.root
 }
 

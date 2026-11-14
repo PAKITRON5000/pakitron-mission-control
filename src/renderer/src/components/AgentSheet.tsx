@@ -149,7 +149,7 @@ export function AgentSheet() {
               <span className="dot" style={{ background: s.status === 'busy' ? 'var(--green)' : s.status === 'waiting' ? 'var(--orange)' : 'var(--gray)' }} />
               <span className="min-w-0 flex-1">
                 <span className="t-body block truncate" style={{ fontWeight: 560 }}>{s.title ?? s.shortId}</span>
-                <span className="t-small c3 block truncate">{s.status === 'busy' ? t('Trabajando') : s.status === 'waiting' ? t('Te espera') : t('En reposo')} · {s.worktree ?? s.cwd.split('\\').pop()} · {ago(s.lastActivityAt, now)}</span>
+                <span className="t-small c3 block truncate">{s.status === 'busy' ? t('Trabajando') : s.status === 'waiting' ? t('Te espera') : t('En reposo')} · {s.worktree ?? s.cwd.split(/[\\/]/).pop()} · {ago(s.lastActivityAt, now)}</span>
               </span>
               {s.kind === 'background' && <button className="btn btn-sm" onClick={() => run(() => api('attachSession', a.id, s.cwd, s.shortId), t('Abriendo la sesión'))}><Play size={12} /> {t('Ver')}</button>}
               {/* EV151: its window in front of the others, to watch it or write in it. */}

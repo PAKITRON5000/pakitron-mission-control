@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { mergeSkills, parseFind, parseList, parseSkillMd, pickSuggestions, scanSkills, skillsStamp, skillsTally, termsFor } from '../src/core/skills'
+import { mergeSkills, parseFind, parseList, parseSkillMd, pickSuggestions, projectToSearch, scanSkills, skillsStamp, skillsTally, termsFor } from '../src/core/skills'
 
 describe('skills', () => {
   it('lee nombre y descripción del SKILL.md, también en bloque plegado', () => {
@@ -78,5 +78,18 @@ describe('skills', () => {
     expect(skillsTally(list, 'p', 4, 1)).toEqual({ installed: 3, suggested: 4, at: 1 })
     expect(skillsTally(list, 'otro', undefined, 1)).toEqual({ installed: 4, suggested: undefined, at: 1 })
     expect(skillsTally([], 'p', 0, 1).installed).toBe(0)
+  })
+})
+
+describe('EV167: skills looked for without asking', () => {
+  const ps = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+  const now = Date.UTC(2026, 10, 14)
+  it('a project just added is searched first, whatever the others', () => {
+    expect(projectToSearch(ps, {}, now, 'c')?.id).toBe('c')
+  })
+  it('otherwise the first one never searched, or searched over a week ago', () => {
+    expect(projectToSearch(ps, { a: { at: now - 86_400_000 } }, now)?.id).toBe('b')
+    expect(projectToSearch(ps, { a: { at: now - 8 * 86_400_000 }, b: { at: now }, c: { at: now } }, now)?.id).toBe('a')
+    expect(projectToSearch(ps, { a: { at: now }, b: { at: now }, c: { at: now } }, now)).toBeUndefined()
   })
 })

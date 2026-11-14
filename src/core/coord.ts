@@ -7,7 +7,7 @@ import { isSessionWorking } from './working'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { AccountId, AgentCard, ProjectConfig } from './types'
-import { paths } from './paths'
+import { isInside, nativePath, pathKey, paths } from './paths'
 import { nodeRunner, shimReady } from './shim'
 import { addEvent, type DB } from './db'
 import { KIND_LABEL, setCommentStatus } from './review'
@@ -308,8 +308,7 @@ export function addNotice(account: AccountId, text: string, roots: string[], now
 /** The first unseen notice for a session working under one of the notice's folders; it is marked as seen. */
 export function takeNotice(account: AccountId, cwd: string): string | undefined {
   const list = readNotices(account)
-  const c = cwd.toLowerCase().split('/').join('\\')
-  const n = list.find((x) => !x.seen && x.roots.some((r) => c === r || c.startsWith(r + '\\')))
+  const n = list.find((x) => !x.seen && x.roots.some((r) => isInside(cwd, r)))
   if (!n) return undefined
   n.seen = true
   try { writeFileSync(noticesFile(account), JSON.stringify(list)) } catch { /* shown again next time */ }
@@ -772,12 +771,12 @@ export const SHARED_FILE_MS = 30 * 60_000
  * hooks). Once per file and session. It does not stop anyone: reservations are by task, and two tasks can meet in a file.
  */
 export function sharedFileWarning(db: DB, account: AccountId, file: string, sessionId: string | undefined, projectId: string | undefined, now = Date.now()): string | undefined {
-  const path = file.split('/').join('\\')
+  const path = nativePath(file)
   const other = db
     .prepare("SELECT account, MAX(at) AS at FROM events WHERE kind = 'archivo' AND lower(detail) = lower(?) AND account IS NOT NULL AND account != ? AND at > ? GROUP BY account ORDER BY at DESC LIMIT 1")
     .get(path, account, now - SHARED_FILE_MS) as { account: string; at: number } | undefined
   if (!other) return undefined
-  const name = path.split('\\').pop() ?? path
+  const name = path.split(/[\\/]/).pop() ?? path
   const fresh = addEvent(db, { projectId, at: now, account, kind: 'aviso', title: t('Claude {v0} y Claude {v1} han escrito el mismo archivo: {name}', { v0: account.slice(6), v1: other.account.slice(6), name: name }), detail: path, source: 'Mission Control', dedupe: `sw:${sessionId ?? account}:${path.toLowerCase()}` })
   if (!fresh) return undefined
   const min = Math.max(1, Math.round((now - other.at) / 60_000))

@@ -263,3 +263,11 @@ export function skillsTally(installed: SkillInfo[], projectId: string, suggested
   const here = new Set(installed.filter((s) => s.scope !== 'proyecto' || s.projects.includes(projectId)).map((s) => s.name.toLowerCase().replace(/^.*:/, '')))
   return { installed: here.size, suggested, at: now }
 }
+
+/** EV167: how old a project's skill search may get before the app runs it again on its own. */
+export const SKILL_SEARCH_EVERY_MS = 7 * 86_400_000
+
+/** The project whose skills the app looks for now: the one just added (`onlyId`), else the first one never searched or searched over a week ago. */
+export function projectToSearch<P extends { id: string }>(projects: P[], searchedAt: Record<string, { at: number } | undefined>, now: number, onlyId?: string): P | undefined {
+  return projects.find((p) => (onlyId ? p.id === onlyId : now - (searchedAt[p.id]?.at ?? 0) > SKILL_SEARCH_EVERY_MS))
+}

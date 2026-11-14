@@ -6,7 +6,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
-import { paths } from '../core/paths'
+import { pathKey, paths } from '../core/paths'
 import { accountFromConfigDir, configuredAccounts, readLogins } from '../core/accounts'
 import { noLimitsText, planOf } from '../core/logins'
 import { appendActivity, describeHook, guardProtected, guardRules, setFocus } from '../core/live'
@@ -173,7 +173,7 @@ async function hook(accountArg?: string): Promise<void> {
             try {
               const f = JSON.parse(readFileSync(join(paths.root(), 'turns.json'), 'utf8')) as TurnFile
               const low = cmd.replace(/\//g, '\\').toLowerCase()
-              const root = f.projects.flatMap((p) => p.roots).find((r) => r.length > 3 && low.includes(r.toLowerCase()))
+              const root = f.projects.flatMap((p) => p.roots).find((r) => r.length > 3 && low.includes(pathKey(r)))
               if (root) t = readTurn(account, root)
             } catch { /* no wheels */ }
           }

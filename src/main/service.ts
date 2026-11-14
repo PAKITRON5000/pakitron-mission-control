@@ -27,7 +27,7 @@ import { applyPendingRestore } from '../core/restore'
 import { codexChats, placeCodexChats } from '../core/astra'
 import { statusLineState, hooksState, type StatusLineState } from '../core/integrations'
 import { checkBuzonReceipts } from '../core/review'
-import { paths } from '../core/paths'
+import { isInside, nativePath, pathKey, paths } from '../core/paths'
 
 export interface DashboardState {
   now: number
@@ -559,8 +559,8 @@ export class Service extends EventEmitter {
         else if (e.event === 'PreCompact') added += Number(addEvent(this.db, { ...base, kind: 'compacta', title: t('{who} compactó su conversación ({v0})', { who: who, v0: e.source ?? 'auto' }), dedupe: `pc:${e.sessionId}:${e.at}` }))
         else if (e.event === 'SessionEnd') added += Number(addEvent(this.db, { ...base, kind: 'sesion', title: t('{who} cerró una sesión{v0}', { who: who, v0: copy ? ' en ' + copy : '' }), dedupe: `se:${e.sessionId}:${e.at}` }))
         else if (e.event === 'PostToolUse' && e.file) {
-          const winPath = String(e.file).split('/').join(BS)
-          const rel = project && winPath.toLowerCase().startsWith(project.root.toLowerCase() + BS) ? winPath.slice(project.root.length + 1) : winPath
+          const winPath = nativePath(String(e.file))
+          const rel = project && isInside(winPath, project.root) && pathKey(winPath) !== pathKey(project.root) ? winPath.slice(project.root.replace(/[\\/]+$/, '').length + 1) : winPath
           // The file's own project goes first: a window opened in one project that edits another (claude1, 12-11) was
           // counted as working in its window's, and its hand-off was opened there.
           const owner = projectForPath(this.projects, winPath).project ?? project

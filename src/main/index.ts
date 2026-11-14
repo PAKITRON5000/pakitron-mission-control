@@ -16,7 +16,7 @@ import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
 import { closePosixClaude, openTerminalWindow, writeTerminalScript, type TerminalJob } from './terminal'
 import { asTasklist, fixPosixPath, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
-import { t, pickLang, setLang } from '../core/i18n'
+import { t, tn, pickLang, setLang } from '../core/i18n'
 import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
 import { readChat } from '../core/chats'
 import { paths } from '../core/paths'
@@ -84,7 +84,7 @@ import { awayAnswer, pendingToolUse, riskOf, yesOnScreen } from '../core/away'
 import { addMemory, editMemory, forgetMemory, listMemories, recentDecisions, memoryText, MEMORY_KINDS } from '../core/memory'
 import { classify, corpusOf, isRequest, placeRequest, textsSignature, type UserRequest } from '../core/requests'
 import { readHistory } from '../core/sessions'
-import { scanSkills, parseFind, parseList, pickSuggestions, termsFor, skillsTally, mergeSkills, skillsStamp, type FoundSkill, type SkillInfo, type SkillsTally } from '../core/skills'
+import { scanSkills, parseFind, parseList, pickSuggestions, projectToSearch, termsFor, skillsTally, mergeSkills, skillsStamp, type FoundSkill, type SkillInfo, type SkillsTally } from '../core/skills'
 import { cpSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { exec } from 'node:child_process'
@@ -534,6 +534,56 @@ async function awayTick(): Promise<void> {
   }
   for (const k of [...permissionSeen.keys()]) if (!live.has(k)) permissionSeen.delete(k)
   for (const k of [...permissionUnsure]) if (!live.has(k)) permissionUnsure.delete(k)
+}
+
+/** Looks on skills.sh for what fits the project (one search per term; a minute or two) and keeps what it found. */
+async function searchSkillsFor(p: ProjectConfig): Promise<void> {
+  const terms = termsFor(profileOf(p.root).kinds)
+  const found: FoundSkill[] = []
+  for (const t of terms) {
+    const out = await runNpx(`npx -y skills find "${t.replace(/"/g, '')}"`, tmpdir(), 90_000).catch((e: Error) => e.message)
+    found.push(...parseFind(out, t))
+  }
+  // What each suggested one does: one listing per repository (it clones it; some seconds each).
+  const chosen = pickSuggestions(found, [], 18, 5, profileOf(p.root).kinds)
+  const desc: Record<string, string> = {}
+  for (const source of [...new Set(chosen.map((f) => f.source))]) {
+    const out = await runNpx(`npx -y skills add ${source} -l`, tmpdir(), 120_000).catch(() => '')
+    for (const [k, v] of Object.entries(parseList(out))) desc[`${source}@${k}`] = v
+  }
+  for (const f of found) if (desc[f.id]) f.description = desc[f.id]
+  const all = skillCache()
+  // Offline or without npx nothing comes back: what was found last time is kept, not wiped.
+  all[p.id] = { at: Date.now(), found: found.length ? found : all[p.id]?.found ?? [] }
+  try { writeFileSync(join(paths.root(), 'skills-search.json'), JSON.stringify(all)) } catch { /* next time */ }
+}
+
+/**
+ * EV167 (the user, 14-11 13:47: «buscando skills para cada proyecto de cada persona… eso son cosas que debe hacer la
+ * app también»): the same search, alone, for a project just added and once a week for each one, one project at a time
+ * and never while the PC is loaded. Installing stays the user's click (a skill works with every permission): Inicio
+ * says how many would fit and the Cronología keeps it.
+ */
+let skillSearching = false
+async function autoSkillSearch(onlyId?: string): Promise<void> {
+  if (skillSearching || process.env.PMC_SHOT_DIR) return
+  if (lastLoad && Date.now() - lastLoad.at < 10 * 60_000 && isLoaded(lastLoad.load)) return
+  const cache = skillCache()
+  const p = projectToSearch(service.projects, cache, Date.now(), onlyId)
+  if (!p) return
+  skillSearching = true
+  try {
+    const before = service.skillsTally[p.id]?.suggested ?? 0
+    await searchSkillsFor(p)
+    await api.skills(p.id)
+    const now = service.skillsTally[p.id]?.suggested ?? 0
+    if (now > before) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'relevo-app', title: tn(now, '{n} skill recomendada para {name}', '{n} skills recomendadas para {name}', { name: p.name }), detail: t('Buscadas solas en skills.sh para lo que es el proyecto. Míralas en Skills: instalar es cosa tuya.'), source: 'Mission Control' })
+    service.push()
+  } catch (e) {
+    service.log(`skills solas: ${p.name}: ${(e as Error).message}`)
+  } finally {
+    skillSearching = false
+  }
 }
 
 /** Skill searches already made, by project (skills.sh is asked again only when the user presses «Buscar»). */
@@ -1913,6 +1963,7 @@ const api: Record<string, Handler> = {
     try { const made = prepareProject(detectProfile(workCopy(p)?.path ?? p.root)); if (made.length) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'proyecto', title: t('Proyecto preparado al añadirlo: {v0}', { v0: made.join(', ') }), source: 'Mission Control' }) } catch { /* the project is added anyway */ }
     service.setSettings({ activeProjectId: p.id })
     void improveAdded(p.id)
+    setTimeout(() => void autoSkillSearch(p.id), 60_000).unref()
     return p
   },
   updateProject: (id: string, patch: any) => service.updateProject(id, patch),
@@ -2238,23 +2289,7 @@ const api: Record<string, Handler> = {
   skillsSearch: async (projectId: string) => {
     const p = service.project(projectId)
     if (!p) throw new Error(t('Proyecto desconocido'))
-    const terms = termsFor(profileOf(p.root).kinds)
-    const found: FoundSkill[] = []
-    for (const t of terms) {
-      const out = await runNpx(`npx -y skills find "${t.replace(/"/g, '')}"`, tmpdir(), 90_000).catch((e: Error) => e.message)
-      found.push(...parseFind(out, t))
-    }
-    // What each suggested one does: one listing per repository (it clones it; some seconds each).
-    const chosen = pickSuggestions(found, [], 18, 5, profileOf(p.root).kinds)
-    const desc: Record<string, string> = {}
-    for (const source of [...new Set(chosen.map((f) => f.source))]) {
-      const out = await runNpx(`npx -y skills add ${source} -l`, tmpdir(), 120_000).catch(() => '')
-      for (const [k, v] of Object.entries(parseList(out))) desc[`${source}@${k}`] = v
-    }
-    for (const f of found) if (desc[f.id]) f.description = desc[f.id]
-    const all = skillCache()
-    all[projectId] = { at: Date.now(), found }
-    try { writeFileSync(join(paths.root(), 'skills-search.json'), JSON.stringify(all)) } catch { /* next time */ }
+    await searchSkillsFor(p)
     return api.skills(projectId)
   },
   /** Installs a skill: in the project (every account sees it) or for every account in use. */
@@ -3432,6 +3467,8 @@ app.whenReady().then(async () => {
   setInterval(() => { try { if (expireDecisions(service.db, service.projects).length) service.push() } catch (e) { service.log(`decisiones vencidas: ${(e as Error).message}`) } }, 60_000).unref()
   void setupTray()
   startUpdateChecks()
+  setTimeout(() => void autoSkillSearch(), 5 * 60_000).unref()
+  setInterval(() => void autoSkillSearch(), 3600_000).unref()
   registerProtocol()
   ipcMain.handle('pmc', async (_e, method: string, ...args: any[]) => {
     const fn = api[method]

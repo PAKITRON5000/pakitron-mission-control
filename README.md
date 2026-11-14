@@ -24,6 +24,7 @@ Claude Code is great at working on its own, but once you run it in more than one
 - **Memory that survives compaction.** Rules, preferences and facts every session reads first, and again after its conversation is compacted.
 - **Your phone.** The same app as an installable web app through Tailscale, with notifications when a Claude needs you. Nothing is opened to the internet.
 - **Built for your PC.** Heavy jobs (Unity, Blender, the GPU) take turns, and the app notices when you are playing or editing video.
+- **Each project set up for Claude.** When you add a folder, the app reads what kind of project it is (a game, a web app, a video…) and leaves it ready: a short `CLAUDE.md` with how to work there, helper subagents (to look around, review screenshots, verify, hand over), the Mission Control skill, and which model is enough for each task. It also looks on [skills.sh](https://skills.sh) for skills that fit that kind of project, on its own when you add it and once a week, and Inicio says how many it found. Installing one is always your click: a skill works with every permission.
 
 | | |
 |---|---|
