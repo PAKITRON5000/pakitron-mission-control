@@ -5,7 +5,8 @@ import { useStore, useAsync } from '../lib/store'
 import { api, type AgentCard, type AccountActivity, type AccountId } from '../lib/api'
 import { Avatar, STATE_META, SPRING, accountNum, ACCOUNT_COLOR, workingOn, accName } from './ui'
 import { ago } from '../lib/format'
-import { t, tn, locale } from '../../../core/i18n'
+import { t, tn, locale, namesList } from '../../../core/i18n'
+import { useDraft } from '../lib/draft'
 
 interface Claim { taskKey: string; account: AccountId; abandoned: boolean }
 
@@ -40,7 +41,7 @@ function RestChip({ a, floating }: { a: AgentCard; floating?: boolean }) {
 
 type NoteTone = 'espera' | 'enviada' | 'leida' | 'apuntada' | 'hecha' | 'fallo'
 interface SentNote { id: number; body: string; target?: string; status: string; createdAt: number; state: { tone: NoteTone; text: string } }
-type NoteRoute = { kind: 'ventana'; account: string } | { kind: 'paso'; account: string } | { kind: 'abrir'; account: string } | { kind: 'espera'; why: string }
+type NoteRoute = { kind: 'ventana'; account: string } | { kind: 'paso'; account: string } | { kind: 'abrir'; account: string } | { kind: 'solo'; account: string } | { kind: 'espera'; why: string } | { kind: 'todos'; accounts: string[] }
 
 const TONE: Record<NoteTone, { color: string; Icon: typeof Clock }> = {
   espera: { color: 'var(--orange)', Icon: Clock },
@@ -92,7 +93,55 @@ function routeToast(r: NoteRoute | undefined, target: string): string {
   if (r.kind === 'ventana') return t('Escrito en la ventana de {name}: ya lo tiene', { name: accName(r.account) })
   if (r.kind === 'paso') return t('{name} lo leerá al acabar su paso', { name: accName(r.account) })
   if (r.kind === 'abrir') return t('Se abre {name} con tu nota', { name: accName(r.account) })
+  // EV182: set aside, written to by name: it does this and stops again.
+  if (r.kind === 'solo') return t('Se abre {name} solo para tu nota; al acabar se cerrará y seguirá parada', { name: accName(r.account) })
+  // EV178: for everyone, it reaches every Claude at work, wherever it is.
+  if (r.kind === 'todos') return t('Para todos: lo leerán {names} al acabar su paso, estén en el proyecto que estén', { names: namesList(r.accounts.map((a) => accName(a))) })
   return t('En espera: {why}', { why: r.why })
+}
+
+/**
+ * The box to write to the Claudes («Para todos» or one), with what was sent and where it is now. In the dock and, on the
+ * phone, at the top of Chats (EV183, the user, 15-11 03:10: «poder hablar desde el móvil… así como esta ventana que puedes
+ * elegir mandar mensaje a todos»). What is written and not sent stays (EV185).
+ */
+export function NoteBox({ phone }: { phone?: boolean }) {
+  const { state, now, toast } = useStore()
+  const pid = state?.activeProjectId
+  const agents = useMemo(() => (state?.agents ?? []).filter((a) => a.identity.hasLogin || a.sessions.length > 0), [state?.agents])
+  const [note, setNote] = useDraft(pid ? `nota:${pid}` : undefined)
+  const [target, setTarget] = useState<string>('')
+  const [sending, setSending] = useState(false)
+  // EV154: the hooks of the Claudes change a note's state in the database, not through the app: asked again every 10 s.
+  const notesQ = useAsync(() => (pid ? api<SentNote[]>('myNotes', pid) : Promise.resolve([])), [pid, Math.floor(now / 10_000), state?.refreshedAt?.agents])
+  const sendNote = async () => {
+    const text = note.trim()
+    if (!text || !pid || sending) return
+    setSending(true)
+    try {
+      const r = await api<{ route?: NoteRoute }>('quickNote', pid, text, target || undefined)
+      setNote('')
+      notesQ.reload()
+      toast(routeToast(r?.route, target))
+    } catch (e) { toast((e as Error).message) } finally { setSending(false) }
+  }
+  const cancelNote = (id: number) => api('cancelNote', id).then(() => { notesQ.reload(); toast(t('Anulada: ningún Claude la recibirá')) }, (e) => toast((e as Error).message))
+  // On the phone, bigger to touch, and 16 px so iOS does not zoom in on typing.
+  const h = phone ? 40 : 32
+  const font = phone ? 16 : undefined
+  return (
+    <div style={phone ? undefined : { borderTop: '0.5px solid var(--sep)' }}>
+      <SentNotes notes={notesQ.data ?? []} onCancel={(id) => void cancelNote(id)} />
+      <div className="p-2.5 flex items-center gap-1.5">
+        <select className="field" style={{ width: 'auto', minWidth: 92, maxWidth: 130, height: h, padding: '0 6px', fontSize: font ?? 12 }} value={target} onChange={(e) => setTarget(e.target.value)} aria-label={t('Para quién')}>
+          <option value="">{t('Para todos')}</option>
+          {agents.map((a) => <option key={a.id} value={a.id}>{accName(a.id)}</option>)}
+        </select>
+        <input className="field flex-1 min-w-0" style={{ height: h, fontSize: font }} placeholder={phone ? t('Mensaje…') : target ? t('Mensaje para {name}…', { name: accName(target) }) : t('Mensaje para los Claude…')} title={t('Le llega directo a un Claude quieto del proyecto; si todos trabajan, al que trabaja al acabar su paso; si no hay nadie, se abre uno libre')} value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void sendNote() }} />
+        <button className="btn btn-sm btn-icon btn-primary flex-none" style={{ width: h, height: h }} disabled={!note.trim() || sending} onClick={() => void sendNote()} aria-label={t('Enviar')}><Send size={14} /></button>
+      </div>
+    </div>
+  )
 }
 
 function whenShort(ms: number, now: number): string {
@@ -200,8 +249,6 @@ export function Dock({ floating }: { floating?: boolean }) {
     document.documentElement.classList.toggle('dock-open', open)
     return () => document.documentElement.classList.remove('dock-open')
   }, [floating, collapsed, state?.floating, Boolean(state)])
-  const [note, setNote] = useState('')
-  const [target, setTarget] = useState<string>('')
   const pid = state?.activeProjectId
   const claimsQ = useAsync(() => (pid ? api<Claim[]>('claims', pid) : Promise.resolve([])), [pid, Math.floor(now / 60_000), state?.refreshedAt?.agents])
   // EV126: an account with no session on this PC (the empty slot of a new PC) is not a Claude yet.
@@ -215,21 +262,6 @@ export function Dock({ floating }: { floating?: boolean }) {
   const windowsText = windows ? ` · ${tn(windows, '{n} ventana', '{n} ventanas')}` : ''
   const pending = state?.decisionsPending ?? 0
   const setMin = (v: boolean) => { setCollapsed(v); try { localStorage.setItem('pmc.dock', v ? 'min' : 'open') } catch { /* private */ } }
-  const [sending, setSending] = useState(false)
-  // EV154: the hooks of the Claudes change a note's state in the database, not through the app: asked again every 10 s.
-  const notesQ = useAsync(() => (pid ? api<SentNote[]>('myNotes', pid) : Promise.resolve([])), [pid, Math.floor(now / 10_000), state?.refreshedAt?.agents])
-  const sendNote = async () => {
-    const t = note.trim()
-    if (!t || !pid || sending) return
-    setSending(true)
-    try {
-      const r = await api<{ route?: NoteRoute }>('quickNote', pid, t, target || undefined)
-      setNote('')
-      notesQ.reload()
-      toast(routeToast(r?.route, target))
-    } catch (e) { toast((e as Error).message) } finally { setSending(false) }
-  }
-  const cancelNote = (id: number) => api('cancelNote', id).then(() => { notesQ.reload(); toast(t('Anulada: ningún Claude la recibirá')) }, (e) => toast((e as Error).message))
   if (!state) return null
   if (!floating && state.floating) return null
   // Nobody to show or to write to yet (a new PC): Primeros pasos says what is missing.
@@ -273,17 +305,7 @@ export function Dock({ floating }: { floating?: boolean }) {
           </div>
         )}
       </div>
-      <div style={{ borderTop: '0.5px solid var(--sep)' }}>
-        <SentNotes notes={notesQ.data ?? []} onCancel={(id) => void cancelNote(id)} />
-        <div className="p-2.5 flex items-center gap-1.5">
-          <select className="field" style={{ width: 'auto', minWidth: 92, maxWidth: 130, height: 32, padding: '0 6px', fontSize: 12 }} value={target} onChange={(e) => setTarget(e.target.value)} aria-label={t('Para quién')}>
-            <option value="">{t('Para todos')}</option>
-            {agents.map((a) => <option key={a.id} value={a.id}>{accName(a.id)}</option>)}
-          </select>
-          <input className="field flex-1 min-w-0" style={{ height: 32 }} placeholder={target ? t('Mensaje para {name}…', { name: accName(target) }) : t('Mensaje para los Claude…')} title={t('Le llega directo a un Claude quieto del proyecto; si todos trabajan, al que trabaja al acabar su paso; si no hay nadie, se abre uno libre')} value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void sendNote() }} />
-          <button className="btn btn-sm btn-icon btn-primary" style={{ width: 32, height: 32 }} disabled={!note.trim() || sending} onClick={() => void sendNote()} aria-label={t('Enviar')}><Send size={14} /></button>
-        </div>
-      </div>
+      <NoteBox />
     </>
   )
   if (floating) return <div className="floating-app">{body}</div>

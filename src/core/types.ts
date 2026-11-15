@@ -100,6 +100,11 @@ export interface LiveSession {
   waitingFor?: string
   startedAt?: number
   projectId?: string
+  /**
+   * EV201: the project it works in now when that is not its window's folder (it touches another project's files or
+   * folders): what the user is shown (Chats, the map). `projectId` stays the folder's, for relays, turns and the rest.
+   */
+  workProjectId?: string
   worktree?: string
   // Filled from the conversation file's tail (read only).
   model?: string
@@ -385,6 +390,8 @@ export interface Settings {
   accountStatus?: Record<string, 'pausada' | 'baja' | undefined>
   /** EV68: the user hid «Primeros pasos» (Inicio); it comes back only while there is no project. */
   firstRunDone?: boolean
+  /** EV188: the guide of the app was seen or skipped (it shows by itself only once, on a new install). */
+  tourDone?: boolean
   /** Backup accounts (IV1, core/reserve.ts): opened on their project when every other account in use is out of usage. */
   reserves?: { account: AccountId; projectId: string; on: boolean; note?: string; marginMin?: number }[]
   /** Accounts the user marked as out of Fable: Claude Code does not report each model's limit. */
@@ -451,6 +458,11 @@ export interface Settings {
    */
   sessionsWhere?: 'ventana' | 'app'
   /**
+   * EV193: the notices of Inicio («Para ti», the Claudes' under the map) the user took away, by what they said, and when.
+   * One that says something else comes back; after a month they are forgotten. The same on the PC and on the phone.
+   */
+  homeSeen?: Record<string, number>
+  /**
    * EV96 (Decidir #130 «B»): Claude Code's gifted limit resets (`/limit-reset`): used by the app at the best moment
    * ('sola', the default), only told to the user ('avisar'), or left alone ('no').
    */
@@ -478,6 +490,8 @@ export interface Activity {
   event: string
   text: string
   file?: string
+  /** EV201: the absolute folders and files a shell command named (live.ts › commandPaths). */
+  paths?: string[]
 }
 
 export interface AccountActivity {
@@ -487,6 +501,10 @@ export interface AccountActivity {
   /** What it says it is working on, in one sentence for the user (`pmc ahora`), and what it said before. */
   focus?: { at: number; text: string; sessionId?: string }
   focusHistory: { at: number; text: string }[]
+  /** The last thing said by each of its conversations: the same account in two projects at once says one thing in each (map). */
+  focusBySession?: Record<string, { at: number; text: string }>
+  /** EV201: what each conversation touched lately (files, folders its commands named), newest first. */
+  touchesBySession?: Record<string, { at: number; path: string }[]>
 }
 
 export type DecisionStatus = 'pendiente' | 'decidida' | 'descartada'

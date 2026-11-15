@@ -8,7 +8,7 @@ import { existsSync, statSync, mkdirSync, copyFileSync, readFileSync, writeFileS
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { AccountActivity, AccountConfig, AccountId, AgentCard, CopyStatus, ProjectConfig, Settings, Task } from '../core/types'
-import { activityDir, readActivity, trimActivity, writeProtected, writeRules } from '../core/live'
+import { activityDir, readActivity, trimActivity, workingProjectOf, writeProtected, writeRules } from '../core/live'
 import { pendingDecisionCount } from '../core/decisions'
 import { home } from '../core/paths'
 import { openDb, backupDb, getSetting, setSetting, addEvent, type DB } from '../core/db'
@@ -178,7 +178,37 @@ export class Service extends EventEmitter {
     const next: Record<string, AccountActivity> = {}
     for (const a of this.accounts) next[a.id] = readActivity(a.id)
     this.activity = next
+    this.placeSessions()
     this.push()
+  }
+
+  /**
+   * EV201: each conversation in the project it works in now, by what it touched last (live.ts › workingProjectOf). The
+   * place stays while it is quiet (the user, 15-11 17:27: One Claude's, quiet since 16:40, showed «Mission Control» again when
+   * a 45-minute limit ran out), and is kept on disk: the activity files only keep their tail, and the app restarts.
+   */
+  private workPlaces?: Record<string, { projectId: string; at: number }>
+  private placeSessions(): void {
+    const now = Date.now()
+    const file = join(paths.root(), 'donde-trabaja.json')
+    if (!this.workPlaces) {
+      try { this.workPlaces = JSON.parse(readFileSync(file, 'utf8')) } catch { this.workPlaces = {} }
+    }
+    const known = this.workPlaces!
+    let changed = false
+    const projectOf = (p: string) => projectForPath(this.projects, p).project?.id
+    for (const a of this.agents ?? []) {
+      for (const s of a.sessions) {
+        const w = workingProjectOf(this.activity[a.id]?.touchesBySession?.[s.sessionId], projectOf, now, 7 * 24 * 3600_000)
+        if (w && known[s.sessionId]?.projectId !== w) { known[s.sessionId] = { projectId: w, at: now }; changed = true }
+        const place = w ?? known[s.sessionId]?.projectId
+        s.workProjectId = place && place !== s.projectId ? place : undefined
+      }
+    }
+    if (!changed) return
+    // Conversations not heard of in two weeks leave the file.
+    for (const [id, v] of Object.entries(known)) if (now - v.at > 14 * 24 * 3600_000) delete known[id]
+    try { writeFileSync(file, JSON.stringify(known)) } catch { /* next time */ }
   }
 
   private activitySoon(): void {
@@ -407,6 +437,7 @@ export class Service extends EventEmitter {
       this.enCurso = hb.enCurso
       t1 = performance.now()
       this.agents = buildAgents({ accounts: this.accounts, projects: this.projects, live: this.live, tasksByProject: this.tasks, heartbeats: hb.byProject, recharged: this.settings.recharged })
+      this.placeSessions()
       t2 = performance.now()
       // An account spending with nothing to show for it: one line in the timeline per half hour, for the user to look.
       try {

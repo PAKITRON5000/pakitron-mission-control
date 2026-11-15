@@ -11,10 +11,20 @@ import type { ReplyRow } from '../../../core/assistant'
 interface Away { from: number; to: number; accounts: { id: string; text: string; rows: ReplyRow[]; spentWeek?: number }[]; photos: { id: number; name: string; projectId: string }[]; asked: number }
 
 const SEEN = 'pmc.seen'
+/**
+ * EV194 (the user, 15-11 13:20: «una vez cambias de pestaña, se va, molaría poder quitarla manualmente»): the card shown
+ * and not yet closed with «Visto», kept apart from the last moment the user was here. Every click moves that one, so on
+ * coming back to Inicio the card was gone; this one only goes with «Visto».
+ */
+const PENDING = 'pmc.awaySince'
 /** Away for this long counts as «while you were away». */
 const AWAY_MS = 60 * 60_000
-const read = () => { try { return Number(localStorage.getItem(SEEN)) || 0 } catch { return 0 } }
-const write = (t: number) => { try { localStorage.setItem(SEEN, String(t)) } catch { /* private */ } }
+const readNum = (k: string) => { try { return Number(localStorage.getItem(k)) || 0 } catch { return 0 } }
+const writeNum = (k: string, v?: number) => { try { if (v) localStorage.setItem(k, String(v)); else localStorage.removeItem(k) } catch { /* private */ } }
+/** Whether the card is out and not yet closed with «Visto» (Inicio says so above the map, the card goes below it). */
+export const awayPending = () => readNum(PENDING) > 0
+const read = () => readNum(SEEN)
+const write = (t: number) => writeNum(SEEN, t)
 
 /**
  * EV66: when the user comes back after an hour or more, what the Claudes did meanwhile, account by account (what each
@@ -23,13 +33,14 @@ const write = (t: number) => { try { localStorage.setItem(SEEN, String(t)) } cat
 export function AwayCard() {
   const { go, state, setViewer } = useStore()
   const run = useGo()
-  const [since, setSince] = useState<number>()
+  const [since, setSince] = useState<number | undefined>(() => readNum(PENDING) || undefined)
   const [data, setData] = useState<Away>()
   useEffect(() => {
     const check = () => {
       const seen = read()
       const now = Date.now()
-      if (seen && now - seen > AWAY_MS) setSince((s) => s ?? seen)
+      // A new absence while the card is still open keeps the earliest start: it covers both.
+      if (seen && now - seen > AWAY_MS) setSince((s) => { const from = s ? Math.min(s, seen) : seen; writeNum(PENDING, from); return from })
       if (!seen) write(now)
     }
     check()
@@ -46,7 +57,7 @@ export function AwayCard() {
   if (!since || !data) return null
   const hours = Math.max(1, Math.round((data.to - data.from) / 3600_000))
   const fromText = new Date(data.from).toLocaleString(locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' })
-  const close = () => { write(Date.now()); setSince(undefined); setData(undefined) }
+  const close = () => { write(Date.now()); writeNum(PENDING); setSince(undefined); setData(undefined) }
   return (
     <motion.div className="card p-5 mb-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={SPRING}
       style={{ boxShadow: '0 0 0 2px color-mix(in srgb, var(--indigo) 55%, transparent), var(--shadow-1)' }}>

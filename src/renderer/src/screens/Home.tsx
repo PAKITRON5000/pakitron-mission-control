@@ -1,7 +1,7 @@
 import { t, tn } from '../../../core/i18n'
 import { motion } from 'motion/react'
-import { ChevronRight, CheckCircle2, Gauge, MessageSquareText, ListChecks, Hourglass, CircleAlert, Hand, GitCommitHorizontal, Images, MessageCircle, Send, Gavel, Sparkles } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ChevronRight, CheckCircle2, Gauge, MessageSquareText, ListChecks, Hourglass, CircleAlert, Hand, GitCommitHorizontal, Images, MessageCircle, Send, Gavel, Sparkles, X, Eye, Moon } from 'lucide-react'
+import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react'
 import { useStore, useAsync, type Route } from '../lib/store'
 import { api, thumbUrl, type AgentCard, type Asset, type Comment, type Instruction, type TimelineEvent, type Decision } from '../lib/api'
 import { Ring, SPRING, STATE_META, accName } from '../components/ui'
@@ -10,10 +10,12 @@ import { ago, clock, plural, whenFull } from '../lib/format'
 import { isSessionWorking } from '../../../core/working'
 import { diskLow, diskWords } from '../../../core/disk'
 import { MissionMap } from '../components/MissionMap'
-import { AwayCard } from '../components/AwayCard'
+import { AwayCard, awayPending } from '../components/AwayCard'
 import { ForecastLine } from '../components/ForecastLine'
 import { FirstSteps } from '../components/FirstSteps'
 import { ImproveButton } from '../components/ImproveProject'
+import { AutonomyNotice } from '../components/AutonomyNotice'
+import { ChatsGlance } from './Chats'
 
 const fade = (i: number) => ({ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { ...SPRING, delay: 0.03 * i } })
 
@@ -84,8 +86,8 @@ function ClaudeTile({ a, i }: { a: AgentCard; i: number }) {
   )
 }
 
-function Row({ icon, color, title, sub, onClick, tone }: { icon: ReactNode; color: string; title: ReactNode; sub?: ReactNode; onClick?: () => void; tone?: string }) {
-  return (
+function Row({ icon, color, title, sub, onClick, tone, onHide }: { icon: ReactNode; color: string; title: ReactNode; sub?: ReactNode; onClick?: () => void; tone?: string; onHide?: () => void }) {
+  const row = (
     <button className="row" onClick={onClick}>
       <span className="icon-sq icon-sq-lg" style={{ background: color, color: color === 'var(--yellow)' ? '#3a2a00' : 'white' }}>{icon}</span>
       <span className="min-w-0 flex-1">
@@ -95,7 +97,19 @@ function Row({ icon, color, title, sub, onClick, tone }: { icon: ReactNode; colo
       <ChevronRight size={16} className="c4 flex-none" />
     </button>
   )
+  if (!onHide) return row
+  // EV193: a notice the user already knows can be taken away (it comes back if what it says changes).
+  return (
+    <div className="row-hide">
+      {row}
+      <button className="row-x" onClick={onHide} title={t('Quitar este aviso: vuelve a salir si cambia lo que dice')} aria-label={t('Quitar este aviso')}><X size={15} /></button>
+    </div>
+  )
 }
+
+/** EV193: what a notice says, to know it again: its kind (the row's key) and its title. */
+const sigOf = (el: ReactElement<{ title?: ReactNode }>) => `${el.key ?? ''}|${typeof el.props.title === 'string' ? el.props.title : ''}`
+const SEEN_KEEP_MS = 30 * 86400_000
 
 interface WeekMetrics { done: number; approved: number; changes: number; checksOk: number; checksFail: number; limits: number; handoffs: number; handoffMinutes?: number; weekPoints: number }
 
@@ -130,7 +144,10 @@ function humanize(e: TimelineEvent): { ids?: string; text: string } {
 }
 
 export function Home() {
-  const { state, now, go, jump, setViewer, setAgentOpen, toast } = useStore()
+  const { state, now, go, jump, setViewer, setAgentOpen, toast, refresh } = useStore()
+  // EV193: taken away here before the app has saved it (so it goes at once).
+  const [hiddenNow, setHiddenNow] = useState<string[]>([])
+  const [shownAgain, setShownAgain] = useState<string[]>([])
   const s = state?.summary
   const p = s?.project
   const pid = p?.id
@@ -171,8 +188,8 @@ export function Home() {
   const crew: ReactNode[] = []
   for (const j of jobs.data ?? []) {
     const left = j.leftSec != null ? t(', quedan {v0}', { v0: j.leftSec < 3600 ? `${Math.max(1, Math.round(j.leftSec / 60))} min` : `${(j.leftSec / 3600).toFixed(1).replace('.', ',')} h` }) : ''
-    if (j.state === 'cortado') todo.push(<Row key={'job' + j.id} icon={<CircleAlert size={17} />} color="var(--red)" title={t('Se cortó: {title}', { title: j.title })} sub={t('Se quedó{v0} y no ha salido nada. Pulsa para quitar el aviso', { v0: j.done != null ? t(' en {done} de {total}', { done: j.done, total: j.total }) : t(' a medias') })} onClick={() => void api('dismissJob', j.id).then(jobs.reload)} />)
-    else if (j.state === 'terminado') todo.push(<Row key={'job' + j.id} icon={<CheckCircle2 size={17} />} color="var(--green)" title={t('Ya está: {title}', { title: j.title })} sub={t('Pulsa para abrirlo')} onClick={() => { void api('openPath', j.output); void api('dismissJob', j.id).then(jobs.reload); toast(t('Abriendo…')) }} />)
+    if (j.state === 'cortado') todo.push(<Row key={'job' + j.id} icon={<CircleAlert size={17} />} color="var(--red)" title={t('Se cortó: {title}', { title: j.title })} sub={t('Se quedó{v0} y no ha salido nada. Pulsa para quitar el aviso', { v0: j.done != null ? t(' en {done} de {total}', { done: j.done, total: j.total }) : t(' a medias') })} onClick={() => void api('dismissJob', j.id).then(jobs.reload)} onHide={() => void api('dismissJob', j.id).then(jobs.reload)} />)
+    else if (j.state === 'terminado') todo.push(<Row key={'job' + j.id} icon={<CheckCircle2 size={17} />} color="var(--green)" title={t('Ya está: {title}', { title: j.title })} sub={t('Pulsa para abrirlo')} onClick={() => { void api('openPath', j.output); void api('dismissJob', j.id).then(jobs.reload); toast(t('Abriendo…')) }} onHide={() => void api('dismissJob', j.id).then(jobs.reload)} />)
     else todo.push(<Row key={'job' + j.id} icon={<Hourglass size={17} />} color="var(--blue)" title={t('En marcha: {title}', { title: j.title })} sub={j.done != null ? t('Va por {done} de {total}{left}. No apagues el PC', { done: j.done, total: j.total, left: left }) : t('No apagues el PC hasta que acabe')} />)
   }
   // The questions go in their own banner, above everything, each one by name and from every project (13-11).
@@ -266,17 +283,59 @@ export function Home() {
     sub={t('Pulsa y se abre su ventana: escribe /login y sigue los pasos (un minuto). Mejor ahora que de noche con la rueda en marcha')} onClick={() => { const pr = state.projects.find((x) => x.id === state.activeProjectId); if (pr) void api('openSession', id, pr.root).then(() => toast(t('Escribe /login en la ventana que se ha abierto')), (e) => toast((e as Error).message)) }} />)
   if (noUsage.length) press.push(<Row key="sl" icon={<Gauge size={17} />} color="var(--blue)" title={t('Activa la lectura de consumo')} sub={t('Falta en {v0}: un clic en Ajustes', { v0: names(noUsage) })} onClick={() => go('ajustes', 'cuentas')} />)
 
+  // EV193 (the user, 15-11 13:20: «no se pueden quitar los cartelitos o marcar como visto, a veces ya sé lo que hay pero no
+  // quiero que esté ahí ocupando»): each notice of «Para ti» and of the Claudes under the map has its ×, and «Para ti» a
+  // «Marcar todo como visto». Kept in the settings (the same on the PC and on the phone) by what the notice says.
+  const seen = state.settings.homeSeen ?? {}
+  const saveSeen = (add: string[], drop: string[] = []) => {
+    const at = Date.now()
+    const next = Object.fromEntries(Object.entries(state.settings.homeSeen ?? {}).filter(([k, v]) => at - v < SEEN_KEEP_MS && !drop.includes(k)))
+    for (const k of add) next[k] = at
+    void api('setSettings', { homeSeen: next }).then(refresh, (e: Error) => toast(e.message))
+  }
+  const hide = (sigs: string[]) => { setHiddenNow((h) => [...h, ...sigs]); setShownAgain((h) => h.filter((x) => !sigs.includes(x))); saveSeen(sigs) }
+  const showAgain = (sigs: string[]) => { setShownAgain((h) => [...h, ...sigs]); setHiddenNow((h) => h.filter((x) => !sigs.includes(x))); saveSeen([], sigs) }
+  const sift = (list: ReactNode[]) => {
+    const shown: ReactNode[] = [], sigs: string[] = [], hidden: string[] = []
+    for (const n of list) {
+      if (!isValidElement<{ title?: ReactNode; onHide?: () => void }>(n)) { shown.push(n); continue }
+      const sig = sigOf(n)
+      if (!shownAgain.includes(sig) && (seen[sig] || hiddenNow.includes(sig))) { hidden.push(sig); continue }
+      sigs.push(sig)
+      const own = n.props.onHide
+      shown.push(cloneElement(n, { onHide: () => { own?.(); hide([sig]) } }))
+    }
+    return { shown, sigs, hidden }
+  }
+  const forYou = sift(todo)
+  const team = sift(crew)
+  const hiddenLine = (hidden: string[], label: string) => hidden.length > 0 && (
+    <button className="seen-line" onClick={() => showAgain(hidden)} title={t('Vuelven a salir los avisos que quitaste')}>
+      <Eye size={13} /> {label} · <u>{t('Volver a verlos')}</u>
+    </button>
+  )
+
+  // The line above the map: what waits for the user, each piece taking them to it.
+  const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const attnChip = (key: string, color: string, icon: ReactNode, label: string, to: string) => (
+    <button key={key} className="attn" style={{ ['--c' as any]: color }} onClick={() => jumpTo(to)}>{icon} {label}</button>
+  )
+  const attn: ReactNode[] = []
+  if (ask.length) attn.push(attnChip('ask', 'var(--red)', <Gavel size={14} />, askTotal > 1 ? t('Te preguntan ({n})', { n: askTotal }) : t('Te preguntan'), 'home-ask'))
+  if (press.length) attn.push(attnChip('press', 'var(--orange)', <Hand size={14} />, press.length > 1 ? t('Te toca pulsar ({n})', { n: press.length }) : t('Te toca pulsar'), 'home-press'))
+  if (forYou.shown.length) attn.push(attnChip('you', 'var(--accent)', <ListChecks size={14} />, tn(forYou.shown.length, '{n} aviso para ti', '{n} avisos para ti'), 'home-foryou'))
+  if (awayPending()) attn.push(attnChip('away', 'var(--indigo)', <Moon size={14} />, t('Mientras no estabas'), 'home-away'))
+
   const imgs = latest.data?.items ?? []
   const changes = (recent.data ?? []).filter((e) => e.kind === 'commit' || e.kind === 'relevo' || e.kind === 'peticion' || e.kind.startsWith('tarea-hecha')).slice(0, 6)
   const pct = s.tasks.total ? Math.round((s.tasks.done / s.tasks.total) * 100) : 0
 
   return (
     <div className="content-inner">
-      <motion.header {...fade(0)} className="flex items-center gap-6 mb-8">
+      <motion.header {...fade(0)} className="flex items-center gap-6 mb-5">
         <div className="min-w-0 flex-1">
           <h1 className="t-hero">{p.name}</h1>
           <p className="t-head c2 mt-2" style={{ fontWeight: 450 }}>{headline(agents, now)}</p>
-          <div className="mt-3"><ImproveButton projectId={p.id} name={p.name} /></div>
         </div>
         <button className="flex items-center gap-3 border-0 bg-transparent p-0 text-left flex-none" onClick={() => go('tareas')} aria-label={t('Progreso de tareas')}>
           <Ring value={s.tasks.done} total={s.tasks.total} size={64} stroke={8} color="var(--green)"><span className="t-small num" style={{ fontWeight: 700 }}>{pct}%</span></Ring>
@@ -289,43 +348,21 @@ export function Home() {
 
       {/* EV68: while a first step is missing (and not hidden), it goes first: nothing else works well without it. */}
       <FirstSteps />
-      {/* EV66: what the Claudes did while the user was away, first thing when they come back. */}
-      <AwayCard />
+      {/* The user, 15-11 13:50: «priorizaría poder ver bien en inicio de un vistazo ese mapa de los claude, sin tantísima
+          información arriba… ahora mismo abruma un poco». Above the map, one line with what waits for the user, each piece a
+          jump to its place below; then the map; then the rest, the most urgent first. */}
+      <motion.div {...fade(1)} className="attn-line mb-4" role="navigation" aria-label={t('Lo que te espera')}>
+        {attn.length ? attn : <span className="attn-ok"><CheckCircle2 size={15} /> {forYou.hidden.length ? t('Nada nuevo para ti.') : t('Nada te espera ahora: todo en marcha.')}</span>}
+        <span className="ml-auto"><ImproveButton projectId={p.id} name={p.name} /></span>
+      </motion.div>
       <section className="mb-9">
         {/* EV84: the live map (Decidir #127) instead of a row of tiles: who works where, who waits, who rests, in one look.
             Accounts the user does not use («De baja», «No usar») take one quiet line below (EV18, 12-11). */}
-        {ask.length > 0 && (
-          <motion.div {...fade(1)} className="press ask mb-5">
-            <div className="press-head">
-              <span className="press-icon"><Gavel size={18} /></span>
-              <span className="min-w-0 flex-1"><b className="t-head block">{askTotal > 1 ? t('Te preguntan ({n})', { n: askTotal }) : t('Te preguntan')}</b><span className="t-small c2 block">{t('Hay un Claude esperando tu respuesta: contesta en Decidir y le llega al momento')}</span></span>
-              {askTotal > ask.length && <button className="btn btn-sm flex-none" onClick={() => go('decisiones')}>{t('Ver todas')}</button>}
-            </div>
-            <div className="press-rows">{ask}</div>
-          </motion.div>
-        )}
-        {press.length > 0 && (
-          <motion.div {...fade(1)} className="press mb-5">
-            <div className="press-head">
-              <span className="press-icon"><Hand size={18} /></span>
-              <span className="min-w-0"><b className="t-head block">{press.length > 1 ? t('Te toca pulsar ({n})', { n: press.length }) : t('Te toca pulsar')}</b><span className="t-small c2 block">{t('Solo tú puedes hacerlo, y es un clic cada uno: sin esto los Claude no funcionan del todo')}</span></span>
-            </div>
-            <div className="press-rows">{press}</div>
-          </motion.div>
-        )}
-        {todo.length > 0 && (
-          <motion.div {...fade(2)} className="mb-6">
-            <h2 className="section-title">{t('Para ti')} <span className="t-small c3" style={{ fontWeight: 450 }}>{t('· en todos tus proyectos')}</span></h2>
-            <div className="group">{todo}</div>
-          </motion.div>
-        )}
-        {!ask.length && !press.length && !todo.length && (
-          <motion.div {...fade(2)} className="t-head mb-5 flex items-center gap-2" style={{ color: 'var(--green)' }}><CheckCircle2 size={18} /> {t('Nada te espera ahora: todo en marcha.')}</motion.div>
-        )}
-        <motion.div {...fade(3)}><MissionMap /></motion.div>
+        <motion.div {...fade(2)} data-tour="mapa"><MissionMap /></motion.div>
         {/* EV67: the wheel's forecast, under the map. */}
         <div className="mt-3"><ForecastLine projectId={Object.entries(state.settings.relayChains ?? {}).find(([, x]) => x?.on && x.order.length)?.[0]} /></div>
-        {crew.length > 0 && <motion.div {...fade(3)} className="group mt-4">{crew}</motion.div>}
+        {team.shown.length > 0 && <motion.div {...fade(3)} className="group mt-4">{team.shown}</motion.div>}
+        {hiddenLine(team.hidden, tn(team.hidden.length, '{n} aviso de los Claude quitado', '{n} avisos de los Claude quitados'))}
         {agents.some((a) => a.state === 'baja' || a.state === 'apartada') && (
           <div className="t-small c3 mt-3 flex items-center gap-2 flex-wrap">
             {t('Sin usar:')}
@@ -335,6 +372,43 @@ export function Home() {
           </div>
         )}
       </section>
+
+      <section className="mb-4">
+        {ask.length > 0 && (
+          <motion.div {...fade(3)} id="home-ask" className="press ask mb-5">
+            <div className="press-head">
+              <span className="press-icon"><Gavel size={18} /></span>
+              <span className="min-w-0 flex-1"><b className="t-head block">{askTotal > 1 ? t('Te preguntan ({n})', { n: askTotal }) : t('Te preguntan')}</b><span className="t-small c2 block">{t('Hay un Claude esperando tu respuesta: contesta en Decidir y le llega al momento')}</span></span>
+              {askTotal > ask.length && <button className="btn btn-sm flex-none" onClick={() => go('decisiones')}>{t('Ver todas')}</button>}
+            </div>
+            <div className="press-rows">{ask}</div>
+          </motion.div>
+        )}
+        {press.length > 0 && (
+          <motion.div {...fade(3)} id="home-press" className="press mb-5">
+            <div className="press-head">
+              <span className="press-icon"><Hand size={18} /></span>
+              <span className="min-w-0"><b className="t-head block">{press.length > 1 ? t('Te toca pulsar ({n})', { n: press.length }) : t('Te toca pulsar')}</b><span className="t-small c2 block">{t('Solo tú puedes hacerlo, y es un clic cada uno: sin esto los Claude no funcionan del todo')}</span></span>
+            </div>
+            <div className="press-rows">{press}</div>
+          </motion.div>
+        )}
+      </section>
+      {/* EV186, EV196: the open chats, right after what waits for the user (above the map they hid it; the user, 15-11). */}
+      <div id="home-chats"><ChatsGlance /></div>
+      {forYou.shown.length > 0 && (
+        <motion.div {...fade(4)} id="home-foryou" className="mb-8">
+          <h2 className="section-title">{t('Para ti')} <span className="t-small c3" style={{ fontWeight: 450 }}>{t('· en todos tus proyectos')}</span>
+            <button className="more" onClick={() => hide(forYou.sigs)} title={t('Quita todos estos avisos; vuelve a salir el que cambie')}>{t('Marcar todo como visto')}</button></h2>
+          <div className="group">{forYou.shown}</div>
+          {hiddenLine(forYou.hidden, tn(forYou.hidden.length, '{n} aviso quitado', '{n} avisos quitados'))}
+        </motion.div>
+      )}
+      {!forYou.shown.length && forYou.hidden.length > 0 && <div className="mb-6">{hiddenLine(forYou.hidden, tn(forYou.hidden.length, '{n} aviso quitado', '{n} avisos quitados'))}</div>}
+      {/* EV66: what the Claudes did while the user was away (the line above the map says it is here). */}
+      <div id="home-away"><AwayCard /></div>
+      {/* EV126: autonomous mode said in words, with what happens when the project is given up as finished. */}
+      <AutonomyNotice projectId={p.id} projectName={p.name} />
 
       <div className="grid gap-x-8 gap-y-9 grid-cols-1 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="flex flex-col gap-9 min-w-0">

@@ -190,6 +190,23 @@ textarea, input[type='text'], input[type='search'], .selectable { user-select: t
 .row + .row::before { content: ''; position: absolute; top: 0; right: 0; left: 58px; border-top: 0.5px solid var(--sep); }
 button.row:hover { background: var(--fill); }
 button.row:active { background: var(--fill-2); }
+/* EV193: a notice with its × to take it away; the separators as between plain rows. */
+.row-hide { position: relative; }
+.row-hide > .row { padding-right: 52px; }
+.row-hide + .row-hide::before, .row + .row-hide::before, .row-hide + .row::before { content: ''; position: absolute; top: 0; right: 0; left: 58px; border-top: 0.5px solid var(--sep); z-index: 1; }
+.row-x { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 99px; border: 0; background: transparent; color: var(--label-3); display: grid; place-items: center; opacity: 0.6; transition: opacity 120ms, background 120ms, color 120ms; z-index: 2; }
+.row-hide:hover .row-x { opacity: 1; }
+.row-x:hover { background: var(--fill-2); color: var(--label); }
+/* Inicio (the user, 15-11 13:50: the map first): one line above it with what waits for the user, each piece a jump below. */
+.attn-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 32px; }
+.attn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px; border-radius: 99px; border: 0; font-size: 13.5px; font-weight: 650; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent); }
+.attn:hover { background: color-mix(in srgb, var(--c) 22%, transparent); }
+.attn:active { transform: scale(0.97); }
+.attn-ok { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--green); }
+[id^='home-'] { scroll-margin-top: 16px; }
+.seen-line { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 0 4px; padding: 2px 0; border: 0; background: none; font-size: 12.5px; color: var(--label-3); }
+.seen-line:hover { color: var(--label-2); }
+.seen-line u { text-underline-offset: 2px; }
 .section-title { font-size: 19px; font-weight: 690; letter-spacing: -0.016em; margin: 0 0 10px 2px; display: flex; align-items: baseline; gap: 10px; }
 .section-title .more { margin-left: auto; font-size: 13.5px; font-weight: 500; color: var(--accent); letter-spacing: 0; background: none; border: 0; padding: 0; }
 .section-title .more:hover { opacity: 0.75; }
@@ -412,6 +429,15 @@ textarea.field { height: auto; padding: 10px 12px; resize: none; line-height: 1.
 
 .m-chat { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--bg); padding-top: env(safe-area-inset-top); padding-bottom: calc(env(safe-area-inset-bottom) * 0.5); }
 .m-chatHead { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--bg); border-bottom: 0.5px solid var(--sep); }
+/* EV177: Electron keeps the title bar's drag strip even under a layer drawn on top of it: «Volver» of an open chat (and any
+   button of a full-window layer in those 52 px) moved the window instead of being pressed, on Windows and on Mac. What is
+   pressed never drags, and the layers that cover the bar take its strip away; the chat's head moves the window instead,
+   leaving room for the window's own buttons (Mac's three lights on the left, Windows' on the right). */
+button, a[href], input, select, textarea, label, summary, [role="button"], [role="tab"], [role="switch"], [contenteditable] { -webkit-app-region: no-drag; }
+.m-chat, .lightbox, .scrim, .m-sheetBack { -webkit-app-region: no-drag; }
+:root[data-os="darwin"] .m-chatHead, :root[data-os="win32"] .m-chatHead, :root[data-os="linux"] .m-chatHead { -webkit-app-region: drag; min-height: 52px; }
+:root[data-os="darwin"] .m-chatHead { padding-left: 84px; }
+:root[data-os="win32"] .m-chatHead, :root[data-os="linux"] .m-chatHead { padding-right: 150px; }
 .m-chatTitle { font-size: 15px; font-weight: 640; }
 .m-chatSub { font-size: 12px; color: var(--label-3); display: flex; align-items: center; gap: 5px; }
 .m-chatSub .m-dot { width: 7px; height: 7px; }
@@ -441,9 +467,13 @@ textarea.field { height: auto; padding: 10px 12px; resize: none; line-height: 1.
 .m-sheet { width: 100%; max-width: 620px; margin: 0 auto; background: var(--chrome); backdrop-filter: blur(24px); border-radius: 18px 18px 0 0; padding: 16px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
 .m-sheet textarea { font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 0.5px solid var(--sep); background: var(--bg); color: var(--label); resize: none; outline: none; }
 .m-sheetTitle { font-size: 17px; font-weight: 680; }
-.m-who { display: flex; gap: 10px; }
-.m-who button { border: 0; background: none; padding: 3px; border-radius: 99px; opacity: 0.45; }
-.m-who button.on { opacity: 1; outline: 2px solid var(--accent); }
+.m-who { display: flex; gap: 6px; flex-wrap: wrap; }
+/* EV195: each Claude with its name under its number, so the one picked is known. */
+.m-who button { border: 0; background: none; padding: 6px 4px 5px; border-radius: 12px; opacity: 0.5; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px; color: var(--label); }
+.m-who button:hover { opacity: 0.8; }
+.m-who button.on { opacity: 1; background: var(--fill); outline: 2px solid var(--accent); }
+.m-whoName { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-whoSaid { font-size: 13.5px; font-weight: 600; color: var(--label); margin-top: -4px; }
 .m-primary { height: 46px; border: 0; border-radius: 12px; background: var(--accent); color: white; font-size: 16px; font-weight: 650; }
 .m-primary:disabled { opacity: 0.4; }
 .m-moreGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 6px; }
@@ -541,6 +571,9 @@ textarea.field { height: auto; padding: 10px 12px; resize: none; line-height: 1.
 .mm-plate b { font-size: 15px; font-weight: 700; }
 .mm-label { font-size: 13px; font-weight: 650; white-space: nowrap; }
 .mm-doing { font-size: 12.5px; color: var(--label-2); max-width: 164px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The same Claude in two projects at once: each place says where else it is. */
+.mm-also { font-size: 11.5px; font-weight: 600; color: var(--accent); max-width: 164px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-c-pilot .mm-also { max-width: 100%; white-space: normal; }
 .mm-pad-label { position: absolute; transform: translateX(-50%); font-size: 13px; color: var(--label-3); white-space: nowrap; }
 .mm-pad-label b { color: var(--label-2); font-weight: 650; }
 .mm-panel { position: absolute; right: 12px; top: 12px; bottom: 12px; width: min(330px, 46%); z-index: 5; display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; background: var(--bg-elev); box-shadow: 0 0 0 1px var(--sep), 0 18px 50px rgb(0 0 0 / .25); overflow: auto; animation: mm-in .22s cubic-bezier(.2, .8, .2, 1); }
@@ -625,3 +658,12 @@ button.card:active, button.group:active { transform: scale(0.99); }
 [role='radio']:not([aria-checked='true']):hover, [role='switch']:hover { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent); }
 
 .btn-ghost:hover { background: var(--fill); }
+
+/* EV188: the guide of the app. The page under it is dimmed except the part it explains, and takes no clicks meanwhile. */
+.tour { position: fixed; inset: 0; z-index: 90; }
+.tour-catch { position: absolute; inset: 0; }
+.tour-light { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.58), 0 0 0 2px var(--accent), 0 0 24px color-mix(in srgb, var(--accent) 55%, transparent); pointer-events: none; }
+.tour-card { position: fixed; background: var(--bg-elev); color: var(--label); border-radius: 18px; padding: 16px 16px 14px; box-shadow: 0 24px 60px rgb(0 0 0 / 0.45), var(--card-edge, 0 0 0 0.5px var(--sep)); }
+.tour-dots { display: flex; gap: 5px; margin-top: 12px; flex-wrap: wrap; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--fill-2, rgb(127 127 127 / 0.3)); }
+.tour-dots span.on { width: 18px; border-radius: 3px; background: var(--accent); }

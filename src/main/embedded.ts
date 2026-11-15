@@ -27,16 +27,23 @@ export interface EmbeddedDeps {
 }
 
 let deps: EmbeddedDeps | undefined
+/**
+ * Who draws a session: a window of the app, or (EV197) the phone through its connection (main/remote.ts › /pty), which
+ * gets `pmc:pty` and `pmc:pty-exit` as a window does.
+ */
+export interface PtyView { send(channel: string, ...args: unknown[]): void; isDestroyed(): boolean }
+const isWindow = (v: PtyView): v is WebContents => typeof (v as WebContents).once === 'function'
+
 let client: PtyClient | undefined
 let connecting: Promise<PtyClient | undefined> | undefined
 const sessions = new Map<string, PtyInfo>()
-/** Views drawing each session (the main window, a popped-out one, the phone never). */
-const viewers = new Map<string, Set<WebContents>>()
+/** Views drawing each session (the main window, a popped-out one, the phone). */
+const viewers = new Map<string, Set<PtyView>>()
 /** The last pieces of each session, for a view that asks for its screen while more is arriving. */
 const recent = new Map<string, { seq: number; data: string }[]>()
 const popped = new Map<string, BrowserWindow>()
 /** Windows already watched for closing (attachView). */
-const watched = new WeakSet<WebContents>()
+const watched = new WeakSet<PtyView>()
 
 export function initEmbedded(d: EmbeddedDeps): void { deps = d }
 
@@ -207,15 +214,16 @@ export const embeddedByPid = (pid: number | undefined): PtyInfo | undefined => (
 export const isEmbeddedPid = (pid: number | undefined): boolean => Boolean(embeddedByPid(pid))
 
 /** A view starts drawing a session: its screen as it is now, then everything new through `pmc:pty`. */
-export async function attachView(id: string, view: WebContents): Promise<PtySnapshot & { alive: boolean }> {
+export async function attachView(id: string, view: PtyView): Promise<PtySnapshot & { alive: boolean }> {
   const c = await ensureClient(false)
   if (!c) throw new Error('esa terminal ya no está')
   const snap = await c.snapshot(id)
-  const set = viewers.get(id) ?? new Set<WebContents>()
+  const set = viewers.get(id) ?? new Set<PtyView>()
   set.add(view)
   viewers.set(id, set)
-  // One listener per window, not one per view drawn (Chats draws them again each time it opens).
-  if (!watched.has(view)) {
+  // One listener per window, not one per view drawn (Chats draws them again each time it opens). The phone's connection
+  // takes itself out when it closes (main/remote.ts).
+  if (isWindow(view) && !watched.has(view)) {
     watched.add(view)
     view.once('destroyed', () => { for (const s of viewers.values()) s.delete(view) })
   }
@@ -224,18 +232,60 @@ export async function attachView(id: string, view: WebContents): Promise<PtySnap
   return { ...snap, data: snap.data + after, alive: sessions.get(id)?.alive ?? false }
 }
 
-export function detachView(id: string, view: WebContents): void {
+/** EV197: the size the PC's windows last gave each session, given back when the phone stops looking at it. */
+const deskSize = new Map<string, { cols: number; rows: number }>()
+const giveBack = new Map<string, ReturnType<typeof setTimeout>>()
+const phoneLooks = (id: string) => [...(viewers.get(id) ?? [])].some((v) => !isWindow(v) && !v.isDestroyed())
+
+export function detachView(id: string, view: PtyView): void {
   viewers.get(id)?.delete(view)
+  if (isWindow(view)) return
+  // EV197: the phone closed it or went to sleep: the PC's size again (the user at the PC would see it narrow), unless the
+  // phone comes straight back (a new connection after a network change).
+  clearTimeout(giveBack.get(id))
+  const timer = setTimeout(() => {
+    giveBack.delete(id)
+    const d = deskSize.get(id)
+    if (d && !phoneLooks(id)) resizeEmbedded(id, d.cols, d.rows, true)
+  }, 3000)
+  timer.unref?.()
+  giveBack.set(id, timer)
+}
+
+/** EV197: a line written from the phone's box, typed as a person types it (text, then Enter apart). */
+export async function typeEmbeddedId(id: string, text: string): Promise<void> {
+  const info = sessions.get(id)
+  if (!info?.alive || !client) throw new Error('esa terminal ya no está')
+  const line = typedLine(String(text))
+  if (line) { client.write(id, line); await new Promise((r) => setTimeout(r, 450)) }
+  client.write(id, '\r')
+}
+
+/** EV197: one key of the phone's bar (Esc, Enter, the arrows, 1-2-3, Shift+Tab…). */
+export function keyEmbeddedId(id: string, key: string): void {
+  const bytes = keyBytes(String(key))
+  if (!bytes) throw new Error('tecla no válida')
+  if (!sessions.get(id)?.alive || !client) throw new Error('esa terminal ya no está')
+  client.write(id, bytes)
 }
 
 export function inputEmbedded(id: string, data: string): void {
   if (typeof data === 'string' && data.length <= 1 << 20) client?.write(id, data)
 }
 
-export function resizeEmbedded(id: string, cols: number, rows: number): void {
-  try { client?.resize(id, cols, rows) } catch { /* no connection */ }
+/** `desk`: asked by a window of the app on the PC (not by the phone), kept to give it back when the phone stops looking. */
+export function resizeEmbedded(id: string, cols: number, rows: number, desk = false): void {
+  if (desk) deskSize.set(id, { cols, rows })
   const info = sessions.get(id)
+  // EV197: the view looked at claims the size each time it is looked at again (the PC on focus, the phone on opening);
+  // the same size is not sent again, so Claude Code does not redraw for nothing.
+  if (info && info.cols === cols && info.rows === rows) return
+  try { client?.resize(id, cols, rows) } catch { /* no connection */ }
   if (info) { info.cols = cols; info.rows = rows }
+  // EV202 (the user, 15-11 15:30: «cuando scrolleo con el móvil un cmd… en pc, se queda como bug el texto… si estiro el
+  // chat se arregla»): every view draws at the size Claude Code draws for, not at its own (the PC at its width drawing
+  // what was drawn for the phone's left bits of the old screen on the right). Said to all, the one that asked too.
+  for (const w of viewers.get(id) ?? []) { if (!w.isDestroyed()) w.send('pmc:pty-size', id, cols, rows) }
 }
 
 export async function killEmbedded(id: string): Promise<boolean> {

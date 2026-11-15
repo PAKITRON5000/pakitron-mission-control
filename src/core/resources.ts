@@ -146,6 +146,22 @@ export function heldResources(db: DB, now = Date.now()): { name: string; account
   return listClaims(db, SHARED, now).filter((c) => !c.abandoned && c.taskKey.startsWith(KEY)).map((c) => ({ name: c.taskKey.slice(KEY.length), account: c.account, until: c.expiresAt, note: c.note }))
 }
 
+/**
+ * EV180 (claude3, 14-11 21:10, in the game project: `pmc relevo claude1` passed the tasks on but not Unity's turn, held by
+ * claude1 until 21:45 while it was out of usage and no Unity was open: the build had to wait for nobody). What the account
+ * being taken over holds goes to the one taking over, who carries on its work; it frees them if it does not need them.
+ * Returns their names.
+ */
+export function handOverResources(db: DB, from: AccountId, to: AccountId, now = Date.now()): string[] {
+  const out: string[] = []
+  for (const r of heldResources(db, now).filter((x) => x.account === from)) {
+    freeResource(db, r.name, from, now)
+    const h = holdResource(db, r.name, to, r.note ? t('{note} (relevo de {from})', { note: r.note, from }) : t('relevo de {from}', { from }), now)
+    if (h.ok) out.push(r.name)
+  }
+  return out
+}
+
 const gb = (mb: number) => dec((mb / 1024).toFixed(1))
 const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
 

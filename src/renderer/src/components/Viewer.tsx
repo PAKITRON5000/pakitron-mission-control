@@ -8,6 +8,7 @@ import { useStore, useAsync } from '../lib/store'
 import { api, media, fileUrl, thumbUrl, type AccountId, type Comment, type Instruction } from '../lib/api'
 import { SPRING, ACCOUNT_COLOR, accName } from './ui'
 import { ago, bytes, dateShort, clock } from '../lib/format'
+import { useDraft } from '../lib/draft'
 
 type Mode = 'ver' | 'pin' | 'circle' | 'rect' | 'arrow' | 'pen'
 const ModelStage = lazy(() => import('./ModelStage'))
@@ -75,7 +76,8 @@ export function Viewer() {
       toast(t('Nota corregida'))
     } catch (e) { toast((e as Error).message) }
   }
-  const [note, setNote] = useState('')
+  // EV185: the note on a picture stays, per picture, until it is saved.
+  const [note, setNote] = useDraft(viewer ? `imagen:${viewer}` : undefined)
   const [noteTarget, setNoteTarget] = useState<AccountId | ''>('')
   const noteRef = useRef<HTMLTextAreaElement>(null)
   const saveNote = async () => {

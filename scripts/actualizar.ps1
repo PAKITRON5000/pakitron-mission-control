@@ -38,5 +38,20 @@ foreach ($dir in @([Environment]::GetFolderPath('Desktop'), (Join-Path $env:APPD
 
 $version = (Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json).version
 Set-Content -Path (Join-Path $dst 'VERSION.txt') -Value $version -Encoding ASCII
-if (-not $NoLaunch) { Start-Process -FilePath $exe -WorkingDirectory $dst }
+if (-not $NoLaunch) {
+  # EV179 (14-11 19:48: the 0.34.4 was installed and the app never came back): opened by Windows' Explorer, outside the
+  # process tree of this console (Claude Code closes what its orders started when they end), and checked: still running
+  # after a few seconds, or opened again another way and said.
+  $alive = {
+    for ($i = 0; $i -lt 16; $i++) { Start-Sleep -Milliseconds 500; if (Get-Process -Name 'Pakitron Mission Control' -ErrorAction SilentlyContinue) { break } }
+    Start-Sleep -Seconds 4
+    [bool](Get-Process -Name 'Pakitron Mission Control' -ErrorAction SilentlyContinue)
+  }
+  Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$exe`""
+  if (-not (& $alive)) {
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/d', '/c', 'start', '""', "`"$exe`"" -WindowStyle Hidden
+    if (-not (& $alive)) { "OJO: Mission Control $version está instalada pero no se ha vuelto a abrir: ábrela desde su icono." ; exit 0 }
+    "(La primera vez no se abrió: abierta en el segundo intento.)"
+  }
+}
 "Mission Control $version en $dst"

@@ -9,6 +9,7 @@ import { Lightbox, SoundRow } from '../components/Sound'
 import { TaskLook } from '../components/TaskLook'
 import { plain } from './Tasks'
 import { ago, dateShort } from '../lib/format'
+import { useDraft } from '../lib/draft'
 
 const shot = (d: Decision, n: number) => media(`dimg/${d.id}/${n}`)
 type Reaction = 'si' | 'no'
@@ -130,7 +131,8 @@ function DecidedRow({ d, startOpen, onReopen }: { d: Decision; startOpen: boolea
 function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => void }) {
   const { state, toast } = useStore()
   const [choice, setChoice] = useState<string>()
-  const [note, setNote] = useState('')
+  // EV185: the note to a question stays, per question, until it is answered.
+  const [note, setNote] = useDraft(`decision:${d.id}`)
   const [zoom, setZoom] = useState<number>()
   const [busy, setBusy] = useState(false)
   const [react, setReactAll] = useState<Record<number, Reaction>>({})
@@ -144,6 +146,7 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
     setBusy(true)
     try {
       const r = await api<Decision>('answerDecision', state.activeProjectId, d.id, { choice: status === 'descartada' ? undefined : choice, note, status, reactions: status === 'descartada' ? undefined : react })
+      setNote('')
       toast(d.askedBy ? t('Enviado a {v0}: le llega en su próximo paso', { v0: accName(d.askedBy) }) : t('Decisión guardada: la recoge el primer Claude que trabaje'))
       onDone(r)
     } catch (e) { toast((e as Error).message) } finally { setBusy(false) }

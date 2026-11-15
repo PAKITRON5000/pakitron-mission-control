@@ -26,7 +26,8 @@ const PLATE = 184
 
 /** One Claude: its ring and a plate with what it is doing. On the way to a project it slides there along the line. */
 function Pilot({ m, a, doing, path, at, style, compact }: { m: CastMember; a?: AgentCard; doing?: string; path?: string; at?: number; style?: CSSProperties; compact?: boolean }) {
-  const { setAgentOpen, now } = useStore()
+  const { setAgentOpen, now, state } = useStore()
+  const projectName = (id: string) => state?.projects.find((p) => p.id === id)?.name ?? id
   const [dist, setDist] = useState(0)
   useEffect(() => {
     if (!path) return
@@ -47,6 +48,7 @@ function Pilot({ m, a, doing, path, at, style, compact }: { m: CastMember; a?: A
         <span className="mm-label" style={{ color: TONE[m.tone] }}>{m.label}</span>
         {m.mood === 'duerme' && m.backAt && <span className="mm-doing">{t('vuelve a las {v0}', { v0: clock(m.backAt) })}</span>}
         {doing && <span className="mm-doing">{doing}</span>}
+        {m.alsoIn?.length ? <span className="mm-also" title={t('El mismo Claude tiene otra ventana trabajando a la vez')}>{t('y a la vez en {v0}', { v0: m.alsoIn.map(projectName).join(', ') })}</span> : null}
       </span>
     </button>
   )
@@ -126,9 +128,16 @@ export function MissionMap() {
 
   const cast = mapCast(state.agents, wheels.data ?? {}, now)
   const agent = (id: string) => state.agents.find((a) => a.id === id)
-  const doing = (id: string) => {
-    const said = state.activity?.[id]?.focus
-    return said && now - said.at < 8 * 3600_000 ? said.text : undefined
+  // What it says it does (`pmc ahora`), said from the conversation that puts it there: the same account with a window in
+  // another project says something else there (15-11: Epic showed in Mission Control what it was doing in Canal).
+  const doing = (m: CastMember) => {
+    const act = state.activity?.[m.id]
+    const fresh = (x?: { at: number; text: string }) => (x && now - x.at < 8 * 3600_000 ? x.text : undefined)
+    const own = m.sessionId ? fresh(act?.focusBySession?.[m.sessionId]) : undefined
+    if (own) return own
+    const said = act?.focus
+    if (said && (!said.sessionId || !m.sessionId || said.sessionId === m.sessionId) && !m.alsoIn?.length) return fresh(said)
+    return agent(m.id)?.sessions.find((s) => s.sessionId === m.sessionId)?.title ?? (m.sessionId ? undefined : fresh(said))
   }
   const N = projects.length
   const nodeW = Math.round(Math.min(290, Math.max(210, W * 0.25)))
@@ -141,11 +150,45 @@ export function MissionMap() {
   const bx = Math.max(24 + (slot * atBase.length) / 2, (px - 40) * 0.3)
   const rx = Math.max(110, (slot * atBase.length) / 2 + 24)
   const start = { x: bx + rx * 0.7, y: by - 10 }
-  const route = (i: number) => {
+  const ctrl = (i: number) => {
     const e = { x: px - 6, y: nodeTop(i) + 54 }
     const dx = e.x - start.x
-    return `M ${start.x} ${start.y} C ${start.x + dx * 0.35} ${start.y - H * 0.25}, ${start.x + dx * 0.62} ${e.y + H * 0.08}, ${e.x} ${e.y}`
+    return [start, { x: start.x + dx * 0.35, y: start.y - H * 0.25 }, { x: start.x + dx * 0.62, y: e.y + H * 0.08 }, e] as const
   }
+  const route = (i: number) => {
+    const [a, b, c, e] = ctrl(i)
+    return `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${e.x} ${e.y}`
+  }
+  // The point at a share of a route's length (as `offset-distance` measures it), to know where a Claude will stand.
+  const pointAt = (i: number, pct: number) => {
+    const [a, b, c, e] = ctrl(i)
+    const P = (s: number) => { const u = 1 - s; return { x: u * u * u * a.x + 3 * u * u * s * b.x + 3 * u * s * s * c.x + s * s * s * e.x, y: u * u * u * a.y + 3 * u * u * s * b.y + 3 * u * s * s * c.y + s * s * s * e.y } }
+    const pts = Array.from({ length: 49 }, (_, k) => P(k / 48))
+    const len = [0]
+    for (let k = 1; k < pts.length; k++) len.push(len[k - 1] + Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y))
+    const want = (len[48] * pct) / 100
+    const k = Math.max(1, len.findIndex((l) => l >= want))
+    const f = (want - len[k - 1]) / Math.max(1e-6, len[k] - len[k - 1])
+    return { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * f, y: pts[k - 1].y + (pts[k].y - pts[k - 1].y) * f }
+  }
+  // Where each Claude at work stands on its line: the first free spot, so none covers another (the user, 15-11: two
+  // Claudes going to two projects were drawn one on top of the other) nor the project it goes to.
+  const BOX_H = 178
+  const taken: { x: number; y: number }[] = atBase.map((_, k) => ({ x: bx - (slot * atBase.length) / 2 + slot * k + slot / 2, y: by }))
+  const spot = new Map<string, number>()
+  projects.forEach((p, i) => cast.filter((m) => m.where === 'proyecto' && m.projectId === p.id).forEach((m) => {
+    let best = 70
+    let bestGap = -Infinity
+    for (const at of [72, 60, 82, 48, 90, 36, 26]) {
+      const q = pointAt(i, at)
+      if (q.x + PLATE / 2 > px - 8) continue
+      const gap = taken.reduce((g, o) => Math.min(g, Math.max(Math.abs(o.x - q.x) - (PLATE + 10), Math.abs(o.y - q.y) - BOX_H)), Infinity)
+      if (gap >= 0) { best = at; break }
+      if (gap > bestGap) { bestGap = gap; best = at }
+    }
+    taken.push(pointAt(i, best))
+    spot.set(`${m.id}:${p.id}`, best)
+  }))
   const busy = new Set(cast.filter((m) => m.where === 'proyecto').map((m) => m.projectId))
   const wheel = state.projects.map((p) => wheels.data?.[p.id]?.chain).find((c) => c?.on && c.order.length)
   const baseText = wheel ? <>{t('Rueda:')} {wheel.order.map((id) => id.replace(/\D/g, '')).join(' → ')}{wheel.holder ? <> {t('· turno de')} <b>{short(wheel.holder)}</b></> : null}</> : t('Base: aquí esperan los que no trabajan')
@@ -179,7 +222,7 @@ export function MissionMap() {
             <button className={`mm-node mm-c-node ${p.id === state.activeProjectId ? 'on' : ''} ${sel === p.id ? 'sel' : ''} ${busy.has(p.id) ? 'mm-c-busy' : ''}`} style={{ ['--c' as any]: p.color }} onClick={() => setSel(sel === p.id ? undefined : p.id)}>
               {nodeBody(p)}
             </button>
-            {crew.length > 0 && <div className="mm-c-crew">{crew.map((m) => <Pilot key={m.id} m={m} a={agent(m.id)} doing={doing(m.id)} compact />)}</div>}
+            {crew.length > 0 && <div className="mm-c-crew">{crew.map((m) => <Pilot key={m.id} m={m} a={agent(m.id)} doing={doing(m)} compact />)}</div>}
             {sel === p.id && <Panel pid={p.id} wheels={wheels.data} tasks={tasks.data?.[p.id]} onClose={() => setSel(undefined)} inline />}
           </div>
         )
@@ -218,8 +261,8 @@ export function MissionMap() {
       {atBase.map((m, k) => (
         <Pilot key={m.id + ':base'} m={m} a={agent(m.id)} style={{ left: bx - (slot * atBase.length) / 2 + slot * k + slot / 2 - PLATE / 2, top: by - RING / 2 }} />
       ))}
-      {projects.map((p, i) => cast.filter((m) => m.where === 'proyecto' && m.projectId === p.id).map((m, k) => (
-        <Pilot key={m.id + ':' + p.id} m={m} a={agent(m.id)} doing={doing(m.id)} path={route(i)} at={70 - k * 22} />
+      {projects.map((p, i) => cast.filter((m) => m.where === 'proyecto' && m.projectId === p.id).map((m) => (
+        <Pilot key={m.id + ':' + p.id} m={m} a={agent(m.id)} doing={doing(m)} path={route(i)} at={spot.get(`${m.id}:${p.id}`) ?? 70} />
       )))}
 
       {sel && <Panel pid={sel} wheels={wheels.data} tasks={tasks.data?.[sel]} onClose={() => setSel(undefined)} />}

@@ -10,6 +10,7 @@ import { isSessionWorking } from '../../../core/working'
 import { acceptanceOf } from '../../../core/acceptance'
 import { accName } from './ui'
 import { CodeChange } from './CodeChange'
+import { readDraft, writeDraft } from '../lib/draft'
 
 interface MediaItem { kind: 'image' | 'video' | 'audio' | 'model'; src: string; thumb?: string; caption?: string; group?: string; assetId?: number; from: 'entrega' | 'decision' | 'archivo' }
 interface TaskInfo { simple: string; ask?: string; written: boolean; responsible?: string; media: MediaItem[] }
@@ -28,9 +29,11 @@ function whereIsIt(c: TaskChange, a: AgentCard | undefined, pid: string | undefi
 }
 
 /** The note and who gets it, whether writing it for the first time or changing it. */
-function NoteForm({ start, startTarget, responsible, busy, onSend, onCancel }: { start: string; startTarget: string; responsible?: string; busy: boolean; onSend: (note: string, target: string, now: boolean) => void; onCancel: () => void }) {
+function NoteForm({ start, startTarget, responsible, busy, onSend, onCancel, draftKey }: { draftKey?: string; start: string; startTarget: string; responsible?: string; busy: boolean; onSend: (note: string, target: string, now: boolean) => void; onCancel: () => void }) {
   const { state, now } = useStore()
-  const [text, setText] = useState(start)
+  // EV185: what is written and not sent stays, per task (or what it already said, when changing a note).
+  const [text, setTextState] = useState(() => (draftKey && readDraft(draftKey)) || start)
+  const setText = (v: string) => { setTextState(v); if (draftKey) writeDraft(draftKey, v) }
   const [target, setTarget] = useState(startTarget)
   const pid = state?.activeProjectId
   const agents = state?.agents ?? []
@@ -107,6 +110,7 @@ export function TaskLook({ t: task, onApproved, onChanged }: { t: Task; onApprov
       ? await api<{ how?: string }>('updateTaskChange', pid, change.id, { note, target: to ?? null, now: go })
       : await api<{ how?: string }>('askTaskChange', pid, task.id, { note, target: to, now: go })
     toast(r.how === 'lanzado' ? t('{v0} lanzado: empieza por tu nota', { v0: name(target) }) : r.how === 'siguiente-paso' ? t('Le llega a {v0} en su próximo paso', { v0: name(target) }) : change ? t('Nota cambiada') : to ? t('En la cola de {v0}', { v0: name(to) }) : t('En la cola'))
+    writeDraft(`tarea:${pid}:${task.id}`, '')
     setWriting(false)
     onChanged?.()
   })
@@ -193,6 +197,7 @@ export function TaskLook({ t: task, onApproved, onChanged }: { t: Task; onApprov
       )}
       {writing ? (
         <NoteForm
+          draftKey={`tarea:${pid}:${task.id}`}
           start={change?.note ?? (media.length === 0 ? t('Enséñamelo con fotos o audio para poder juzgarlo.') : '')}
           startTarget={change ? change.target ?? 'any' : info.data?.responsible ?? 'any'}
           responsible={info.data?.responsible}

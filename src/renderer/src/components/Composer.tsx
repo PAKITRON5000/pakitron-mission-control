@@ -5,6 +5,7 @@ import { Send, Copy, Play } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { api, type AccountId, type Instruction, type InstructionKind } from '../lib/api'
 import { SPRING, accName } from './ui'
+import { readDraft, writeDraft } from '../lib/draft'
 
 const KINDS: { k: InstructionKind; label: string; hint: string }[] = [
   { k: 'mensaje', get label() { return t('Mensaje a un agente') }, get hint() { return t('Para un Claude concreto') } },
@@ -18,7 +19,9 @@ const KINDS: { k: InstructionKind; label: string; hint: string }[] = [
 
 export function Composer() {
   const { composer, closeComposer, state, toast } = useStore()
-  const [text, setText] = useState('')
+  const [text, setTextState] = useState('')
+  // EV185: what is written and not sent stays (a preset text, from a button, comes first).
+  const setText = (v: string) => { setTextState(v); writeDraft('composer', v) }
   const [kind, setKind] = useState<InstructionKind>('general')
   const [touched, setTouched] = useState(false)
   const [target, setTarget] = useState<AccountId | ''>('')
@@ -33,7 +36,7 @@ export function Composer() {
 
   useEffect(() => {
     if (!composer.open) return
-    setText(composer.preset?.text ?? '')
+    setTextState(composer.preset?.text ?? readDraft('composer'))
     setKind((composer.preset?.kind as InstructionKind) ?? 'general')
     setTouched(Boolean(composer.preset?.kind))
     setTarget((composer.preset?.target as AccountId) ?? '')
@@ -75,12 +78,14 @@ export function Composer() {
       if (start && to) {
         const d = await api<{ action: string; why: string }>('startOn', project.id, to)
         setSaved(r)
+        writeDraft('composer', '')
         toast(d.action === 'abrir' ? t('{v0} se abre en {name} y empieza por esto', { v0: accName(to), name: project.name }) : d.action === 'avisar' ? t('Se lo ha escrito a {v0} en su ventana', { v0: accName(to) }) : t('Guardado para {v0}; no se abre nada: {why}', { v0: accName(to), why: d.why }))
         setTimeout(closeComposer, 700)
         return
       }
       if (deliver) r = await api<Instruction>('deliverInstruction', project.id, r.id)
       setSaved(r)
+      if (r.status !== 'fallida') writeDraft('composer', '')
       toast(r.status === 'entregada' ? t('Escrita en el Buzón') : kind === 'idea' ? t('Idea guardada en Tareas › Ideas') : kind === 'tarea' ? t('Tarea creada') : t('Guardada en Mission Control'))
       if (r.status !== 'fallida') setTimeout(closeComposer, 500)
     } catch (e) { toast((e as Error).message) }

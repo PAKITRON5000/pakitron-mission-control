@@ -15,6 +15,15 @@ describe('automatic hand-off', () => {
   const team = [idle('claude1', 78), idle('claude2', 0, 'sin-uso'), idle('claude3', 0, 'sin-uso'), idle('claude4', 60), idle('claude5', 68), idle('claude6', 90)]
   const real = { ...base, agents: team, status: { claude4: 'pausada' as const, claude2: 'baja' as const }, noFable: ['claude6'], order: ['claude1', 'claude3', 'claude4', 'claude2'] }
 
+  it('never to the backup account of another project (MC-276: Claude 5, backup of Video Dos, was handed the work of Claude 1)', () => {
+    const out = team.map((a) => (a.id === 'claude1' ? idle('claude1', 0, 'sin-uso') : a))
+    const reserves = [{ account: 'claude5', projectId: 'iv', on: true }]
+    const c = pickSuccessor({ ...real, agents: out, reserves })
+    expect(c.to).toBe('claude6')
+    // In its own project it is a candidate like any other.
+    expect(pickSuccessor({ ...real, projectId: 'iv', agents: out, reserves }).to).toBe('claude5')
+  })
+
   it('a Fable job goes to the next account in the turn that still has Fable; never to one set aside or unpaid', () => {
     const c = pickSuccessor(real)
     expect(c.to).toBe('claude1')

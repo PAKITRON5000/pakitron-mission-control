@@ -6,8 +6,8 @@ declare global {
   interface Window {
     pmc: {
       call: <T = any>(method: string, ...args: unknown[]) => Promise<T>
-      on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding' | 'pty' | 'pty-exit' | 'pty-focus', cb: (...args: unknown[]) => void) => () => void
-      /** EV156: the terminals inside the app (only in the app itself; the phone has none). */
+      on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding' | 'pty' | 'pty-exit' | 'pty-focus' | 'pty-size', cb: (...args: unknown[]) => void) => () => void
+      /** EV156: the terminals inside the app; EV197: on the phone too, through its connection (lib/remoteBridge.ts). */
       pty?: {
         attach: (id: string) => Promise<{ data: string; seq: number; cols: number; rows: number; alive: boolean }>
         detach: (id: string) => void

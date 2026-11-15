@@ -56,6 +56,12 @@ export function tn(n: number, one: string, many: string, vars?: Record<string, s
   return t(n === 1 ? one : many, { n, ...vars })
 }
 
+/** «Claude 1, Claude 3 y Claude 6» / «Claude 1, Claude 3 and Claude 6». */
+export function namesList(names: string[]): string {
+  if (names.length < 2) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} ${current === 'en' ? 'and' : 'y'} ${names[names.length - 1]}`
+}
+
 /** Dates and times in the current language («sáb, 15:30» / «Sat, 3:30 PM»). */
 export function locale(): string {
   return current === 'en' ? 'en-GB' : 'es-ES'

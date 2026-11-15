@@ -50,6 +50,14 @@ describe('verification gate', async () => {
     expect(v.verificationLine(v.lastVerification(db, 'game', 'OTRA'))).toContain('Sin verificar')
   })
 
+  it('the resource is let go even when the check itself blows up (MC-273: the routine kept Unity until it expired)', () => {
+    const { db, p, root } = setup()
+    const boom: import('../src/core/verify').Runner = () => { throw new Error('el proceso se cortó') }
+    const r = v.runVerification(db, p, root, 'rutina' as never, undefined, unity, { run: boom, busy: free, git })
+    expect(r.outcome).not.toBe('bien')
+    expect(res.heldResources(db)).toEqual([])
+  })
+
   it('a failed build stops there, and repeated failures change what the agent is told', () => {
     const { db, p, root } = setup()
     const bad = runner({ 'unity build': "Assets/_Juego/X.cs(10,5): error CS0103: The name 'foo' does not exist", 'unity test': 'Tests: total=1 passed=1 failed=0' })

@@ -6,6 +6,7 @@ import { useStore, useAsync } from '../lib/store'
 import { api } from '../lib/api'
 import { Segmented, SPRING, accName } from './ui'
 import { ago } from '../lib/format'
+import { useDraft } from '../lib/draft'
 
 type Kind = 'regla' | 'preferencia' | 'dato'
 interface Mem { id: number; kind: Kind; text: string; source: string; at: number }
@@ -26,7 +27,8 @@ export function MemoryBox() {
   const { state, toast, now } = useStore()
   const pid = state?.activeProjectId
   const project = state?.projects.find((p) => p.id === pid)
-  const [text, setText] = useState('')
+  // EV185: what is written and not sent stays, per project.
+  const [text, setText] = useDraft(pid ? `memoria:${pid}` : undefined)
   const [kind, setKind] = useState<Kind>('regla')
   // EV24: for this project or for every project (the accounts, speaking Spanish, not bothering while playing…).
   const [everywhere, setEverywhere] = useState(false)

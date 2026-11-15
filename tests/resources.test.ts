@@ -22,6 +22,19 @@ describe('shared resources', async () => {
     return gpu
   }
 
+  it('pmc relevo also passes on the turns the account it takes over held (EV180)', () => {
+    const db = fresh()
+    expect(res.holdResource(db, 'unity', 'claude1' as never, 'build de F10').ok).toBe(true)
+    res.holdResource(db, 'gpu', 'claude6' as never)
+    expect(res.handOverResources(db, 'claude1' as never, 'claude3' as never)).toEqual(['unity'])
+    const held = res.heldResources(db)
+    expect(held.find((r) => r.name === 'unity')?.account).toBe('claude3')
+    expect(held.find((r) => r.name === 'unity')?.note).toContain('claude1')
+    expect(held.find((r) => r.name === 'gpu')?.account).toBe('claude6')
+    // Nothing held: nothing passed.
+    expect(res.handOverResources(db, 'claude1' as never, 'claude3' as never)).toEqual([])
+  })
+
   it.skipIf(process.platform !== 'win32')('sees the user playing or editing, the editors open and the memory of the card', () => {
     const busy = res.detectBusy(exec(tasklist('System', 'Adobe Premiere Pro.exe', 'Unity.exe', 'Unity Hub.exe', 'VALORANT-Win64-Shipping.exe', 'blender.exe'), '13100, 16303\r\n'))
     expect(busy.playing).toBe('VALORANT-Win64-Shipping.exe')

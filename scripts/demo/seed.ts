@@ -9,7 +9,7 @@ import { openDb, addEvent } from '../../src/core/db'
 import { saveProject } from '../../src/core/projects'
 import { addDecision } from '../../src/core/decisions'
 import { addMemory } from '../../src/core/memory'
-import { addInstruction } from '../../src/core/review'
+import { addComment, addInstruction } from '../../src/core/review'
 import { claimTask } from '../../src/core/coord'
 import { markTyped } from '../../src/core/notes'
 import { installHooks, installStatusLine } from '../../src/core/integrations'
@@ -194,6 +194,19 @@ db.prepare("UPDATE instructions SET status = 'recibida', created_at = ?, updated
 // The task line carries the note's mark, so the dock shows it as filed.
 writeFileSync(join(P.starfall, 'docs', 'TASKS.md'), readFileSync(join(P.starfall, 'docs', 'TASKS.md'), 'utf8').replace('(MC-1)', `(MC-${n1.id})`))
 addEvent(db, { projectId: 'starfall', at: now - 3 * hour + 4 * min, account: 'claude1', kind: 'recibida', title: L('Claude 1 ha recibido: «Me gustaría un tutorial corto al empezar»', 'Claude 1 received: «I would like a short tutorial at the start»'), source: 'hook', ref: `ins:${n1.id}` })
+// Review (14-11): one a Claude gave back as fixed, one a Claude has, one the user reopened.
+const asComment = (body: string, status: string, ago: number, note?: [AccountId, string]): void => {
+  const c = addComment(db, { projectId: 'starfall', body }, L('una captura', 'a screenshot')).comment
+  const history = [{ at: now - ago, status: 'pendiente' }, { at: now - ago + 20 * min, status: 'recibido' }] as { at: number; status: string; note?: string }[]
+  if (note) history.push({ at: now - ago + 2 * hour, status: 'esperando-revision', note: `${note[0]}: ${note[1]}` })
+  if (status === 'reabierto') history.push({ at: now - ago + 3 * hour, status: 'reabierto' })
+  db.prepare('UPDATE comments SET status = ?, history = ?, created_at = ?, updated_at = ? WHERE id = ?').run(status, JSON.stringify(history), now - ago, history[history.length - 1].at, c.id)
+}
+asComment(L('La nave se sale de la pantalla por la derecha al esquivar', 'The ship leaves the screen on the right when dodging'), 'esperando-revision', 26 * hour,
+  ['claude2', L('SF7: la nave ya no pasa del borde (margen de 24 px a cada lado) y el esquive frena contra él. Película nueva en la Galería.', 'SF7: the ship no longer goes past the edge (24 px either side) and the dodge stops against it. New clip in the Gallery.')])
+asComment(L('El jefe tarda demasiado en aparecer, se hace aburrido', 'The boss takes too long to show up, it gets boring'), 'recibido', 5 * hour)
+asComment(L('El brillo de los disparos tapa a los enemigos', 'The shots\' glow hides the enemies'), 'reabierto', 50 * hour,
+  ['claude1', L('SF5: brillo de los disparos a la mitad.', 'SF5: the shots\' glow halved.')])
 const n2 = addInstruction(db, { projectId: 'starfall', kind: 'general', body: L('El láser del jefe debería avisar antes de disparar, ahora no da tiempo a esquivarlo', 'The boss\'s laser should warn before firing; right now there is no time to dodge it') })
 db.prepare('UPDATE instructions SET created_at = ?, updated_at = ? WHERE id = ?').run(now - 6 * min, now - 6 * min, n2.id)
 markTyped(db, n2.id, 'claude1' as AccountId, now - 6 * min)

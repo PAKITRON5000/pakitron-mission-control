@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('pmc', {
   call: (method: string, ...args: unknown[]) => ipcRenderer.invoke('pmc', method, ...args),
-  on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding' | 'pty' | 'pty-exit' | 'pty-focus', cb: (...args: unknown[]) => void) => {
+  on: (channel: 'state' | 'assets' | 'model-thumb' | 'ding' | 'pty' | 'pty-exit' | 'pty-focus' | 'pty-size', cb: (...args: unknown[]) => void) => {
     const listener = (_e: unknown, ...args: unknown[]) => cb(...args)
     ipcRenderer.on(`pmc:${channel}`, listener)
     return () => ipcRenderer.removeListener(`pmc:${channel}`, listener)

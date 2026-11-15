@@ -413,7 +413,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export interface TaskInfo { id: number; extId?: string; title: string; detail?: string; status: string; mark?: string; section?: string; priority?: number; projectId: string; checked?: boolean }
 
-const STATUS_WORD: Record<string, string> = { idea: 'idea', pendiente: 'pendiente', planificada: 'planificada', 'en-desarrollo': 'a medias', bloqueada: 'bloqueada', 'pendiente-integracion': 'por integrar', 'en-pruebas': 'en pruebas', revision: 'para revisar', terminada: 'terminada' }
+const STATUS_WORD: Record<string, string> = { idea: 'idea', pendiente: 'pendiente', planificada: 'planificada', 'en-desarrollo': 'a medias', bloqueada: 'en espera (del usuario o de verla pasar de verdad)', 'pendiente-integracion': 'por integrar', 'en-pruebas': 'en pruebas', revision: 'para revisar', terminada: 'terminada' }
 export const isOpen = (t: Pick<TaskInfo, 'status'>) => t.status !== 'terminada' && t.status !== 'idea'
 
 export function answerTasks(input: { taskId?: string; project: { id: string; name: string }; tasks: TaskInfo[]; allTasks?: TaskInfo[]; projects: { id: string; name: string }[]; claims: { key: string; account: string }[]; agenda?: string }): Reply {

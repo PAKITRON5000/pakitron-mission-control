@@ -20,6 +20,10 @@ export interface CastMember {
   backAt?: number
   /** It holds the turn of the wheel of the project it is in. */
   holder: boolean
+  /** The conversation that puts it there (to say what it does in that project, not in another one). */
+  sessionId?: string
+  /** The other projects where the same Claude is at the same time (the user, 15-11: «cuando un claude trabaja en dos proyectos a la vez… no sabe mostrarse»). */
+  alsoIn?: string[]
 }
 
 export type Wheels = Record<string, { chain: RelayChain } | undefined>
@@ -36,17 +40,32 @@ export function mapCast(agents: AgentCard[], wheels: Wheels, now: number): CastM
       out.push({ ...base, where: 'recarga', mood: 'duerme', label: t('Recargando'), tone: 'red', backAt: back && back > now ? back : undefined, holder: false })
       continue
     }
-    const working = a.sessions.find((s) => isSessionWorking(s) && s.status !== 'waiting' && s.projectId)
-    const waiting = a.sessions.find((s) => s.status === 'waiting' && s.projectId)
-    if (a.state === 'esperando' && waiting) {
-      out.push({ ...base, where: 'proyecto', projectId: waiting.projectId, mood: 'llama', label: /permission|permiso/i.test(waiting.waitingFor ?? '') ? t('Te pide permiso') : t('Te espera'), tone: 'orange', holder: holderOf === waiting.projectId })
-      continue
+    // One place per project where it is at work or waiting for the user: the same account can have a window in two projects
+    // at once, and each one shows in its project (before, only the first, and the other project looked empty). Waiting
+    // for the user goes first: it is what the user has to see.
+    const here: CastMember[] = []
+    if (a.state === 'esperando' || a.state === 'trabajando') {
+      for (const s of a.sessions) {
+        // EV201: in the project it works in now (what it touches), not only the one its window was opened in.
+        const pid = s.workProjectId ?? s.projectId
+        if (!pid || here.some((m) => m.projectId === pid && m.mood === 'llama')) continue
+        if (s.status === 'waiting') {
+          const at = here.findIndex((m) => m.projectId === pid)
+          const m: CastMember = { ...base, where: 'proyecto', projectId: pid, mood: 'llama', label: /permission|permiso/i.test(s.waitingFor ?? '') ? t('Te pide permiso') : t('Te espera'), tone: 'orange', holder: holderOf === pid, sessionId: s.sessionId }
+          if (at >= 0) here[at] = m
+          else here.push(m)
+        } else if (isSessionWorking(s) && !here.some((m) => m.projectId === pid)) {
+          const w = wheels[pid]?.chain
+          const holder = Boolean(w?.on && w.holder === a.id)
+          const outgoing = Boolean(w?.on && w.outgoing === a.id)
+          here.push({ ...base, where: 'proyecto', projectId: pid, mood: 'trabaja', label: holder ? t('★ En misión') : outgoing ? t('★ Remata lo pequeño') : t('Trabajando'), tone: holder || outgoing ? 'gold' : 'orange', holder, sessionId: s.sessionId })
+        }
+      }
     }
-    if (a.state === 'trabajando' && working?.projectId) {
-      const w = wheels[working.projectId]?.chain
-      const holder = Boolean(w?.on && w.holder === a.id)
-      const outgoing = Boolean(w?.on && w.outgoing === a.id)
-      out.push({ ...base, where: 'proyecto', projectId: working.projectId, mood: 'trabaja', label: holder ? t('★ En misión') : outgoing ? t('★ Remata lo pequeño') : t('Trabajando'), tone: holder || outgoing ? 'gold' : 'orange', holder })
+    if (here.length) {
+      here.sort((x, y) => Number(y.mood === 'llama') - Number(x.mood === 'llama'))
+      if (here.length > 1) for (const m of here) m.alsoIn = here.filter((o) => o !== m).map((o) => o.projectId!)
+      out.push(...here)
       continue
     }
     if (a.state === 'desconectado') { out.push({ ...base, where: 'base', mood: 'espera', label: t('Sin conexión'), tone: 'gray', holder: false }); continue }

@@ -115,7 +115,14 @@ export function removeChange(db: DB, id: number, now = Date.now()): void {
  * delivering the task for any other reason must not close something it has not even read.
  */
 export function finishChange(db: DB, projectId: string, extId: string, now = Date.now()): number {
-  const rows = db.prepare(`${SELECT} WHERE c.project_id = ? AND c.ext_id = ? AND c.status = 'pedido' AND i.delivered_at IS NOT NULL`).all(projectId, extId) as any[]
+  // A card the user wrote in the app (key «app:…», no ID) that a Claude filed in TASKS.md under an ID names that key in
+  // its text (Video Dos, IV20: «(app:mwgbkvbrhwb6, MC-243; …)»): delivering the ID closes the card's note too. 15-11:
+  // the cleanup was done and delivered as IV20, and its card kept saying «cambios que pidió el usuario» in every parte.
+  // The card's own key works as well (`pmc entrega app:…`).
+  const filed = db.prepare('SELECT title, detail FROM tasks WHERE project_id = ? AND ext_id = ? AND gone = 0').get(projectId, extId) as { title: string; detail: string } | undefined
+  const keys = [...new Set([extId, ...(filed ? `${filed.title} ${filed.detail ?? ''}`.match(/\bapp:[a-z0-9]+/g) ?? [] : [])])]
+  const rows = db.prepare(`${SELECT} WHERE c.project_id = ? AND (c.ext_id = ? OR c.task_key IN (${keys.map(() => '?').join(', ')})) AND c.status = 'pedido' AND i.delivered_at IS NOT NULL`)
+    .all(projectId, extId, ...keys) as any[]
   for (const r of rows) {
     db.prepare("UPDATE task_changes SET status = 'hecho', done_at = ?, updated_at = ? WHERE id = ?").run(now, now, r.id)
     if (r.instruction_id) db.prepare("UPDATE instructions SET status = 'ejecutada', updated_at = ? WHERE id = ?").run(now, r.instruction_id)

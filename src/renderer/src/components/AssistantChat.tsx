@@ -7,6 +7,7 @@ import { api, thumbUrl } from '../lib/api'
 import { ask, askClaude, cancelPlan, sendPlan, useChat, type ChatMsg, type Reply } from '../lib/assistantChat'
 import type { Go } from '../../../core/assistant'
 import { Avatar, Bar, SPRING, nameify } from './ui'
+import { useDraft } from '../lib/draft'
 
 /** The assistant's face: the app's own colours, breathing slowly while it thinks. */
 export function Orb({ size = 40, thinking }: { size?: number; thinking?: boolean }) {
@@ -124,7 +125,8 @@ function Bubble({ m, compact, last }: { m: ChatMsg; compact?: boolean; last: boo
 export function AssistantChat({ compact, empty }: { compact?: boolean; empty?: React.ReactNode }) {
   const { state } = useStore()
   const msgs = useChat()
-  const [text, setText] = useState('')
+  // EV185: what is written and not sent stays.
+  const [text, setText] = useDraft('asistente')
   const scroller = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const busy = msgs.some((m) => m.pending)

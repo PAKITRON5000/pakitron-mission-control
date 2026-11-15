@@ -9,6 +9,7 @@ import { useAsync, useStore } from '../lib/store'
 import { api, type AgentCard } from '../lib/api'
 import { Avatar, STATE_META, workingOn, ACCOUNT_COLOR, accName } from './ui'
 import { isSessionWorking } from '../../../core/working'
+import { freeLabel, usageView } from './ClaudeRing'
 import { WORK_MODES, modeOf } from '../../../core/workmode'
 
 const ago = (ms: number, now: number) => {
@@ -45,8 +46,9 @@ export function WhoWhere({ ids, bare }: { ids?: string[]; bare?: boolean } = {})
   // finishes what it has half done and leaves the rest.
   const takers = (a: AgentCard) => state.agents
     .filter((x) => x.id !== a.id && x.state !== 'baja' && x.state !== 'apartada')
-    .map((x) => { const w = x.usage.snapshot?.sevenDay; return { id: x.id, free: w && w.resetsAt > now ? Math.max(0, 100 - Math.round(w.usedPct)) : undefined, out: x.state === 'sin-uso' } })
-    .sort((p, q) => Number(p.out) - Number(q.out) || (q.free ?? -1) - (p.free ?? -1))
+    // EV175: what is used of the week, as /usage says it (a bare «98 %» of what was left read as spent).
+    .map((x) => { const v = usageView(x, 'week', now); return { id: x.id, used: v.used != null ? Math.round(v.used) : undefined, out: x.state === 'sin-uso' } })
+    .sort((p, q) => Number(p.out) - Number(q.out) || (p.used ?? 101) - (q.used ?? 101))
   const handoff = (a: AgentCard, projectId: string, to: string) =>
     void api('handoff', projectId, a.id, to).then(
       () => toast(t('{v0} seguirá lo de {v1} en {v2}{v3}', { v0: accName(to), v1: accName(a.id), v2: projectName(projectId), v3: state.hooks?.[to] ? '' : t(' (lo recibirá al abrir su próxima sesión)') })),
@@ -64,7 +66,7 @@ export function WhoWhere({ ids, bare }: { ids?: string[]; bare?: boolean } = {})
               <button className="border-0 bg-transparent p-0" onClick={() => setAgentOpen(a.id)} title={t('Ver su ficha')}><Avatar id={a.id} size={28} /></button>
               <b className="t-body">{accName(a.id)}</b>
               <span className="t-small" style={{ color: m.color }}>{m.label}</span>
-              {(five || week) && <span className="t-small c3">{t('· queda {v0} de 5 h y {v1} de la semana', { v0: five && five.resetsAt > now ? `${Math.max(0, 100 - Math.round(five.usedPct))} %` : '—', v1: week && week.resetsAt > now ? `${Math.max(0, 100 - Math.round(week.usedPct))} %` : '—' })}</span>}
+              {(five || week) && <span className="t-small c3">· {freeLabel(a, now)}</span>}
               {(() => {
                 const w = Object.entries(state.settings.relayChains ?? {}).find(([, c]) => c?.on && c.order.includes(a.id))
                 if (!w) return null
@@ -102,7 +104,8 @@ export function WhoWhere({ ids, bare }: { ids?: string[]; bare?: boolean } = {})
               return (
                 <div key={s.sessionId} className={`t-small ${pad} flex items-center gap-2 flex-wrap`}>
                   <span className="rounded-full flex-none" style={{ width: 7, height: 7, background: working ? 'var(--green)' : 'var(--label-3)' }} />
-                  <span className="c2"><b style={{ fontWeight: 580 }}>{projectName(s.projectId)}</b>{s.worktree ? ` · ${t(s.worktree)}` : ''}</span>
+                  {/* EV201: where it works now (what it touches); its window's folder, if another, after it. */}
+                  <span className="c2"><b style={{ fontWeight: 580 }}>{projectName(s.workProjectId ?? s.projectId)}</b>{s.workProjectId ? t(' · ventana en {v0}', { v0: projectName(s.projectId) }) : s.worktree ? ` · ${t(s.worktree)}` : ''}</span>
                   <span className="c3">· {working ? t('trabajando') : s.rateLimited ? t('parada por el límite') : t('quieta')}{s.lastActivityAt ? `, ${ago(s.lastActivityAt, now)}` : ''}{/* The chat's name in quotes: bare, «· Recarga de créditos no detectada» read like a status of the account (13-11). */}{s.title ? t(' · chat «{v0}»', { v0: s.title.slice(0, 60) }) : ''}</span>
                   {!s.projectId && !(state.settings.declinedFolders ?? []).some((d) => d.toLowerCase() === s.cwd.toLowerCase()) && (
                     <button className="btn btn-sm btn-ghost" title={t('Mission Control empezará a seguir {cwd}: tareas, relevo, galería y ayudantes', { cwd: s.cwd })} onClick={() => void api('addProjectAt', s.cwd).then(() => toast(t('Añadido como proyecto: ya lo sigue Mission Control')), (e) => toast((e as Error).message))}>{t('+ Añadirlo como proyecto')}</button>
@@ -112,8 +115,8 @@ export function WhoWhere({ ids, bare }: { ids?: string[]; bare?: boolean } = {})
                     <span className="flex items-center gap-1 flex-wrap" title={t('Otra cuenta sigue este trabajo: recibe el último latido, las reservas y los cambios sin guardar; esta termina lo que tiene a medias y no empieza nada de eso')}>
                       <span className="c3">{t('que siga:')}</span>
                       {takers(a).map((x) => (
-                        <button key={x.id} className="btn btn-sm" disabled={x.out} onClick={() => { setGiving(undefined); handoff(a, s.projectId!, x.id) }} title={x.out ? t('Sin uso ahora') : x.free != null ? t('Le queda el {free} % de la semana', { free: x.free }) : undefined}>
-                          <span className="inline-block rounded-full" style={{ width: 8, height: 8, background: ACCOUNT_COLOR[x.id as any] }} /> {accName(x.id)}{x.out ? t(' · sin uso') : x.free != null ? ` · ${x.free} %` : ''}
+                        <button key={x.id} className="btn btn-sm" disabled={x.out} onClick={() => { setGiving(undefined); handoff(a, s.projectId!, x.id) }} title={x.out ? t('Sin uso ahora') : x.used != null ? t('Lleva usado el {used} % de la semana', { used: x.used }) : undefined}>
+                          <span className="inline-block rounded-full" style={{ width: 8, height: 8, background: ACCOUNT_COLOR[x.id as any] }} /> {accName(x.id)}{x.out ? t(' · sin uso') : x.used != null ? t(' · semana {used} % usado', { used: x.used }) : ''}
                         </button>
                       ))}
                       <button className="btn btn-sm btn-icon btn-ghost" onClick={() => setGiving(undefined)} aria-label={t('Cancelar')}><X size={12} /></button>

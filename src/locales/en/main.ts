@@ -518,4 +518,10 @@ export const main: Record<string, string> = {
   '· de fondo, sin ventana': '· in the background, no window',
   'Las conversaciones de tus Claude, como en un móvil: ábrelas para ver qué hacen, contestarles o darles trabajo. Arriba, lo que te espera.': 'Your Claudes\' conversations, like on a phone: open them to see what they do, answer them or give them work. At the top, what is waiting for you.',
   'Cuando un Claude trabaje, aparecerá aquí. Con «Nuevo chat» abres uno en el proyecto que elijas.': 'When a Claude works, it will show here. With «New chat» you open one on the project you choose.',
+  'Claude {n} está de baja': 'Claude {n} is gone',
+  'Claude {n} no tiene la sesión iniciada en este PC': 'Claude {n} is not signed in on this PC',
+  'la rueda de relevos tiene el turno en Claude {h}; Claude {n} la leerá cuando le toque': 'the relay wheel\'s turn is with Claude {h}; Claude {n} will read it when its turn comes',
+  'Abriendo a {who} para dársela…': 'Opening {who} to give it…',
+  'Claude {v0} ya está abierta para otra cosa del usuario; la leerá allí': 'Claude {v0} is already open for something else of the user\'s; it will read it there',
+  'Se abre Claude {v0} en {name} solo para tu nota: «{v1}»; al acabar se cerrará y seguirá parada': 'Claude {v0} opens on {name} only for your note: «{v1}»; when done it will close and stay stopped',
 }

@@ -446,4 +446,5 @@ export const corecore: Record<string, string> = {
   '{names} se quedaron': '{names} ran out',
   'queda 1 tarea abierta': '1 open task left',
   'quedan {n} tareas abiertas': '{n} open tasks left',
+  '{id} es la cuenta de reserva de otro proyecto': '{id} is the backup account of another project',
 }

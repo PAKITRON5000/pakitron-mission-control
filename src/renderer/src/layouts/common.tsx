@@ -29,6 +29,7 @@ import { Next } from '../screens/Next'
 import { Relays } from '../screens/Relays'
 import { Skills } from '../screens/Skills'
 import { Assistant } from '../screens/Assistant'
+import { Tour } from '../components/Tour'
 
 export const SCREENS: Record<Route, ComponentType> = {
   chats: Chats, inicio: Home, asistente: Assistant, decisiones: Decisions, relevos: Relays, skills: Skills, proximo: Next, agentes: Accounts,
@@ -214,6 +215,8 @@ export function Overlays({ dock = true }: { dock?: boolean }) {
       <ModelThumbnailer />
       {dock && <Dock />}
       <AssistantBubble />
+      {/* EV188: the guide of the app, the first time on a new install and from Ajustes. */}
+      <Tour />
       <AnimatePresence>
         {toastText && (
           <motion.div className="toast" style={{ x: '-50%' }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={SPRING} role="status">{toastText}</motion.div>

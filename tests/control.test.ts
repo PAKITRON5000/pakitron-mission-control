@@ -61,8 +61,9 @@ describe('mission control 0.8', async () => {
     addInstruction(db, { projectId: 'game', kind: 'general', body: 'El gorro del mago no me convence' })
     addInstruction(db, { projectId: 'game', kind: 'prioridad', body: 'Arregla el cierre del juego' })
     const text = coord.deliverPending(db, p, 'claude1')
-    expect(text).toContain('No son tu tarea principal ni te hacen parar')
-    expect(text).toContain('donde le toque')
+    // EV178: a note for everyone says so; each Claude judges whether it is its own, and when.
+    expect(text).toContain('para todos los Claude')
+    expect(text).toContain('decide tú si te toca, a quién y cuándo')
     expect(text).toContain('para hacer antes que lo demás')
     expect(text.indexOf('Arregla el cierre')).toBeLessThan(text.indexOf('El gorro del mago'))
   })
@@ -116,6 +117,16 @@ describe('mission control 0.8', async () => {
     expect(a.recent[1].text).toBe('Edita Hud.uss')
     expect(a.recent[2].text).toBe('Compila el juego')
     expect(a.lastMessage?.text).toBe('He terminado el HUD.')
+  })
+
+  it('EV201: what each conversation touches is kept by conversation, the folders its commands name too', () => {
+    const now = Date.now()
+    live.appendActivity('claude8', { ...live.describeHook({ hook_event_name: 'PreToolUse', session_id: 'a', tool_name: 'Bash', tool_input: { command: 'cd "B:\\VIDEO DOS" && python check.py', description: 'Comprueba los vídeos' } })!, at: now - 2000 })
+    live.appendActivity('claude8', { ...live.describeHook({ hook_event_name: 'PreToolUse', session_id: 'b', tool_name: 'Edit', tool_input: { file_path: 'C:/x/Hud.uss' } })!, at: now - 1000 })
+    const a = live.readActivity('claude8')
+    expect(a.touchesBySession?.a).toEqual([{ at: now - 2000, path: 'B:\\VIDEO DOS' }])
+    expect(a.touchesBySession?.b?.[0].path).toBe('C:/x/Hud.uss')
+    expect(a.recent[1].text).toBe('Comprueba los vídeos')
   })
 
   it('the CLI knows an added account by its folder', async () => {

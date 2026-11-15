@@ -22,10 +22,18 @@ const TYPES: Record<string, string> = {
 
 interface Saved { vapid?: { publicKey: string; privateKey: string }; subs: webpush.PushSubscription[] }
 
+/** EV197: what the phone's terminal is sent as it draws it (main/embedded.ts › PtyView). */
+export interface RemotePtyView { send(channel: string, ...args: unknown[]): void; isDestroyed(): boolean }
+
 export interface RemoteDeps {
   rootDir: string
   call: (method: string, args: unknown[]) => Promise<unknown>
   media: (req: Request) => Promise<Response>
+  /** EV197: the Claudes inside the app, drawn on the phone too: their screen now, then what they write (`/pty?id=…`). */
+  pty?: {
+    attach: (id: string, view: RemotePtyView) => Promise<unknown>
+    detach: (id: string, view: RemotePtyView) => void
+  }
 }
 
 export function createRemote(deps: RemoteDeps) {
@@ -33,6 +41,8 @@ export function createRemote(deps: RemoteDeps) {
   const load = (): Saved => { try { return { subs: [], ...JSON.parse(readFileSync(file(), 'utf8')) } } catch { return { subs: [] } } }
   const save = (s: Saved) => writeFileSync(file(), JSON.stringify(s))
   const listeners = new Set<ServerResponse>()
+  /** EV197: the phone's terminals open now (they get the same heartbeat as /events). */
+  const ptyStreams = new Set<ServerResponse>()
 
   const allowed = (req: IncomingMessage): boolean => {
     const host = String(req.headers.host ?? '').split(':')[0].toLowerCase()
@@ -60,6 +70,37 @@ export function createRemote(deps: RemoteDeps) {
         res.write('event: state\ndata: []\n\n')
         listeners.add(res)
         req.on('close', () => listeners.delete(res))
+        return
+      }
+      // EV197 (the user, 15-11 13:20: «en el móvil poder ver la pestaña de chats como la veo aquí en el pc, con los cmd»):
+      // one Claude inside the app, drawn on the phone: its screen as it is now («snap»), then each piece it writes
+      // («data») and its end («exit»), as the app's windows get them. Typing goes through /api (ptyInput, ptyKey…).
+      if (url.startsWith('/pty?') && req.method === 'GET' && deps.pty) {
+        const id = new URL(url, 'http://pmc').searchParams.get('id') ?? ''
+        if (!/^[a-z0-9]{4,40}$/i.test(id)) { res.writeHead(400); res.end(); return }
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
+        let gone = false
+        let ready = false
+        const early: string[] = []
+        const out = (event: string, data: unknown) => { if (gone) return; const s = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`; if (ready) res.write(s); else early.push(s) }
+        const view: RemotePtyView = {
+          send: (channel, ...args) => { if (channel === 'pmc:pty') out('data', args[1]); else if (channel === 'pmc:pty-exit') out('exit', args[1]); else if (channel === 'pmc:pty-size') out('size', [args[1], args[2]]) },
+          isDestroyed: () => gone
+        }
+        req.on('close', () => { gone = true; ptyStreams.delete(res); deps.pty?.detach(id, view) })
+        try {
+          const snap = await deps.pty.attach(id, view)
+          // Closed while its screen was being read: nobody to send it to, and it must not stay among the views.
+          if (gone) { deps.pty.detach(id, view); return }
+          res.write(`event: snap\ndata: ${JSON.stringify(snap)}\n\n`)
+          ready = true
+          for (const s of early) res.write(s)
+          early.length = 0
+          ptyStreams.add(res)
+        } catch (e) {
+          res.write(`event: fail\ndata: ${JSON.stringify((e as Error).message)}\n\n`)
+          res.end()
+        }
         return
       }
       if (url.startsWith('/api/') && req.method === 'POST') {
@@ -98,7 +139,7 @@ export function createRemote(deps: RemoteDeps) {
   })
 
   return {
-    start: () => { server.on('error', () => undefined); server.listen(REMOTE_PORT, '127.0.0.1'); setInterval(() => { for (const l of listeners) l.write(': latido\n\n') }, 25_000).unref() },
+    start: () => { server.on('error', () => undefined); server.listen(REMOTE_PORT, '127.0.0.1'); setInterval(() => { for (const l of listeners) l.write(': latido\n\n'); for (const l of ptyStreams) l.write(': latido\n\n') }, 25_000).unref() },
     emit: (channel: string, ...args: unknown[]) => { for (const l of listeners) l.write(`event: ${channel}\ndata: ${JSON.stringify(args)}\n\n`) },
 
     /** Where things stand, for the setup card: every step it can do by itself, it does. */

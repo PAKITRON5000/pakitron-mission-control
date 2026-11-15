@@ -187,5 +187,14 @@ export const pmc: Record<string, string> = {
   'Cerradas {n}': 'Closed {n}',
   'Corregido': 'Fixed',
   'sin uso': 'no usage',
-  'ninguno': 'none'
+  'ninguno': 'none',
+  '{note} (relevo de {from})': '{note} (taken over from {from})',
+  'relevo de {from}': 'taken over from {from}',
+  'También te paso sus turnos de {list}: si no los vas a usar, suéltalos con pmc recurso <nombre> --soltar.': 'Its turns of {list} are yours too: if you will not use them, free them with pmc recurso <name> --soltar.',
+  'Unity está abierto (míralo con pmc recursos antes de compilar)': 'Unity is open (check pmc recursos before building)',
+  'Blender está abierto': 'Blender is open',
+  'Premiere está abierto (con su conexión MCP)': 'Premiere is open (with its MCP connection)',
+  'el agente {name} ({what})': 'the agent {name} ({what})',
+  'la skill {name} ({what})': 'the skill {name} ({what})',
+  'Para esta tarea te puede servir: {list}. Úsalo si encaja; no gasta nada hasta que lo cargas.': 'For this task you may use: {list}. Use it if it fits; it costs nothing until you load it.',
 }

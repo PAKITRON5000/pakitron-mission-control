@@ -51,8 +51,10 @@ export function UsageRow({ label, w, capturedAt, now }: { label: string; w?: Usa
 export function AgentPanel({ a, index }: { a: AgentCard; index: number }) {
   const { now, setAgentOpen, state } = useStore()
   // The session in the project on screen comes first; another project's session is named as such.
-  const s = a.sessions.find((x) => x.projectId === state?.activeProjectId) ?? a.sessions[0]
-  const otherProject = s && s.projectId !== state?.activeProjectId ? state?.projects.find((p) => p.id === s.projectId)?.name ?? s.cwd.split(/[\\/]/).pop() : undefined
+  // EV201: where it works now (what it touches), else its window's folder.
+  const s = a.sessions.find((x) => (x.workProjectId ?? x.projectId) === state?.activeProjectId) ?? a.sessions[0]
+  const where = s ? s.workProjectId ?? s.projectId : undefined
+  const otherProject = s && where !== state?.activeProjectId ? state?.projects.find((p) => p.id === where)?.name ?? s.cwd.split(/[\\/]/).pop() : undefined
   const snap = a.usage.snapshot
   const lim = a.usage.activeLimit
   const task = a.assigned.find((t) => t.status === 'en-desarrollo') ?? a.assigned[0]

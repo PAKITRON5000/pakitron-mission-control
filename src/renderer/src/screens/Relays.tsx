@@ -7,7 +7,7 @@ import { useStore, useAsync } from '../lib/store'
 import { api, type AgentCard } from '../lib/api'
 import { Avatar, Segmented, SPRING, STATE_META, ACCOUNT_COLOR, accLabel, accName, ACCOUNT_NAME } from '../components/ui'
 import { ForecastLine } from '../components/ForecastLine'
-import { UsageBars, hhmm, usageView, leftColor } from '../components/ClaudeRing'
+import { UsageBars, hhmm, usageView, usedColor } from '../components/ClaudeRing'
 import { memberViews, nextInLine, type ChainMember, type MemberStatus, type RelayChain } from '../../../core/chain'
 import { whenFull } from '../lib/format'
 import { isSessionWorking } from '../../../core/working'
@@ -101,9 +101,10 @@ function Token({ id, pid, a, view, holder, first, last, onMove, onGive, onPause,
     <div className="flex items-center gap-2 t-small">
       <span className="c3 w-9 flex-none">{label}</span>
       <span className="relative flex-1 rounded-full" style={{ height: 6, background: 'var(--fill-2)' }}>
-        {v?.left != null && v.left > 0 && <span className="absolute left-0 top-0 bottom-0 rounded-full" style={{ width: `${Math.max(3, v.left)}%`, background: leftColor(v.left, ACCOUNT_COLOR[id as any]) }} />}
+        {/* EV175: what is used, as /usage draws it. */}
+        {v?.used != null && v.used > 0 && <span className="absolute left-0 top-0 bottom-0 rounded-full" style={{ width: `${Math.max(3, Math.min(100, v.used))}%`, background: usedColor(v.used, ACCOUNT_COLOR[id as any]) }} />}
       </span>
-      <span className="num w-11 text-right flex-none whitespace-nowrap" style={{ color: v?.left == null ? 'var(--label-3)' : leftColor(v.left, 'var(--label-2)'), fontWeight: 600 }}>{v?.out ? '0 %' : v?.left == null ? '—' : `${Math.round(v.left)} %`}</span>
+      <span className="num w-11 text-right flex-none whitespace-nowrap" style={{ color: v?.used == null ? 'var(--label-3)' : usedColor(v.used, 'var(--label-2)'), fontWeight: 600 }} title={t('Usado, como en /usage')}>{v?.out ? '100 %' : v?.used == null ? '—' : `${Math.round(v.used)} %`}</span>
     </div>
   )
   return (

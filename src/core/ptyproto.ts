@@ -85,7 +85,9 @@ export function decodeMsg<T extends { op: string }>(line: string): T | undefined
 
 /** The keys the app sends to a Claude (`chatKey`), as a terminal sends them. */
 export function keyBytes(key: string): string | undefined {
-  const k: Record<string, string> = { esc: '\x1b', enter: '\r', up: '\x1b[A', down: '\x1b[B', tab: '\t' }
+  // EV197: the phone's key bar adds Shift+Tab (Claude Code's modes), the side arrows and Backspace. Not Ctrl+C: two of
+  // them close Claude Code, too easy with a thumb.
+  const k: Record<string, string> = { esc: '\x1b', enter: '\r', up: '\x1b[A', down: '\x1b[B', left: '\x1b[D', right: '\x1b[C', tab: '\t', 'shift-tab': '\x1b[Z', backspace: '\x7f' }
   if (k[key]) return k[key]
   return /^[0-9a-z]$/i.test(key) ? key : undefined
 }

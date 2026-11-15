@@ -44,6 +44,40 @@ export interface StopInput {
   elsewhere?: { project: string; root: string; next: string[] }[]
   /** In a wheel's overlap, the one leaving: the turn is another's, it only finishes small things that do not touch hers. */
   outgoing?: boolean
+  /** EV126: a Claude said there is nothing left worth improving in this project (pmc terminado), and nothing new came since. */
+  done?: boolean
+  /** EV126: what the user wants then: rest, or go on in another project with work. */
+  whenDone?: WhenDone
+}
+
+/**
+ * EV126 (the user, 14-11 19:2x: «si claude considera que no tiene más que mejorar, que la app deje de intentar hacer que
+ * claude trabaje en modo autónomo, se le de a elegir al usuario si… empiece con otro o deje de trabajar»). A Claude that
+ * finds nothing more worth doing in a project says so with `pmc terminado "why"`; it holds until new work comes (a task,
+ * a note of the user's) or the user presses «Seguir mejorándolo».
+ */
+export type WhenDone = 'parar' | 'otro'
+export interface DoneMark { at: number; by: string; why: string }
+const doneFile = () => join(paths.root(), 'done.json')
+
+export function readDone(): Record<string, DoneMark> {
+  try { return JSON.parse(readFileSync(doneFile(), 'utf8')) } catch { return {} }
+}
+
+export function markDone(projectId: string, mark: DoneMark): void {
+  writeFileSync(doneFile(), JSON.stringify({ ...readDone(), [projectId]: mark }, null, 1))
+}
+
+export function clearDone(projectId: string): void {
+  const all = readDone()
+  if (!all[projectId]) return
+  delete all[projectId]
+  writeFileSync(doneFile(), JSON.stringify(all, null, 1))
+}
+
+/** Still done: marked, and no work came after it (a task or a note made later). */
+export function stillDone(mark: DoneMark | undefined, newestWorkAt: number | undefined): boolean {
+  return Boolean(mark) && (newestWorkAt == null || newestWorkAt <= mark!.at)
 }
 
 /**
@@ -77,9 +111,18 @@ export function keepGoing(i: StopInput): string | undefined {
   if (!i.next.length) {
     const here = i.project ? t('en {project}', { project: i.project }) : t('en este proyecto')
     const other = i.elsewhere?.[0]
+    // EV126: given up here as finished: it rests, or (the user's choice) goes where there is work.
+    if (i.done) {
+      if (i.whenDone !== 'otro' || !other) return undefined
+      return [
+        t('Mission Control, modo autónomo: {here} ya está dado por terminado y el usuario quiere que, entonces, sigas en otro proyecto.', { here }),
+        t('Pasa a {project} ({root}), donde te espera {list}; trabaja allí con rutas absolutas y las órdenes pmc desde su carpeta.', { project: other.project, root: other.root, list: other.next.slice(0, 3).join('; ') })
+      ].join(' ')
+    }
     return [
       t('Mission Control, modo autónomo: no te quedan tareas {here}, pero el usuario no quiere que nadie se quede parado.', { here }),
       t('Primero piensa qué se puede mejorar {here} (lo que falla, lo que falta, lo que el usuario pidió y no está, pruebas, rendimiento, lo que se ve) y apúntalo en docs/TASKS.md como tareas nuevas, cada una con «se da por buena cuando…»; reserva la primera (pmc claim) y empiézala ya.', { here }),
+      t('Si de verdad no queda nada que merezca la pena mejorar {here}, dilo con pmc terminado "por qué" y termina: Mission Control se lo enseña al usuario y deja de pedirte que sigas aquí.', { here }),
       other
         ? t('Solo si de verdad no hay nada que añadir, pasa a otro proyecto: {project} ({root}), donde te espera {list}; trabaja allí con rutas absolutas y las órdenes pmc desde su carpeta.', { project: other.project, root: other.root, list: other.next.slice(0, 3).join('; ') })
         : t('Solo si de verdad no hay nada que añadir ni otro proyecto con trabajo para ti, dilo en una línea en el relevo.')

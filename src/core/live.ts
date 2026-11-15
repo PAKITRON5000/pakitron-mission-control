@@ -49,6 +49,45 @@ export function toolCallsIn(folder: string, since: number, except: string): numb
 
 const short = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
 
+/**
+ * EV201 (the user, 15-11 15:28: «debería actualizarse también en lo que trabaja cada claude, el de una cuenta… está con IV
+ * CUATRO y en chats sigue poniendo mission control»): the absolute folders and files a shell command names (in quotes or
+ * not, Windows or Git Bash style), up to four. A Claude opened in one project's folder that works in another one says it
+ * this way (`cd "B:\VIDEO DOS"`, a script run there): only the paths are kept, never the command.
+ */
+export function commandPaths(cmd: string): string[] {
+  const out: string[] = []
+  const add = (p: string | undefined) => {
+    const c = (p ?? '').trim().replace(/[\\/]+$/, '')
+    if (c.length > 3 && c.length < 300 && out.length < 4 && !out.includes(c)) out.push(c)
+  }
+  const text = cmd.slice(0, 4000)
+  for (const m of text.matchAll(/"([A-Za-z]:[\\/][^"\r\n]*)"|'([A-Za-z]:[\\/][^'\r\n]*)'/g)) add(m[1] ?? m[2])
+  for (const m of text.matchAll(/(?<![\w"'\\/:.-])([A-Za-z]:[\\/][^\s"'|&;<>()]*)/g)) add(m[1])
+  // Git Bash: /c/Users/…, /b/VIDEO DOS/… (in quotes, with its spaces).
+  for (const m of text.matchAll(/"\/([a-zA-Z])\/([^"\r\n]*)"|'\/([a-zA-Z])\/([^'\r\n]*)'/g)) add(`${(m[1] ?? m[3]).toUpperCase()}:\\${(m[2] ?? m[4]).replace(/\//g, '\\')}`)
+  for (const m of text.matchAll(/(?<![\w"'\\/:.~-])\/([a-zA-Z])\/([^\s"'|&;<>()]+)/g)) add(`${m[1].toUpperCase()}:\\${m[2].replace(/\//g, '\\')}`)
+  return out
+}
+
+/**
+ * EV201: the project a conversation works in now, by what it touched lately (files it wrote or edited, folders its
+ * commands named): the most touched of its last six inside a project, the latest on a tie. Undefined when it touched
+ * nothing of a project in the last `withinMs`: then the folder its window was opened in says it, as until now.
+ */
+export function workingProjectOf(touches: { at: number; path: string }[] | undefined, projectOf: (path: string) => string | undefined, now = Date.now(), withinMs = 45 * 60_000): string | undefined {
+  const seen: string[] = []
+  for (const t of [...(touches ?? [])].sort((a, b) => b.at - a.at)) {
+    if (now - t.at > withinMs || seen.length >= 6) break
+    const id = projectOf(t.path)
+    if (id) seen.push(id)
+  }
+  if (!seen.length) return undefined
+  const count = new Map<string, number>()
+  for (const id of seen) count.set(id, (count.get(id) ?? 0) + 1)
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || seen.indexOf(a[0]) - seen.indexOf(b[0]))[0][0]
+}
+
 /** One line saying what a hook event means, in the user's words; undefined when it says nothing worth showing. */
 export function describeHook(data: any): (Activity & { message?: string }) | undefined {
   const at = Date.now()
@@ -60,7 +99,8 @@ export function describeHook(data: any): (Activity & { message?: string }) | und
     const tool = String(data?.tool_name ?? '')
     if (tool === 'Bash' || tool === 'PowerShell') {
       const d = typeof input.description === 'string' && input.description.trim() ? input.description.trim() : String(input.command ?? '').split(/\r?\n/)[0]
-      return d ? { ...base, text: short(d, 140) } : undefined
+      const paths = commandPaths(String(input.command ?? ''))
+      return d ? { ...base, text: short(d, 140), ...(paths.length ? { paths } : {}) } : undefined
     }
     if (file) return { ...base, text: `${tool === 'Write' ? 'Escribe' : 'Edita'} ${basename(String(file))}`, file: String(file) }
     return undefined
@@ -111,7 +151,17 @@ export function readActivity(account: AccountId, keep = 14): AccountActivity {
   for (const line of lines) {
     let a: Activity & { message?: string }
     try { a = JSON.parse(line) } catch { continue }
+    // EV201: what each conversation touched lately, newest first (workingProjectOf).
+    if (a.sessionId && (a.file || a.paths?.length)) {
+      const by = (out.touchesBySession ??= {})
+      const list = by[a.sessionId] ?? (Object.keys(by).length < 12 ? (by[a.sessionId] = []) : undefined)
+      for (const p of [a.file, ...(a.paths ?? [])]) if (p && list && list.length < 10) list.push({ at: a.at, path: p })
+    }
     if (a.event === 'Focus') {
+      if (a.sessionId) {
+        const by = (out.focusBySession ??= {})
+        if (!by[a.sessionId] && Object.keys(by).length < 12) by[a.sessionId] = { at: a.at, text: a.text }
+      }
       if (!out.focus) out.focus = { at: a.at, text: a.text, sessionId: a.sessionId }
       else if (out.focusHistory.length < 6 && out.focusHistory[out.focusHistory.length - 1]?.text !== a.text && out.focus.text !== a.text) out.focusHistory.push({ at: a.at, text: a.text })
       continue

@@ -15,7 +15,9 @@ export const STATUS: { s: TaskStatus; label: string; color: string; always?: boo
   { s: 'pendiente', get label() { return t('Por hacer') }, color: 'var(--gray)', always: true },
   { s: 'planificada', get label() { return t('Planificada') }, color: 'var(--teal)' },
   { s: 'en-desarrollo', get label() { return t('En curso') }, color: 'var(--accent)', always: true },
-  { s: 'bloqueada', get label() { return t('Bloqueada') }, color: 'var(--red)' },
+  // EV176 (the user, 14-11: «por qué hay tantas tareas bloqueadas»): 9 of 10 were done and installed, waiting to see a real
+  // event happen («Espera un hecho real»), in a red «Bloqueada» column. They wait (for the user or for something to happen).
+  { s: 'bloqueada', get label() { return t('En espera') }, color: 'var(--indigo)' },
   { s: 'pendiente-integracion', get label() { return t('Pendiente de integración') }, color: 'var(--orange)' },
   { s: 'en-pruebas', get label() { return t('En pruebas') }, color: 'var(--yellow)' },
   { s: 'revision', get label() { return t('Para revisar') }, color: 'var(--orange)', always: true },
@@ -61,11 +63,14 @@ export function verdict(task: Task): { label: string; color: string } | undefine
  * and whether that is something of the user's. 13-11, the user: «¿por qué hay algunas tareas bloqueadas en tareas?»: the
  * column said only «Bloqueada» and each card had to be opened to know.
  */
-export function waitingOn(task: Task): { text: string; yours: boolean } | undefined {
-  // What the app keeps has the notes without their asterisks: up to the end of the note's first sentence.
-  const m = /\*?\bBloquead[ao] \([^)]*\):\s*(.+?)(?:\.(?=\s|\*|$)|\*|$)/i.exec(`${task.title} ${task.detail ?? ''}`)
+export function waitingOn(task: Task): { text: string; yours: boolean; real?: boolean } | undefined {
+  // What the app keeps has the notes without their asterisks: up to the end of the note's first sentence. EV176: also
+  // «Espera un hecho real (…): …» and «Espera a que el usuario… (…)» (EV121), which said nothing on the card.
+  const m = /\*?\b(Bloquead[ao]|Espera un hecho real|Espera a que el usuario [^(]{3,80}?) \([^)]*\):\s*(.+?)(?:\.(?=\s|\*|$)|\*|$)/i.exec(`${task.title} ${task.detail ?? ''}`)
   if (!m) return undefined
-  const text = m[1].trim().replace(/\.$/, '')
+  const real = /hecho real/i.test(m[1])
+  if (real) return { text: t('Hecha e instalada; falta verla pasar de verdad: {v0}', { v0: m[2].trim().replace(/\.$/, '') }), yours: false, real }
+  const text = (/^bloquead/i.test(m[1]) ? m[2] : `${m[1]}: ${m[2]}`).trim().replace(/\.$/, '')
   const yours = /\bel usuario\b/i.test(text)
   // Said to him: «espera a que el usuario encienda…» → «que enciendas…», «dé la orden» → «des la orden», «lo pida» → «lo pidas».
   const said = yours ? text.replace(/^espera a /i, '').replace(/que el usuario ((?:lo|la|le|los|las|se|nos) )?([a-záéíóúñ]+)/i, (_, cl: string | undefined, v: string) => `que ${cl ?? ''}${v.endsWith('é') ? v.slice(0, -1) + 'es' : v + 's'}`).replace(/\bsu madre\b/g, 'tu madre') : text

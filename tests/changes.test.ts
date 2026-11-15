@@ -174,6 +174,22 @@ describe('al entregarla', () => {
     expect(view('A1').waitingLook).toBe(true)
   })
 
+  it('la nota de una tarjeta de la app se cierra al entregar la tarea con la que se apuntó en TASKS (IV20, 15-11)', () => {
+    db.prepare(`INSERT INTO tasks (project_id, key, title, detail, status, priority, owner, source, gone, created_at, updated_at)
+      VALUES (?, 'app:abc123', 'Hacer limpieza', 'Hacer limpieza de los vídeos', 'pendiente', 2, 'claude5', 'app', 0, 1, 1)`).run(P)
+    task('IV20', 'claude5')
+    db.prepare("UPDATE tasks SET detail = '(app:abc123, MC-243; usuario: limpieza) hecho' WHERE ext_id = 'IV20'").run()
+    const c = askChange(db, { projectId: P, taskKey: 'app:abc123', note: 'haz solo esta tarea', target: 'claude5' })
+    read(c.instructionId!)
+    expect(finishChange(db, P, 'A1')).toBe(0)
+    expect(finishChange(db, P, 'IV20')).toBe(1)
+    expect(db.prepare('SELECT status FROM task_changes WHERE id = ?').get(c.id)).toEqual({ status: 'hecho' })
+    // And with the card's own key.
+    const d = askChange(db, { projectId: P, taskKey: 'app:abc123', note: 'otra vez', target: 'claude5' })
+    read(d.instructionId!)
+    expect(finishChange(db, P, 'app:abc123')).toBe(1)
+  })
+
   it('con tu visto bueno se acaba', () => {
     const c = ask()
     read(c.instructionId!)

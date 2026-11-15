@@ -31,6 +31,8 @@ export interface RelayInput {
   wantsFable: boolean
   /** Accounts the user marked as out of Fable (Claude Code does not report the limit of each model). */
   noFable: string[]
+  /** Settings › reserves: an account kept as another project's backup is not handed anyone's work here (MC-276). */
+  reserves?: { account: string; projectId: string; on: boolean }[]
 }
 
 export type RelayChoice = { to: AccountId; fable: boolean; why: string } | { to?: undefined; why: string }
@@ -46,6 +48,9 @@ export function pickSuccessor(i: RelayInput): RelayChoice {
     if (a.id === i.from) return false
     const s = i.status[a.id]
     if (s) { out.push(`${a.id} ${s === 'baja' ? t('de baja') : t('apartada')}`); return false }
+    // MC-276 (the user, 15-11 03:12, of Claude 5, the backup of another project: «seguir estando parada cuando termines la
+    // tarea… no deberías entrar en el relevo»; at 04:30 it was handed Claude 1's work all the same).
+    if ((i.reserves ?? []).some((r) => r.on && r.account === a.id && r.projectId !== i.projectId)) { out.push(t('{id} es la cuenta de reserva de otro proyecto', { id: a.id })); return false }
     if (a.state === 'sin-uso') { out.push(t('{id} sin uso', { id: a.id })); return false }
     if (a.state === 'desconectado') { out.push(t('{id} sin sesión iniciada', { id: a.id })); return false }
     if (a.weekFree != null && a.weekFree < MIN_WEEK_FREE) { out.push(t('{id} con el {pct} % de la semana', { id: a.id, pct: a.weekFree })); return false }

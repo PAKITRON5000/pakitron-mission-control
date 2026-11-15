@@ -106,6 +106,8 @@ describe('ptyproto', () => {
     expect(keyBytes('esc')).toBe('\x1b')
     expect(keyBytes('enter')).toBe('\r')
     expect(keyBytes('2')).toBe('2')
+    expect(keyBytes('shift-tab')).toBe('\x1b[Z')
+    expect(keyBytes('ctrl-c')).toBeUndefined()
     expect(keyBytes('borrar todo')).toBeUndefined()
     expect(typedLine('  hola\r\n  mundo ')).toBe('hola mundo')
   })

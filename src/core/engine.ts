@@ -163,7 +163,7 @@ export function addAppTask(db: DB, projectId: string, t: { title: string; detail
 }
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
-  idea: 'Ideas', pendiente: 'Pendiente', planificada: 'Planificada', 'en-desarrollo': 'En desarrollo', bloqueada: 'Bloqueada',
+  idea: 'Ideas', pendiente: 'Pendiente', planificada: 'Planificada', 'en-desarrollo': 'En desarrollo', bloqueada: 'En espera',
   'pendiente-integracion': 'Pendiente de integración', 'en-pruebas': 'En pruebas', revision: 'Pendiente de tu revisión', terminada: 'Terminada'
 }
 

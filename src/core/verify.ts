@@ -113,8 +113,9 @@ export function runVerification(db: DB, project: ProjectConfig, copyRoot: string
     }
     const t0 = Date.now()
     let r: ReturnType<Runner>
-    try { r = run(c.orden, copyRoot, (c.minutos ?? 30) * 60_000) } catch (e) { r = { code: -1, output: String((e as Error).message), timedOut: false } }
-    if (c.recurso) freeResource(db, c.recurso, account, now)
+    // MC-273 (claude1, 15-11 03:55: the night's routine ended its tests at 03:45 and Unity stayed «its» until 04:59): the
+    // resource is let go whatever happens to the check.
+    try { r = run(c.orden, copyRoot, (c.minutos ?? 30) * 60_000) } catch (e) { r = { code: -1, output: String((e as Error).message), timedOut: false } } finally { if (c.recurso) freeResource(db, c.recurso, account, Date.now()) }
     const log = join(logDir, `${now}-${c.nombre.replace(/[^\w.-]+/g, '_')}.log`)
     try { writeFileSync(log, `$ ${c.orden}\n(en ${copyRoot})\n\n${r.output}`) } catch { /* the result still counts */ }
     const j = judge(c, r)

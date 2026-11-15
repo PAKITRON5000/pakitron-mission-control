@@ -8,7 +8,7 @@ import { whenFull } from '../lib/format'
 
 interface SkillInfo { name: string; description: string; scope: 'proyecto' | 'cuenta' | 'plugin'; accounts: string[]; projects: string[]; dir: string; source?: string; updatedAt?: number }
 interface Found { id: string; skill: string; source: string; installs: number; url?: string; term: string; description?: string }
-interface SkillsView { es: Record<string, string>; installed: SkillInfo[]; uses: Record<string, number>; usesEverywhere?: Record<string, number>; countedEverywhere?: boolean; aside?: string[]; onlyIn?: Record<string, string>; moved?: { name: string; projectId: string; at: number }[]; usesAt?: number; kinds: string[]; summary?: string; terms: string[]; suggestions: Found[]; searchedAt?: number }
+interface SkillsView { es: Record<string, string>; installed: SkillInfo[]; uses: Record<string, number>; usesEverywhere?: Record<string, number>; countedEverywhere?: boolean; aside?: string[]; onlyIn?: Record<string, string>; moved?: { name: string; projectId: string; at: number }[]; usesAt?: number; kinds: string[]; summary?: string; terms: string[]; suggestions: Found[]; searchedAt?: number; gapTerms?: string[]; hinted?: Record<string, { given: number; used: number }> }
 
 const err = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 const fmt = (n: number) => (n >= 1000 ? t('{v0} mil', { v0: (n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace('.', ',') }) : String(n))
@@ -107,7 +107,7 @@ export function Skills() {
             <Search size={13} /> {busy === 'buscar' ? t('Buscando en skills.sh… (1-2 min)') : data?.searchedAt ? t('Buscar otra vez') : t('Buscar sugerencias')}
           </button>
         </div>
-        <div className="t-small c3">{t('Busca en skills.sh por')} {data?.terms.length ? data.terms.map((t) => `«${t}»`).join(', ') : t('lo que es el proyecto')} {t('y solo propone las de más de mil instalaciones que aún no tienes.{v0}', { v0: data?.searchedAt ? t(' Última búsqueda: {v0}.', { v0: whenFull(data.searchedAt, Date.now()) }) : '' })}</div>
+        <div className="t-small c3">{t('Busca en skills.sh por')} {data?.terms.length || data?.gapTerms?.length ? [...(data?.terms ?? []), ...(data?.gapTerms ?? [])].map((t) => `«${t}»`).join(', ') : t('lo que es el proyecto')} {t('y solo propone las de más de mil instalaciones que aún no tienes.{v0}', { v0: data?.searchedAt ? t(' Última búsqueda: {v0}.', { v0: whenFull(data.searchedAt, Date.now()) }) : '' })}</div>
         {data?.suggestions.length ? (
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {data.suggestions.map((f) => (
@@ -153,6 +153,8 @@ export function Skills() {
                 {uses(s.name) > 0 ? <span className="t-small" style={{ color: 'var(--green)' }}>{t('usada {v0} {v1} aquí', { v0: uses(s.name), v1: uses(s.name) === 1 ? t('vez') : t('veces') })}</span> : <span className="t-small c3">{t('sin usar aquí')}</span>}
               </div>
               <div className="t-small c2 clamp-2" title={s.description}>{say(s.name, s.description) || t('Sin descripción')}</div>
+              {/* EV191: how often pmc claim suggested it to a Claude, and how often it was then loaded (after 5 unused, no more). */}
+              {data?.hinted?.[s.name] && <div className="t-small c3 mt-0.5">{t('Sugerida a los Claude {given} {v0} · la cargaron {used}{v1}', { given: data.hinted[s.name].given, v0: data.hinted[s.name].given === 1 ? t('vez') : t('veces'), used: data.hinted[s.name].used, v1: data.hinted[s.name].given >= 5 && !data.hinted[s.name].used ? t(' (ya no se sugiere)') : '' })}</div>}
               {/* EV119: where it came from (skills.sh's registry) and how old it is; a skill with no known origin, said. */}
               {s.scope === 'cuenta' && <div className="t-small mt-0.5" style={{ color: s.source ? 'var(--label-3)' : 'var(--orange)' }}>{s.source ? <>{t('De {source}', { source: s.source })}{s.updatedAt ? <> {t('· puesta al día {v0}{v1}', { v0: new Date(s.updatedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }), v1: Date.now() - s.updatedAt > 30 * 86400_000 ? t(' (hace más de un mes)') : '' })}</> : null}</> : t('Sin procedencia apuntada: mira su texto antes de seguir usándola')}</div>}
               {s.scope !== 'proyecto' && (

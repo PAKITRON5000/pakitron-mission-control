@@ -12,7 +12,7 @@ import { nodeRunner, shimReady } from './shim'
 import { addEvent, type DB } from './db'
 import { KIND_LABEL, setCommentStatus } from './review'
 import { openChangesFor, REVIEW_PREFIX, takeChange } from './changes'
-import { confirmTyped } from './notes'
+import { confirmTyped, forAllText, markForAll, notesForAll, parkedAccount, type ForAllNote } from './notes'
 
 export const LEASE_MS = 2 * 3600_000
 
@@ -665,8 +665,12 @@ export function deliverPending(db: DB, project: ProjectConfig, account: AccountI
   expireStaleRelays(db, now)
   // EV154: what was typed into its window it already has, as the user's message: read, and not said twice.
   try { confirmTyped(db, project.id, account, now) } catch { /* never block */ }
-  const ins = pendingInstructions(db, project.id, account)
-  if (!ins.length) return ''
+  // EV178: notes for everyone reach every Claude at work, wherever it is, each once.
+  let all: ForAllNote[] = []
+  try { all = notesForAll(db, account, now, project.id) } catch { /* never block */ }
+  const ins = pendingInstructions(db, project.id, account).filter((i) => !all.some((n) => n.id === i.id))
+  if (all.length) markForAll(db, all, account, 'hook PostToolUse', now)
+  if (!ins.length) return forAllText(project.id, all).join('\n')
   const mark = db.prepare("UPDATE instructions SET status = 'recibida', channel = COALESCE(channel, 'durante la sesión'), delivered_at = COALESCE(delivered_at, ?), updated_at = ? WHERE id = ?")
   for (const i of ins) {
     mark.run(now, now, i.id)
@@ -674,14 +678,17 @@ export function deliverPending(db: DB, project: ProjectConfig, account: AccountI
     addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: t('Claude {v0} ha recibido: «{v1}»', { v0: account.slice(6), v1: i.body.slice(0, 100) }), source: 'hook PostToolUse', ref: `ins:${i.id}` })
   }
   const back = commentsReached(db, ins, pmcCommand())
-  return [...notesText(project.name, ins, true), ...(back ? [back] : [])].join('\n')
+  return [...notesText(project.name, ins, true), ...(back ? [back] : []), ...forAllText(project.id, all)].join('\n')
 }
 
 /** Text added to a session's context at start, and the instructions marked as received (they reached the agent). */
 export function sessionContext(db: DB, project: ProjectConfig, account: AccountId, now = Date.now()): string {
   // What it read in an earlier session and has not done yet: a note is delivered once, so this keeps it from being forgotten.
   const stillOpen = openChangesFor(db, project.id, account).filter((c) => c.readAt)
-  const ins = pendingInstructions(db, project.id, account)
+  // EV178: notes for everyone, from any project, that this account has not had yet.
+  let forAll: ForAllNote[] = []
+  try { forAll = notesForAll(db, account, now, project.id) } catch { /* an old database: none */ }
+  const ins = pendingInstructions(db, project.id, account).filter((i) => !forAll.some((n) => n.id === i.id))
   const mine = listClaims(db, project.id, now).filter((c) => c.account === account && !c.abandoned)
   const others = listClaims(db, project.id, now).filter((c) => c.account !== account && !c.abandoned)
   const out: string[] = []
@@ -708,6 +715,10 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
       addEvent(db, { projectId: project.id, at: now, account, kind: 'recibida', title: t('Claude {v0} ha recibido: «{v1}»', { v0: account.slice(6), v1: i.body.slice(0, 100) }), source: 'hook SessionStart', ref: `ins:${i.id}` })
     }
   }
+  if (forAll.length) {
+    out.push(...forAllText(project.id, forAll))
+    markForAll(db, forAll, account, 'hook SessionStart', now)
+  }
   if (stillOpen.length) {
     out.push(tr('Mission Control: cambios que el usuario pidió al revisar y siguen sin hacer en {project}. Van antes que las tareas nuevas; al acabar cada uno, pmc entrega <ID> --que … --mirar … --foto … para que vuelva a «Para revisar»:', { project: project.name }))
     // EV75: the start of each note (the whole one is in pmc tarea <ID>), at most 10: they were 5.000 characters in the game project.
@@ -724,6 +735,8 @@ export function sessionContext(db: DB, project: ProjectConfig, account: AccountI
   const team = teamContext(account, now, undefined, project.id)
   if (team) opt((out.length ? '' : 'Mission Control: ') + team, 2)
   if (mine.length) out.push(tr('Tienes reservadas: {list}.', { list: mine.map((c) => c.taskKey).join(', ') }))
+  // EV182 (MC-276): set aside or kept for another project, it is not offered the queue: what the user asks, and stop.
+  else if (parkedAccount(db, account, project.id)) out.push(tr('Tu cuenta está apartada para lo demás: haz solo lo que el usuario te pida o te haya escrito y luego para; no cojas tareas de la cola ni entres en la rueda de relevos.'))
   else {
     // EV37: «sigue» starts on the right task without first running pmc parte and pmc next to find it.
     const next = nextTasks(db, project.id, account, 3, now).filter((t) => !t.change)

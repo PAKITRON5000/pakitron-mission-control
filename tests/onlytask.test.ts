@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from '../src/core/db'
 import { claimTask, releaseTask } from '../src/core/coord'
 import { isStopPrompt } from '../src/core/autonomy'
-import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskPrompt, ONLY_TASK_MS, reopenForAnswer } from '../src/core/onlytask'
+import { answerPrompt, endedTurnSince, notePrompt, onlyTaskFinished, onlyTaskPrompt, ONLY_TASK_MS, reopenForAnswer } from '../src/core/onlytask'
 
 const P = 'iv'
 let db: DB
@@ -75,5 +75,22 @@ describe('contestar a un Claude que se cerró tras su tarea (EV160)', () => {
     expect(endedTurnSince([{ at: 900, event: 'Stop' }], 1000)).toBe(false)
     expect(endedTurnSince([{ at: 3000, event: 'PreToolUse' }], 1000)).toBe(false)
     expect(endedTurnSince([{ at: 9000, event: 'Stop' }], 1000)).toBe(true)
+  })
+})
+
+describe('abierta solo para una nota del usuario (EV182)', () => {
+  it('lleva la nota con su marca, prohíbe otras tareas, sin caracteres que rompan la orden, y termina en parar', () => {
+    const s = notePrompt({ projectName: 'Mission Control', id: 275, body: 'si te escribo "directamente" & estás apartada\r\nactívate 100%' })
+    expect(s).toContain('(MC-275)')
+    expect(s).toContain('estás apartada actívate')
+    expect(s).toContain('No cojas ninguna otra tarea')
+    expect(s).not.toMatch(/["%&\r\n]/)
+    expect(isStopPrompt(s)).toBe(true)
+  })
+
+  it('una nota muy larga se corta y dice dónde está entera', () => {
+    const s = notePrompt({ projectName: 'MC', id: 1, body: 'palabra '.repeat(400) })
+    expect(s.length).toBeLessThan(2400)
+    expect(s).toContain('entera, en lo que te llega al empezar')
   })
 })

@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { GitBranch, FileText, FolderOpen, RotateCcw, Check, Send, Copy, Plus, HardDriveDownload, ShieldCheck, Terminal, ChevronRight, Trash2, UserPlus } from 'lucide-react'
 import { NoticeSettings, PhoneSetup } from '../components/PhoneSetup'
 import { MemoryBox } from '../components/MemoryBox'
+import { AfterRestart } from '../components/AfterRestart'
+import { startTour } from '../components/Tour'
 import { RequestsBox, type UserRequest } from '../components/RequestsBox'
 import { NewProject, ProjectBrain } from '../components/ProjectBrain'
 import { useStore, useAsync } from '../lib/store'
@@ -98,8 +100,21 @@ export function Reviews() {
   const [tab, setTab] = useState<'abiertos' | 'instrucciones' | 'cerrados'>('abiertos')
   const comments = useAsync(() => (pid ? api<Comment[]>('comments', pid) : Promise.resolve([])), [pid, state?.now])
   const ins = useAsync(() => (pid ? api<Instruction[]>('instructions', pid) : Promise.resolve([])), [pid, state?.now])
+  // 14-11 (the user: «no entiendo bien qué revisar en cada cosa»): what each one is waiting for, in words, the ones to
+  // look at first, and what the Claude did under what was asked (it was only in the history, and «esperando-revision»
+  // said nothing).
+  const ORDER: Record<string, number> = { 'esperando-revision': 0, corregido: 0, reabierto: 1, 'en-correccion': 2, recibido: 2, pendiente: 3 }
   const open = (comments.data ?? []).filter((c) => c.status !== 'aprobado')
+    .sort((a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9) || b.updatedAt - a.updatedAt)
   const closed = (comments.data ?? []).filter((c) => c.status === 'aprobado')
+  const toLook = open.filter((c) => ORDER[c.status] === 0).length
+  const S: Record<string, [string, string]> = {
+    pendiente: [t('Aún no lo ha leído ningún Claude'), 'var(--label-3)'], recibido: [t('Lo tiene un Claude'), 'var(--teal)'], 'en-correccion': [t('Un Claude lo está arreglando'), 'var(--teal)'],
+    corregido: [t('Arreglado: te toca mirarlo'), 'var(--orange)'], 'esperando-revision': [t('Arreglado: te toca mirarlo'), 'var(--orange)'],
+    reabierto: [t('Lo reabriste: sigue pendiente'), 'var(--red)'], aprobado: [t('Aprobado'), 'var(--green)']
+  }
+  /** What the Claude said it did, the last time it gave it back to be looked at. */
+  const done = (c: Comment) => [...(c.history ?? [])].reverse().find((h) => h.note && (h.status === 'esperando-revision' || h.status === 'corregido'))
   const deliver = (id: number) => api<Instruction>('deliverInstruction', pid, id).then((r) => { ins.reload(); toast(r.status === 'entregada' ? t('Escrito en el Buzón') : r.error ?? t('No se pudo')) }, (e: Error) => toast(e.message))
   const D: Record<string, [string, string]> = {
     guardada: [t('Guardada'), 'var(--label-3)'], 'pendiente-entrega': [t('Pendiente de entrega'), 'var(--orange)'], entregada: [t('En el Buzón'), 'var(--accent)'],
@@ -118,25 +133,39 @@ export function Reviews() {
       <div className="card-flat px-4 py-3 mb-4 t-small c2 flex items-center gap-3">
         <ShieldCheck size={16} className="c3 flex-none" />
         <span>{Object.values(state?.hooks ?? {}).some(Boolean)
-          ? t('Tus notas les llegan solas a los Claude de este proyecto (al empezar o en su siguiente paso): entonces pasan a «recibido». Cuando uno la arregla, vuelve aquí como «esperando revisión» para que la apruebes o la reabras.')
+          ? t('Tus comentarios les llegan solos a los Claude de este proyecto: entonces pasan a «Lo tiene un Claude». Cuando uno lo arregla, vuelve aquí como «Arreglado: te toca mirarlo», con lo que cambió, para que digas si está bien.')
           : t('Sin la coordinación activada en ninguna cuenta, tus notas se guardan aquí y puedes copiarlas. Actívala en Ajustes › Cuentas para que les lleguen solas.')}</span>
       </div>
+      {tab === 'abiertos' && toLook > 0 && (
+        <div className="t-small c2 mb-3">{tn(toLook, 'Hay {n} que un Claude dio por arreglado: lee debajo de tu comentario qué cambió, ábrelo (sale como está ahora) y pulsa «Está bien» o «Sigue mal».', 'Hay {n} que un Claude dio por arreglados: lee debajo de cada comentario qué cambió, ábrelo (sale como está ahora) y pulsa «Está bien» o «Sigue mal».')}</div>
+      )}
       {tab !== 'instrucciones' && (
         <div className="flex flex-col gap-2">
-          {(tab === 'abiertos' ? open : closed).map((c) => (
-            <div key={c.id} className="group p-4 flex gap-4">
-              {c.assetId && <button className="tile w-28 aspect-[4/3] flex-none p-0 border-0" onClick={() => setViewer(c.assetId)}><img src={media(`thumb/${c.assetId}?s=300`)} alt="" /></button>}
-              <div className="min-w-0 flex-1">
-                <div className="t-small c3">{c.status} · {ago(c.createdAt)}{c.target ? t(' · para {v0}', { v0: accName(c.target) }) : ''}{c.timeSec != null ? t(' · segundo {s}', { s: c.timeSec.toFixed(2) }) : ''}</div>
-                <div className="t-body mt-1 selectable">{c.body}</div>
-                <div className="flex gap-1.5 mt-2">
-                  <button className="btn btn-sm" onClick={() => c.assetId && setViewer(c.assetId)}>{t('Abrir')}</button>
-                  {c.status !== 'aprobado' && <button className="btn btn-sm" onClick={() => api('setCommentStatus', c.id, 'aprobado').then(() => comments.reload())}><Check size={12} /> {t('Aprobar')}</button>}
-                  {c.status === 'aprobado' && <button className="btn btn-sm" onClick={() => api('setCommentStatus', c.id, 'reabierto').then(() => comments.reload())}><RotateCcw size={12} /> {t('Reabrir')}</button>}
+          {(tab === 'abiertos' ? open : closed).map((c) => {
+            const [label, color] = S[c.status] ?? [c.status, 'var(--label-3)']
+            const fix = done(c)
+            const by = fix?.note?.match(/^(claude\d+):\s*/)
+            return (
+              <div key={c.id} className="group p-4 flex gap-4">
+                {c.assetId && <button className="tile w-28 aspect-[4/3] flex-none p-0 border-0" onClick={() => setViewer(c.assetId)}><img src={media(`thumb/${c.assetId}?s=300`)} alt="" /></button>}
+                <div className="min-w-0 flex-1">
+                  <div className="t-small c3"><b style={{ color, fontWeight: 600 }}>{label}</b> · {t('lo escribiste {v0}', { v0: ago(c.createdAt) })}{c.target ? t(' · para {v0}', { v0: accName(c.target) }) : ''}{c.timeSec != null ? t(' · segundo {s}', { s: c.timeSec.toFixed(2) }) : ''}</div>
+                  <div className="t-body mt-1 selectable">{c.body}</div>
+                  {fix && (
+                    <div className="t-small c2 mt-2 rounded-lg px-3 py-2 selectable" style={{ background: 'var(--fill)' }}>
+                      <b>{by ? t('Lo que hizo {v0}', { v0: accName(by[1] as AccountId) }) : t('Lo que se hizo')}</b>{t(' ({v0}): ', { v0: ago(fix.at) })}{by ? fix.note!.slice(by[0].length) : fix.note}
+                    </div>
+                  )}
+                  <div className="flex gap-1.5 mt-2">
+                    {c.assetId && <button className="btn btn-sm" onClick={() => setViewer(c.assetId)}>{t('Abrir')}</button>}
+                    {c.status !== 'aprobado' && <button className="btn btn-sm" onClick={() => api('setCommentStatus', c.id, 'aprobado').then(() => comments.reload())}><Check size={12} /> {ORDER[c.status] === 0 ? t('Está bien') : t('Aprobar')}</button>}
+                    {ORDER[c.status] === 0 && <button className="btn btn-sm" onClick={() => api('setCommentStatus', c.id, 'reabierto').then(() => comments.reload())}><RotateCcw size={12} /> {t('Sigue mal')}</button>}
+                    {c.status === 'aprobado' && <button className="btn btn-sm" onClick={() => api('setCommentStatus', c.id, 'reabierto').then(() => comments.reload())}><RotateCcw size={12} /> {t('Reabrir')}</button>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
           {(tab === 'abiertos' ? open : closed).length === 0 && <Empty title={tab === 'abiertos' ? t('Nada pendiente de revisar') : t('Aún no has aprobado nada')} text={t('Los comentarios se dejan desde el visor de la galería: pulsa sobre la imagen o en el segundo del vídeo.')} />}
         </div>
       )}
@@ -774,8 +803,12 @@ export function SettingsScreen() {
         <div className="group p-5 flex flex-col gap-4">
           <div className="flex items-center gap-4 flex-wrap"><span className="w-44 c2">{t('Si nadie contesta un «1. Yes / 2. No»')}</span><Segmented value={state.settings.awayPolicy ?? 'todo'} onChange={(v) => set({ awayPolicy: v })} options={[{ value: 'todo', label: t('Pulsar 1 (sí)') }, { value: 'seguro', label: t('Sí, menos lo arriesgado') }, { value: 'esperar', label: t('Esperarme') }]} /><span className="c3 t-small">{t('a los')}</span><Segmented value={String(state.settings.awayMinutes ?? 3)} onChange={(v) => set({ awayMinutes: Number(v) })} options={[{ value: '1', label: t('1 min') }, { value: '3', label: t('3 min') }, { value: '10', label: t('10 min') }]} /></div>
           <div className="flex items-center gap-4"><span className="w-44 c2">{t('Reducir movimiento')}</span><Segmented value={state.settings.reduceMotion} onChange={(v) => set({ reduceMotion: v })} options={[{ value: 'system', label: t('Como el sistema') }, { value: 'on', label: t('Sí') }, { value: 'off', label: t('No') }]} /></div>
+          {/* EV188: the guide of the app, again. */}
+          <div className="flex items-center gap-4 flex-wrap"><span className="w-44 c2">{t('Guía de la app')}</span><button className="btn btn-sm" onClick={startTour}>{t('Ver la guía')}</button><span className="t-small c3">{t('Un minuto, pantalla a pantalla: qué es cada parte')}</span></div>
         </div>
       </section>
+      {/* EV189: after a restart of the PC, the Claudes go back to work by themselves. */}
+      <AfterRestart />
       </>)}
       {tab === 'cuentas' && (<>
       <section className="mb-8">

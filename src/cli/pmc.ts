@@ -45,7 +45,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.34.1'
+const VERSION = '0.34.17'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -184,6 +184,14 @@ async function hook(accountArg?: string): Promise<void> {
       const act = describeHook(data)
       if (act) appendActivity(account, act)
     } catch { /* never block */ }
+    // EV191 step 3: a skill or agent loaded, to know which suggestions serve (only for those two tools: one line).
+    if (data.tool_name === 'Skill' || data.tool_name === 'Agent' || data.tool_name === 'Task') {
+      try {
+        const g = await import('../core/skillgaps')
+        const name = g.usedHelper(data)
+        if (name) g.appendHint({ kind: 'usada', at: Date.now(), account, name })
+      } catch { /* never block */ }
+    }
     // Before (PreToolUse) or right after (PostToolUse) a tool: if another account took over this one's work, say it first.
     if (data.hook_event_name === 'PreToolUse' || data.hook_event_name === 'PostToolUse') {
       await loadLang() // before anything that may be said (the notice, the turn, the guards)
@@ -485,6 +493,29 @@ async function moveSkillsCmd(cmd: string, args: string[]): Promise<void> {
 }
 
 /** pmc recuerda "texto" [--regla|--preferencia|--dato]: saves something the project must not forget (Mission Control › Memoria). */
+/**
+ * EV126: pmc terminado "why": this Claude finds nothing left worth improving in this project. Autonomous mode stops pushing
+ * it here (core/autonomy.ts › keepGoing) until new work comes; the user sees it and chooses what happens then.
+ */
+async function finishedCmd(args: string[]): Promise<void> {
+  const say = (s: string) => process.stdout.write(s + '\n')
+  const why = args.join(' ').trim()
+  await loadLang()
+  if (!why) { say(t('Uso: pmc terminado "por qué no queda nada que merezca la pena mejorar aquí"')); process.exitCode = 2; return }
+  const { db, projectOf } = await openShared()
+  try {
+    const project = projectOf(process.cwd())
+    if (!project) { say(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.')); process.exitCode = 2; return }
+    const account = accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR) ?? 'claude'
+    const { markDone } = await import('../core/autonomy')
+    const { addEvent } = await import('../core/db')
+    const now = Date.now()
+    markDone(project.id, { at: now, by: account, why: why.slice(0, 400) })
+    addEvent(db, { projectId: project.id, at: now, account: account as AccountId, kind: 'proyecto', title: t('{who} da {project} por terminado: «{why}»', { who: account.replace(/^claude/, 'Claude '), project: project.name, why: why.slice(0, 160) }), detail: t('El modo autónomo deja de pedirle que siga aquí hasta que haya trabajo nuevo.'), source: 'pmc' })
+    say(t('Apuntado: {project} queda por terminado. Mission Control se lo enseña al usuario y el modo autónomo deja de pedirte que sigas aquí hasta que haya trabajo nuevo. Guarda lo tuyo (pmc guarda) y termina.', { project: project.name }))
+  } finally { db.close() }
+}
+
 async function rememberCmd(args: string[]): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
   const kind = args.includes('--regla') ? 'regla' : args.includes('--preferencia') ? 'preferencia' : 'dato'
@@ -597,6 +628,12 @@ async function coordinate(event: string, account: AccountId, cwd?: string, data?
         }
         // EV159: opened for one task only: it stops when it is done, autonomous mode or wheel or not.
         try { const { onlyTaskOf } = await import('../core/onlytask'); if (onlyTaskOf(account)) on = false } catch { /* as before */ }
+        // EV182 (MC-276): an account set aside, or kept as another project's backup, stops when it has done what the user
+        // asked it (13-11 on: Claude 5, opened by hand in Mission Control, was kept going with the queue). Not when it holds
+        // a wheel's turn: the user put it in that wheel.
+        if (on && !wheelProject && !(turn.inWheel && turn.mine)) {
+          try { const { parkedAccount } = await import('../core/notes'); if (parkedAccount(db, account, cwd ? projectOf(cwd)?.id : undefined)) on = false } catch { /* as before */ }
+        }
         // EV146: never kept going on an account that pays per use (no limit would cut it: it would spend until its credit ends).
         try { const { autonomyFor } = await import('../core/autonomy'); if (on && !autonomyFor(planOf(readLogins()[account]))) on = false } catch { /* as before */ }
         const { loadProjects } = await import('../core/projects')
@@ -628,7 +665,22 @@ async function coordinate(event: string, account: AccountId, cwd?: string, data?
             } catch { /* nowhere else */ }
           }
           const outgoing = turn.inWheel && Boolean(turn.outgoing)
-          const reason = keepGoing({ autonomous: on, next, lastPrompt: lastUserPrompt(data.transcript_path), blocks, project: project.name, elsewhere, outgoing })
+          // EV126: given up as finished (pmc terminado) and nothing new since: it rests, or goes where the user said.
+          let done = false
+          let whenDone: 'parar' | 'otro' = 'parar'
+          if (!next.length) {
+            try {
+              const { readDone, stillDone } = await import('../core/autonomy')
+              const mark = readDone()[project.id]
+              if (mark) {
+                const newest = (db.prepare('SELECT MAX(at) AS at FROM (SELECT MAX(created_at) AS at FROM tasks WHERE project_id = ? UNION ALL SELECT MAX(created_at) FROM instructions WHERE project_id = ?)').get(project.id, project.id) as { at?: number } | undefined)?.at ?? undefined
+                done = stillDone(mark, newest)
+                const ui = JSON.parse((db.prepare("SELECT value FROM settings WHERE key = 'ui'").get() as any)?.value ?? '{}')
+                if (ui.autonomyWhenDone === 'otro') whenDone = 'otro'
+              }
+            } catch { /* as before */ }
+          }
+          const reason = keepGoing({ autonomous: on, next, lastPrompt: lastUserPrompt(data.transcript_path), blocks, project: project.name, elsewhere, outgoing, done, whenDone })
           if (reason) { noteBlock(data.session_id, blocks); process.stdout.write(JSON.stringify({ decision: 'block', reason })) }
         }
       } catch { /* never block Claude by mistake */ }
@@ -731,6 +783,11 @@ async function claims(cmd: string, args: string[]): Promise<void> {
         backAt = tm?.backAt
       } catch { /* app not running */ }
       say(coord.takeOver(db, { project, from, to: account, enCurso: [...new Set(enCurso)], heartbeat, copies, fromState, backAt }))
+      // EV180: its turns of Unity, the graphics card or a build come with its work.
+      try {
+        const passed = (await import('../core/resources')).handOverResources(db, from, account as AccountId)
+        if (passed.length) say(t('También te paso sus turnos de {list}: si no los vas a usar, suéltalos con pmc recurso <nombre> --soltar.', { list: passed.join(', ') }))
+      } catch { /* the tasks were passed on all the same */ }
       return
     }
     if (cmd === 'plan') {
@@ -1054,8 +1111,10 @@ async function claims(cmd: string, args: string[]): Promise<void> {
           const pick = pickFiles({ changed, mine: [...mine, 'docs/RELEVO.md', `docs/archivo/${archiveName}`, 'docs/archivo/'], others, leaving, othersLast, mtime, othersBusy })
           left = pick.left
           if (pick.commit.length) {
-            git('add', '-A', '--', ...pick.commit)
-            git('commit', '-q', '-m', `Punto de control (${account}): ${text.slice(0, 200)}`)
+            // EV181: the paths and the message through git's input (a few hundred paths overflowed Windows' command line).
+            const { stagePaths, commitStaged } = await import('../core/gitstage')
+            stagePaths(root, pick.commit)
+            commitStaged(root, `Punto de control (${account}): ${text.slice(0, 200)}`)
             done.push(tn(pick.commit.length, 'commit de {n} cambio ({hash})', 'commit de {n} cambios ({hash})', { hash: git('log', '-1', '--format=%h').trim() }))
           } else done.push(t('nada que guardar en git'))
           // What the session had already added itself went into the commit too: only what is still changed is «left»
@@ -1089,6 +1148,26 @@ async function claims(cmd: string, args: string[]): Promise<void> {
             const m = (listTasks(db, project.id).find((x) => x.key === key)?.model ?? '').toLowerCase()
             const tag = /\b(fable|opus)\b/.test(m) ? undefined : m.match(/\b(sonnet|haiku)\b/)?.[1]
             if (tag) say(t('Esta tarea basta con {model}: si es de hacer más que de pensar, encárgasela a un subagente con model: "{tag}" (gasta menos de tu uso) y revisa tú lo que entregue.', { model: tag === 'haiku' ? 'Haiku' : 'Sonnet', tag }))
+          } catch { /* advice only */ }
+          // EV191: the skills, agents and programs open that fit this task, by their words (no model, nothing spent).
+          try {
+            const { listTasks } = await import('../core/engine')
+            const task = listTasks(db, project.id).find((x) => x.key === key)
+            const h = await import('../core/taskhints')
+            const text = `${task?.title ?? title ?? ''} ${task?.detail ?? ''}`
+            let spanish: Record<string, string> = {}
+            try { spanish = JSON.parse(readFileSync(join(paths.root(), 'skills-es.json'), 'utf8')) } catch { /* none yet */ }
+            // EV191 step 3: what was suggested many times and never loaded is not suggested any more.
+            const g = await import('../core/skillgaps')
+            const useless = g.neverUseful(g.hintStats(g.readHints()))
+            const found = h.bestHelpers(text, h.helpersFor({ cwd: process.cwd(), configDir: process.env.CLAUDE_CONFIG_DIR, spanish }).filter((x) => !useless.has(x.name)))
+            let programs: string[] = []
+            try { programs = h.openPrograms(text, (await import('../core/resources')).detectBusy()) } catch { /* not on this system */ }
+            const line = h.hintsLine(found, programs)
+            if (line) say(line)
+            if (found.length) g.appendHint({ kind: 'dada', at: Date.now(), account, project: project.id, task: id, names: found.map((x) => x.name) })
+            // EV191 step 2: nothing installed fits: its subjects wait for the app's search on skills.sh.
+            else g.writeGaps(g.noteGap(g.readGaps(), project.id, id, text))
           } catch { /* advice only */ }
         }
       }
@@ -1164,6 +1243,7 @@ else if (cmd === 'turno') void turnCmd(process.argv.slice(3))
 else if (cmd === 'skills-es') void skillsEsCmd(process.argv.slice(3))
 else if (cmd === 'llevar-skills' || cmd === 'devolver-skills') void moveSkillsCmd(cmd, process.argv.slice(3))
 else if (cmd === 'recuerda') void rememberCmd(process.argv.slice(3))
+else if (cmd === 'terminado') void finishedCmd(process.argv.slice(3))
 else if (cmd === 'rumbo') void courseCmd()
 else if (cmd === 'desechable' || cmd === 'conservar') {
   // EV100: a note for the cleaning, while working: «this render was a test» / «keep it, the final cut uses it».

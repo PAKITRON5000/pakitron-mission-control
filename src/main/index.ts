@@ -14,12 +14,12 @@ import { createRemote } from './remote'
 import { bringToFront, fontLine, fontPrefix, readScreen, typeKey, typeText } from './consoleTyper'
 import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
 import { closePosixClaude, openTerminalWindow, writeTerminalScript, type TerminalJob } from './terminal'
-import { attachView, detachView, dock, embeddedByPid, embeddedList, findEmbedded, forgetEmbedded, initEmbedded, inputEmbedded, killEmbedded, popOut, poppedIds, resizeEmbedded, startEmbedded } from './embedded'
+import { attachView, detachView, dock, embeddedByPid, embeddedList, findEmbedded, forgetEmbedded, initEmbedded, inputEmbedded, keyEmbeddedId, killEmbedded, popOut, poppedIds, resizeEmbedded, startEmbedded, typeEmbeddedId } from './embedded'
 import { typedLine } from '../core/ptyproto'
 import { asTasklist, fixPosixPath, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
 import { t, tn, getLang, pickLang, setLang, locale } from '../core/i18n'
-import { answerPrompt, endedTurnSince, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
+import { answerPrompt, endedTurnSince, notePrompt, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
 import { readChat } from '../core/chats'
 import { paths } from '../core/paths'
 import type { AccountConfig, AccountId, CommentStatus, InstructionKind, ProjectConfig, TaskStatus } from '../core/types'
@@ -87,6 +87,7 @@ import { addMemory, editMemory, forgetMemory, listMemories, recentDecisions, mem
 import { classify, corpusOf, isRequest, placeRequest, textsSignature, type UserRequest } from '../core/requests'
 import { readHistory } from '../core/sessions'
 import { scanSkills, parseFind, parseList, pickSuggestions, projectToSearch, termsFor, skillsTally, mergeSkills, skillsStamp, type FoundSkill, type SkillInfo, type SkillsTally } from '../core/skills'
+import { englishTerms, hintStats, readGaps, readHints, repeatedSubjects } from '../core/skillgaps'
 import { cpSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { exec } from 'node:child_process'
@@ -560,7 +561,9 @@ async function awayTick(): Promise<void> {
 
 /** Looks on skills.sh for what fits the project (one search per term; a minute or two) and keeps what it found. */
 async function searchSkillsFor(p: ProjectConfig): Promise<void> {
-  const terms = termsFor(profileOf(p.root).kinds)
+  // EV191 step 2: also the subjects its tasks keep needing with nothing installed for them, in English.
+  const gapTerms = gapTermsFor(p.id)
+  const terms = [...new Set([...termsFor(profileOf(p.root).kinds), ...gapTerms])]
   const found: FoundSkill[] = []
   for (const t of terms) {
     const out = await runNpx(`npx -y skills find "${t.replace(/"/g, '')}"`, tmpdir(), 90_000).catch((e: Error) => e.message)
@@ -576,8 +579,13 @@ async function searchSkillsFor(p: ProjectConfig): Promise<void> {
   for (const f of found) if (desc[f.id]) f.description = desc[f.id]
   const all = skillCache()
   // Offline or without npx nothing comes back: what was found last time is kept, not wiped.
-  all[p.id] = { at: Date.now(), found: found.length ? found : all[p.id]?.found ?? [] }
+  all[p.id] = { at: Date.now(), found: found.length ? found : all[p.id]?.found ?? [], gapTerms }
   try { writeFileSync(join(paths.root(), 'skills-search.json'), JSON.stringify(all)) } catch { /* next time */ }
+}
+
+/** EV191 step 2: the English terms for the subjects that came back in two or more of a project's tasks with nothing installed. */
+function gapTermsFor(projectId: string): string[] {
+  return englishTerms(repeatedSubjects(readGaps(), projectId), skillsEs())
 }
 
 /**
@@ -591,7 +599,9 @@ async function autoSkillSearch(onlyId?: string): Promise<void> {
   if (skillSearching || process.env.PMC_SHOT_DIR) return
   if (lastLoad && Date.now() - lastLoad.at < 10 * 60_000 && isLoaded(lastLoad.load)) return
   const cache = skillCache()
+  // EV191 step 2: a project whose tasks keep needing something not searched yet, at most once a day.
   const p = projectToSearch(service.projects, cache, Date.now(), onlyId)
+    ?? (onlyId ? undefined : service.projects.find((q) => Date.now() - (cache[q.id]?.at ?? 0) > 86_400_000 && gapTermsFor(q.id).some((x) => !(cache[q.id]?.gapTerms ?? []).includes(x))))
   if (!p) return
   skillSearching = true
   try {
@@ -609,7 +619,7 @@ async function autoSkillSearch(onlyId?: string): Promise<void> {
 }
 
 /** Skill searches already made, by project (skills.sh is asked again only when the user presses «Buscar»). */
-function skillCache(): Record<string, { at: number; found: FoundSkill[] }> {
+function skillCache(): Record<string, { at: number; found: FoundSkill[]; gapTerms?: string[] }> {
   try { return JSON.parse(readFileSync(join(paths.root(), 'skills-search.json'), 'utf8')) } catch { return {} }
 }
 
@@ -840,7 +850,7 @@ function autoRelay(e: { at: number; account: AccountId; error?: string; event?: 
     })
     const from = service.agents.find((a) => a.id === e.account)
     const wantsFable = /fable/i.test(from?.usage.snapshot?.model ?? '')
-    const choice = pickSuccessor({ from: e.account, projectId: project.id, agents, order: service.settings.nextOrderBy?.[project.id] ?? service.settings.nextOrder ?? [], status: service.settings.accountStatus ?? {}, wantsFable, noFable: service.settings.noFable ?? [] })
+    const choice = pickSuccessor({ from: e.account, projectId: project.id, agents, order: service.settings.nextOrderBy?.[project.id] ?? service.settings.nextOrder ?? [], status: service.settings.accountStatus ?? {}, wantsFable, noFable: service.settings.noFable ?? [], reserves: service.settings.reserves ?? [] })
     const who = `Claude ${e.account.slice(6)}`
     // The one that should go on is about to get its usage back (the user, 12-11: «te quedarás sin créditos minutos antes
     // de que claude5 vuelva»): better to wait for it than to open a worse one now. Its start is scheduled for that moment.
@@ -1133,7 +1143,19 @@ async function routeNote(id: number, open: boolean): Promise<NoteRoute | undefin
   const row = service.db.prepare("SELECT project_id, body, target, status FROM instructions WHERE id = ?").get(id) as { project_id: string; body: string; target: string | null; status: string } | undefined
   const p = row ? service.project(row.project_id) : undefined
   if (!row || !p || row.status !== 'guardada') return undefined
-  const route = pickNoteRoute({ agents: service.agents, projectId: p.id, target: (row.target ?? undefined) as AccountId | undefined, excluded: service.settings.accountStatus ?? {}, chains: service.settings.relayChains ?? {} })
+  const route = pickNoteRoute({ agents: service.agents, projectId: p.id, target: (row.target ?? undefined) as AccountId | undefined, excluded: service.settings.accountStatus ?? {}, chains: service.settings.relayChains ?? {}, reserves: service.settings.reserves ?? [] })
+  // EV182: an account set aside, written to by name: opened for this note only (also from the tick: the user named it,
+  // e.g. one that was out of usage when he wrote), and closed when it ends its turn (onlyTaskTick).
+  if (route.kind === 'solo') {
+    if (process.env.PMC_SHOT_DIR) return { kind: 'espera', why: t('la leerá el primer Claude que trabaje aquí') }
+    try {
+      openForNote(p, id, row.body, route.account)
+      return route
+    } catch (e) {
+      service.log(`nota ${id}: no se pudo abrir ${route.account}: ${(e as Error).message}`)
+      return { kind: 'espera', why: (e as Error).message }
+    }
+  }
   if (route.kind === 'ventana') {
     try {
       await typeText(route.pid, typedNoteText(p.name, id, row.body))
@@ -1159,6 +1181,25 @@ async function routeNote(id: number, open: boolean): Promise<NoteRoute | undefin
   return route
 }
 
+/**
+ * EV182: an account set aside («No usar», or kept as another project's backup) that the user wrote to by name: opened in
+ * the project for that note only, inside the app unless Chats says «En su ventana» (Decidir #157), and closed when it
+ * ends its turn (onlyTaskTick), so it does not go on with the queue nor enter the wheel. It reads the whole note at start.
+ */
+function openForNote(p: ProjectConfig, id: number, body: string, account: AccountId): void {
+  if (onlyTaskOf(account)) throw new Error(t('Claude {v0} ya está abierta para otra cosa del usuario; la leerá allí', { v0: account.slice(6) }))
+  const cwd = workCopy(p)?.path ?? p.root
+  const label = `MC-${id}`
+  const now = Date.now()
+  setOnlyTask(account, { projectId: p.id, taskKey: `nota:${id}`, label, at: now, noteId: id })
+  try {
+    openTerminal(account, cwd, ['--permission-mode', 'auto', notePrompt({ projectName: p.name, id, body })], `${account} · ${p.name} · tu nota ${label}`)
+  } catch (e) { setOnlyTask(account, undefined); throw e }
+  markOpening(service.db, id, account)
+  addEvent(service.db, { projectId: p.id, at: now, account, kind: 'entrega', title: t('Se abre Claude {v0} en {name} solo para tu nota: «{v1}»; al acabar se cerrará y seguirá parada', { v0: account.slice(6), name: p.name, v1: body.slice(0, 100) }), source: 'Mission Control', ref: `ins:${id}` })
+  setTimeout(() => void service.refreshAgents(), 4000)
+}
+
 /** EV171: a project added that already had work in it is gone over and improved by itself (once a week at most). */
 async function improveAdded(projectId: string): Promise<void> {
   const p = service.project(projectId)
@@ -1166,7 +1207,7 @@ async function improveAdded(projectId: string): Promise<void> {
   let hasWork = false
   try { hasWork = looksLikeProject(p.root) } catch { /* unreadable: leave it */ }
   if (!improveOnAdd({ hasWork, lastAskedAt: service.settings.improveAsked?.[projectId], now: Date.now() })) return
-  try { await api.improveProject(projectId) } catch (e) { service.log(`mejorar ${projectId}: ${(e as Error).message}`) }
+  try { await api.improveProject(projectId, true) } catch (e) { service.log(`mejorar ${projectId}: ${(e as Error).message}`) }
 }
 
 /** Notes still waiting (sent while every Claude was busy, or nobody was in): to a window that is now free. */
@@ -1220,14 +1261,15 @@ function onlyTaskTick(now: number): void {
       continue
     }
     // EV160: opened again for an answer, it is done when it ends a turn after that; for a task, when it hands it in.
-    const finished = only.decisionId ? endedTurnSince(readActivity(account, 40).recent, only.at) : onlyTaskFinished(service.db, account, only)
+    // EV182: opened for a note, the same as for an answer.
+    const finished = only.decisionId || only.noteId ? endedTurnSince(readActivity(account, 40).recent, only.at) : onlyTaskFinished(service.db, account, only)
     if (!finished || here.some((s) => isSessionWorking(s))) continue
     for (const s of here) if (s.pid && s.kind !== 'background') closeClaudeWindow(s.pid)
     setOnlyTask(account, undefined)
     rememberClosed(account, only, now)
-    const what = only.decisionId ? `lo que le contestaste en #${only.decisionId} (${only.label})` : `${only.label}, la tarea para la que la abriste,`
+    const what = only.decisionId ? `lo que le contestaste en #${only.decisionId} (${only.label})` : only.noteId ? `lo que le escribiste (${only.label}); sigue parada` : `${only.label}, la tarea para la que la abriste,`
     addEvent(service.db, { projectId: only.projectId, at: now, account, kind: 'sesion', title: t('Claude {v0} ha hecho {what} y se ha cerrado', { v0: account.slice(6), what: what }), source: 'Mission Control' })
-    void remote.push(`Claude ${account.slice(6)} ha terminado`, only.decisionId ? `Ha hecho lo que le contestaste en #${only.decisionId}: su ventana se ha cerrado.` : `Era su única tarea (${only.label}): su ventana se ha cerrado.`, 'inicio').catch(() => undefined)
+    void remote.push(`Claude ${account.slice(6)} ha terminado`, only.decisionId ? `Ha hecho lo que le contestaste en #${only.decisionId}: su ventana se ha cerrado.` : only.noteId ? `Ha hecho lo que le escribiste (${only.label}): su ventana se ha cerrado y sigue parada.` : `Era su única tarea (${only.label}): su ventana se ha cerrado.`, 'inicio').catch(() => undefined)
     setTimeout(() => void service.refreshAgents(), 2500)
     service.push()
   }
@@ -1584,12 +1626,22 @@ const api: Record<string, Handler> = {
    * Claude (routeNote: typed into a free window, or a free account is opened for it; with nobody, the first one that works
    * there reads it). Also asked by itself when a project that already had work is added (see addProject).
    */
-  improveProject: async (projectId: string) => {
+  /** EV126: the projects a Claude gave up as finished (pmc terminado), for Inicio's notice. */
+  autonomyDone: async () => (await import('../core/autonomy')).readDone(),
+  /** EV126: «Seguir mejorándolo»: the project is not finished any more; autonomous mode pushes there again. */
+  clearDone: async (projectId: string) => {
+    const { clearDone } = await import('../core/autonomy')
+    clearDone(projectId)
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Has pedido que se siga mejorando {name}', { name: service.project(projectId)?.name ?? projectId }), source: 'Mission Control' })
+    service.push()
+    return true
+  },
+  improveProject: async (projectId: string, auto = false) => {
     const p = service.project(projectId)
     if (!p) throw new Error(t('Proyecto desconocido'))
     const r = addIns(service.db, { projectId, kind: 'general', body: improveText(p.name) })
     service.setSettings({ improveAsked: { ...(service.settings.improveAsked ?? {}), [projectId]: Date.now() } })
-    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Mejorar {name}: encargado a los Claude', { name: p.name }), source: 'Mission Control', ref: `ins:${r.id}` })
+    addEvent(service.db, { projectId, at: Date.now(), kind: 'proyecto', title: t('Mejorar {name}: encargado a los Claude', { name: p.name }), ...(auto ? { detail: t('Se ha pedido solo al añadir el proyecto, porque ya tenía trabajo dentro. Gasta uso como una sesión de trabajo normal de un Claude, y se pide una vez por semana como mucho.') } : {}), source: 'Mission Control', ref: `ins:${r.id}` })
     const route = await routeNote(r.id, true).catch(() => undefined)
     service.push()
     return { ...r, route }
@@ -1604,7 +1656,7 @@ const api: Record<string, Handler> = {
   myNotes: (projectId: string) => {
     const notes = sentNotes(service.db, projectId, Date.now() - 2 * 86400_000, 5)
     const waiting = notes.some((n) => n.status === 'guardada')
-    const route = (target?: AccountId) => pickNoteRoute({ agents: service.agents, projectId, target, excluded: service.settings.accountStatus ?? {}, chains: service.settings.relayChains ?? {} })
+    const route = (target?: AccountId) => pickNoteRoute({ agents: service.agents, projectId, target, excluded: service.settings.accountStatus ?? {}, chains: service.settings.relayChains ?? {}, reserves: service.settings.reserves ?? [] })
     const shared = waiting ? route() : undefined
     return notes.map((n) => ({ ...n, state: noteStatus(n, n.status === 'guardada' ? (n.target ? route(n.target) : shared) : undefined) }))
   },
@@ -1946,7 +1998,9 @@ const api: Record<string, Handler> = {
     const out = poppedIds()
     return embeddedList().map((s) => {
       const live = service.agents.flatMap((a) => a.sessions).find((x) => x.pid === s.pid)
-      return { ...s, popped: out.includes(s.id), sessionId: live?.sessionId, status: live?.status, projectName: s.meta.projectId ? service.project(s.meta.projectId)?.name : undefined }
+      // EV201: where it works now (what it touches), else where it was opened.
+      const where = live?.workProjectId ?? s.meta.projectId
+      return { ...s, popped: out.includes(s.id), sessionId: live?.sessionId, status: live?.status, workProjectId: live?.workProjectId, projectName: where ? service.project(where)?.name : undefined }
     })
   },
   /** A new Claude inside the app, in a project (its work copy, as «Poner a trabajar»), with a first message or none. */
@@ -1975,6 +2029,11 @@ const api: Record<string, Handler> = {
   embedForget: (id: string) => { forgetEmbedded(id); return true },
   embedPopOut: (id: string) => { popOut(id); return true },
   embedDock: (id: string) => { dock(id); return true },
+  /** EV197: the phone types into a Claude inside the app (what xterm sends), keeps its size, writes a line or one key. */
+  ptyInput: (id: string, data: string) => { inputEmbedded(String(id), String(data)); return true },
+  ptyResize: (id: string, cols: number, rows: number) => { resizeEmbedded(String(id), Math.max(20, Math.min(400, Number(cols) || 80)), Math.max(5, Math.min(200, Number(rows) || 24))); return true },
+  ptyType: async (id: string, text: string) => { await typeEmbeddedId(String(id), String(text ?? '')); return true },
+  ptyKey: (id: string, key: string) => { keyEmbeddedId(String(id), String(key)); return true },
   /** EV96: each account's reset and what the app will do with it; «Usarla ya» and «Mirar su ventana». */
   recharges: () => recharge.view(),
   useRecharge: (account: AccountId) => recharge.apply(account, recharge.inputFor(account).limit?.kind === 'semanal' ? 'weekly' : '5-hour'),
@@ -2368,10 +2427,12 @@ const api: Record<string, Handler> = {
     const onlyIn = countedEverywhere ? Object.fromEntries(installed.filter((s) => s.scope === 'cuenta' && usedBy[s.name]?.length === 1).map((s) => [s.name, usedBy[s.name][0]])) : {}
     const prof = p ? profileOf(p.root) : undefined
     const cache = skillCache()[projectId]
-    const suggestions = cache ? pickSuggestions(cache.found.filter((f) => termsFor(prof?.kinds ?? []).includes(f.term)), installed.map((s) => s.name), 18, 5, prof?.kinds ?? []) : []
+    // EV191 step 2: what was searched for the subjects its tasks kept needing counts too.
+    const searched = [...termsFor(prof?.kinds ?? []), ...(cache?.gapTerms ?? [])]
+    const suggestions = cache ? pickSuggestions(cache.found.filter((f) => searched.includes(f.term)), installed.map((s) => s.name), 18, 5, prof?.kinds ?? []) : []
     // EV133: what this screen has just counted is also the board's figure (installing or removing one comes through here).
     if (p && saveSkillsTally(p.id, skillsTally(installed, p.id, cache ? suggestions.length : undefined))) service.push()
-    return { es: skillsEs(), installed, uses, usesEverywhere, countedEverywhere, aside, onlyIn, moved: Object.values(moved).map((m) => ({ name: m.name, projectId: m.projectId, at: m.at })), usesAt: p ? subagentCounts.get(p.id)?.at : undefined, kinds: prof?.kinds ?? [], summary: prof?.summary, terms: termsFor(prof?.kinds ?? []), suggestions, searchedAt: cache?.at }
+    return { es: skillsEs(), installed, uses, usesEverywhere, countedEverywhere, aside, onlyIn, moved: Object.values(moved).map((m) => ({ name: m.name, projectId: m.projectId, at: m.at })), usesAt: p ? subagentCounts.get(p.id)?.at : undefined, kinds: prof?.kinds ?? [], summary: prof?.summary, terms: termsFor(prof?.kinds ?? []), gapTerms: cache?.gapTerms ?? [], suggestions, searchedAt: cache?.at, hinted: hintStats(readHints()) }
   },
   /** Looks on skills.sh for what fits the project (one search per term; a minute or two). */
   skillsSearch: async (projectId: string) => {
@@ -2488,7 +2549,7 @@ const api: Record<string, Handler> = {
       const wantsFable = /fable/i.test(a.usage.snapshot?.model ?? '')
       // Asked as if that account were the only one there: who takes over from it.
       const others = agents.filter((x) => x.id === a.id || !here.some((h) => h.id === x.id))
-      const c = pickSuccessor({ from: a.id, projectId, agents: others, order: s.nextOrderBy?.[projectId] ?? s.nextOrder ?? [], status: s.accountStatus ?? {}, wantsFable, noFable: s.noFable ?? [] })
+      const c = pickSuccessor({ from: a.id, projectId, agents: others, order: s.nextOrderBy?.[projectId] ?? s.nextOrder ?? [], status: s.accountStatus ?? {}, wantsFable, noFable: s.noFable ?? [], reserves: s.reserves ?? [] })
       const f = a.usage.snapshot?.fiveHour
       return { from: a.id, to: c.to, fable: Boolean(c.to && c.fable), why: c.why, usedPct: f && f.resetsAt > now ? Math.round(f.usedPct) : undefined, minutesLeft: a.usage.minutesLeft, backAt: f && f.resetsAt > now ? f.resetsAt : undefined }
     })
@@ -2554,6 +2615,16 @@ const api: Record<string, Handler> = {
   },
   /** Only web pages (a skill's page on skills.sh): nothing else is opened from here. */
   openExternal: (url: string) => (/^https:[/][/]/.test(url) ? shell.openExternal(url) : undefined),
+  /** EV189: whether the app opens when the user signs in (Windows and Mac; a development run never registers itself). */
+  loginItem: () => ({ on: app.isPackaged ? app.getLoginItemSettings().openAtLogin : false, packaged: app.isPackaged, platform: process.platform }),
+  setLoginItem: (on: boolean) => {
+    if (!app.isPackaged) throw new Error(t('Solo en la app instalada'))
+    app.setLoginItemSettings({ openAtLogin: Boolean(on) })
+    service.log(`abrir al iniciar sesión: ${on ? 'sí' : 'no'}`)
+    return app.getLoginItemSettings().openAtLogin
+  },
+  /** EV189: where signing in by itself is chosen: Windows' sign-in options, or the Mac's users. Only those two pages. */
+  openSignInOptions: () => (isWin ? shell.openExternal('ms-settings:signinoptions') : process.platform === 'darwin' ? shell.openExternal('x-apple.systempreferences:com.apple.Users-Groups-Settings.extension') : undefined),
   // A window, as its button says (for /login the first time); Decidir #157 «A» is about the ones the app opens alone.
   openSession: (account: AccountId, cwd: string) => openTerminal(account, cwd, [], `${account} · nueva sesión`, 'ventana'),
   /**
@@ -2727,7 +2798,7 @@ const api: Record<string, Handler> = {
         // usage (13-11: Claude 5's windows said «Trabajando» next to «Se quedó sin uso… vuelve a las 19:50»).
         const outOfUsage = a.state === 'sin-uso' && live.rateLimited && !fresh
         const status = (live.status === 'waiting' && tail?.midTurn && Date.now() - tail.mtime < ASKING_FOR_MS) ? 'waiting' : outOfUsage ? 'limit' : live.status === 'busy' || (tail?.midTurn && fresh && live.status !== 'waiting') ? 'working' : 'idle'
-        out.push({ sessionId: live.sessionId, account: a.id, alias: a.alias, cwd: live.cwd, title: live.name || basename(live.cwd), status, live: true, background: live.kind === 'background' ? live.shortId : undefined, inApp: embeddedByPid(live.pid)?.id, waitingFor: live.waitingFor,
+        out.push({ sessionId: live.sessionId, account: a.id, alias: a.alias, cwd: live.cwd, title: live.name || basename(live.cwd), status, live: true, background: live.kind === 'background' ? live.shortId : undefined, inApp: embeddedByPid(live.pid)?.id, waitingFor: live.waitingFor, workProjectId: live.workProjectId,
           doing: status === 'working' && focus && (!focus.sessionId || focus.sessionId === live.sessionId) ? focus.text : undefined, last: tail?.messages.at(-1)?.text.slice(0, 140), lastAt: tail?.mtime ?? live.startedAt ?? 0 })
       }
     }
@@ -3061,7 +3132,8 @@ const remote = createRemote({
     if (!fn) throw new Error(t('Método desconocido: {method}', { method: method }))
     return await fn(...args)
   },
-  media: servePmc
+  media: servePmc,
+  pty: { attach: (id, view) => attachView(id, view), detach: (id, view) => detachView(id, view) }
 })
 
 // Chats that need the user: one waiting for an answer (the same that shows as «Te espera»), or one that was working and has been quiet for a minute.
@@ -3466,6 +3538,9 @@ function routineTick(): void {
   child.on('close', (code) => {
     clearTimeout(kill)
     routineRunning = undefined
+    // MC-273: what the routine held (Unity for the night's tests) is free once its process is gone, however it ended
+    // (cut by its time limit, it never reached its own release).
+    try { for (const h of heldResources(service.db).filter((x) => (x.account as string) === 'rutina')) freeResource(service.db, h.name, 'rutina' as AccountId) } catch { /* it expires at its time */ }
     const last = service.db.prepare('SELECT outcome, summary, at FROM verifications WHERE project_id = ? ORDER BY id DESC LIMIT 1').get(p.id) as { outcome: string; summary: string; at: number } | undefined
     const fresh = last && last.at >= now
     const outcome = code === 2 || !fresh ? 'nada' : (last!.outcome as 'bien' | 'falla' | 'aplazada')
@@ -3646,7 +3721,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('pmc:pty-attach', (e, id: string) => attachView(String(id), e.sender))
   ipcMain.on('pmc:pty-detach', (e, id: string) => detachView(String(id), e.sender))
   ipcMain.on('pmc:pty-in', (_e, id: string, data: string) => inputEmbedded(String(id), data))
-  ipcMain.on('pmc:pty-resize', (_e, id: string, cols: number, rows: number) => resizeEmbedded(String(id), Number(cols), Number(rows)))
+  ipcMain.on('pmc:pty-resize', (_e, id: string, cols: number, rows: number) => resizeEmbedded(String(id), Number(cols), Number(rows), true))
   // The ones that kept running while the app was closed (an update, a restart), found again without starting anything.
   setTimeout(() => void findEmbedded(), 1500).unref()
   ipcMain.handle('pmc', async (_e, method: string, ...args: any[]) => {

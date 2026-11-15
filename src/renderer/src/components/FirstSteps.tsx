@@ -3,7 +3,7 @@
 // the one button that does it. Shown on Inicio while there is no project, or while a step is missing until the user
 // hides it; with everything done it does not show at all.
 import { t } from '../../../core/i18n'
-import { Check, Eye, FolderPlus, Repeat, Users } from 'lucide-react'
+import { Check, Eye, FolderPlus, Gauge, Repeat, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useStore, useAsync } from '../lib/store'
 import { api } from '../lib/api'
@@ -85,7 +85,7 @@ export function FirstSteps() {
       key: 'proyecto', icon: <FolderPlus size={16} />, title: t('Tu primer proyecto'), done: state.projects.length > 0,
       text: state.projects.length
         ? `${state.projects.length === 1 ? t('Tienes 1 proyecto') : t('Tienes {n} proyectos', { n: state.projects.length })}: ${state.projects.map((p) => p.name).join(', ')}.`
-        : t('Elige la carpeta de lo que quieras hacer (un juego, una web, un vídeo…). La app entiende qué es y la prepara para que varios Claude trabajen en ella sin pisarse.'),
+        : t('Elige la carpeta de lo que quieras hacer (un juego, una web, un vídeo…). La app entiende qué es y la prepara para que varios Claude trabajen en ella sin pisarse. Si ya tiene trabajo dentro, un Claude la repasa entera y apunta mejoras: eso gasta como una sesión de trabajo normal.'),
       button: { label: state.projects.length ? t('Añadir otro') : t('Elegir la carpeta'), run: () => run(() => api('addProject'), t('Proyecto añadido y preparado')) },
       // EV56: the folders where a Claude already worked, offered with one click.
       extra: (candidates.data ?? []).map((c) => ({ label: t('Añadir {name}', { name: c.name }), title: t('{root} · {prompts} mensajes tuyos allí', { root: c.root, prompts: c.prompts }), run: () => run(() => api('addProjectAt', c.root), t('{name} añadido y preparado', { name: c.name })) }))
@@ -116,6 +116,9 @@ export function FirstSteps() {
         </div>
         {state.projects.length > 0 && <button className="btn btn-ghost" onClick={() => void api('setSettings', { firstRunDone: true }).then(refresh)}>{t('Ocultar')}</button>}
       </div>
+      {/* EV187 (the user, 15-11 03:55: «para que no piense que la app chupa muchos créditos, debe saber que la app ayuda
+          precisamente también a mejorar el uso de los créditos»): what spends usage at the start, and what the app saves. */}
+      <UsageNote />
       <ol className="flex flex-col gap-2.5 m-0 p-0 list-none">
         {steps.map((s, i) => (
           <li key={s.key} className="rounded-2xl px-4 py-3 flex items-start gap-3" style={{ background: s.done ? 'color-mix(in srgb, var(--green) 9%, transparent)' : 'var(--fill)' }}>
@@ -136,5 +139,19 @@ export function FirstSteps() {
         ))}
       </ol>
     </section>
+  )
+}
+
+/** EV187: what setting the app up spends (nearly nothing: the app does it itself) and how it helps to spend less. */
+export function UsageNote() {
+  return (
+    <div className="rounded-2xl px-4 py-3 flex items-start gap-3" style={{ background: 'color-mix(in srgb, var(--blue) 10%, transparent)' }}>
+      <span className="icon-sq flex-none" style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--blue)', color: 'white' }}><Gauge size={17} /></span>
+      <div className="min-w-0 flex-1">
+        <div className="t-body" style={{ fontWeight: 650 }}>{t('Lo que gasta tu uso de Claude, y lo que ahorra')}</div>
+        <div className="t-small c2 mt-0.5">{t('Preparar la app casi no gasta: buscar las cuentas, ver lo que hace cada Claude, preparar las carpetas e instalar skills lo hace la app sola. Gasta lo que trabajan los Claude, como siempre; por ejemplo, el repaso de un proyecto que ya tenía trabajo.')}</div>
+        <div className="t-small c2 mt-1">{t('Y la app está para que gastes menos y saques más: cada tarea dice qué modelo basta, dos Claude no hacen lo mismo, las ventanas olvidadas se cierran y cada relevo deja escrito dónde seguir, para que el siguiente no tenga que releerlo todo.')}</div>
+      </div>
+    </div>
   )
 }

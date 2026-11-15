@@ -20,6 +20,8 @@ export interface OnlyTask {
    * when it ends a turn after that, not when it releases a task.
    */
   decisionId?: number
+  /** EV182: opened for a note the user wrote to it by name (MC-<id>): done, like an answer, when it ends a turn after that. */
+  noteId?: number
 }
 
 /** After this long the mark goes, done or not: a forgotten one must not keep an account out of autonomous mode for days. */
@@ -108,6 +110,20 @@ export function answerPrompt(o: { projectName: string; label: string; title: str
   return clean(t('Mission Control: el usuario ha contestado tu pregunta «{title}» (#{id}) sobre {label} en {project}, y quiere que lo hagas ahora. ', { title: o.title.slice(0, 120), id: o.decisionId, label: o.label, project: o.projectName }) +
     t('Lee su respuesta con pmc respuestas y haz exactamente lo que dice, solo eso: no cojas otras tareas aunque las veas en tu cola o te lo proponga el modo autónomo. ') +
     t('Al terminar, pmc entrega {label} si hay algo que mirar, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana) y luego para.', { label: o.label }))
+}
+
+/**
+ * EV182 (the user, 15-11 03:11: «si te escribo directamente sí deberías activarte aun que estés apartada/parada… pero
+ * seguir estando parada cuando termines la tarea… no deberías entrar en el relevo»): the prompt of an account set aside,
+ * opened for a note the user wrote to it. The note itself also comes whole at the start (SessionStart).
+ */
+export function notePrompt(o: { projectName: string; id: number; body: string }): string {
+  const clean = (s: string) => s.replace(/["%^&|<>\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const body = clean(o.body)
+  return clean(t('Mission Control: el usuario te ha escrito a ti en {project} y te ha abierto solo para eso (MC-{id}): «{body}». ', { project: o.projectName, id: o.id, body: body.length > 900 ? body.slice(0, 900).replace(/\s+\S*$/, '') + t('… (entera, en lo que te llega al empezar)') : body }) +
+    t('Hazlo ahora, aunque tu cuenta esté apartada para lo demás; si es una tarea, apúntala en docs/TASKS.md con la marca (MC-{id}) en su línea. ', { id: o.id }) +
+    t('No cojas ninguna otra tarea aunque veas más en tu cola o te lo proponga el modo autónomo, y no borres nada que no se pueda recuperar sin preguntarlo antes con pmc decide. Lo que tenga que decidir el usuario, pregúntalo con pmc decide y no en este chat (cuando conteste, Mission Control te volverá a abrir). ') +
+    t('Al terminar: pmc entrega si hay algo que mirar, deja el relevo al día con pmc guarda (Mission Control cerrará esta ventana y tu cuenta seguirá parada) y luego para.'))
 }
 
 /** For a reopening (decisionId): it ended a turn after being opened, so it has done what the answer asked. */

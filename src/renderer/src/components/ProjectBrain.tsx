@@ -8,6 +8,7 @@ import { useAsync, useStore } from '../lib/store'
 import { api } from '../lib/api'
 import { SectionTitle, accName } from './ui'
 import { TEMPLATES, type TemplateId } from '../../../core/templates'
+import { useDraft } from '../lib/draft'
 
 interface Profile {
   name: string
@@ -224,8 +225,9 @@ function Backup({ projectId }: { projectId: string }) {
 export function NewProject() {
   const { refresh, toast } = useStore()
   const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [desc, setDesc] = useState('')
+  // EV185: a project being described is not lost when the box closes.
+  const [name, setName] = useDraft('proyecto-nuevo:nombre')
+  const [desc, setDesc] = useDraft('proyecto-nuevo:que')
   const [kind, setKind] = useState<TemplateId>('libre')
   const [busy, setBusy] = useState(false)
   if (!open) return <button className="btn btn-sm" onClick={() => setOpen(true)}><FolderPlus size={13} /> {t('Crear proyecto')}</button>
