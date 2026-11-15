@@ -63,7 +63,7 @@ export function Tile({ a, onOpen, size, caption }: { a: Item; onOpen: () => void
           </div>
         )}
         {a.kind !== 'image' && !failed && (
-          <span className="absolute left-2 top-2 pill z-[2]" style={{ background: 'rgb(0 0 0 / 0.55)', color: 'white', backdropFilter: 'blur(8px)' }}><Icon size={12} /></span>
+          <span className="absolute left-2 top-2 pill z-[2]" style={{ background: 'rgb(0 0 0 / 0.62)', color: 'white' }}><Icon size={12} /></span>
         )}
         {(a.openComments ?? 0) > 0 && (
           <span className="absolute right-2 top-2 pill num z-[2]" style={{ background: 'var(--orange)', color: 'white' }}><MessageSquare size={11} /> {a.openComments}</span>

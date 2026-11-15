@@ -723,6 +723,10 @@ export const rest: Record<string, string> = {
   'Pulsa para descargarla. Se instala encima y no pierdes nada.': 'Click to download it. It installs over this one and you lose nothing.',
   'Descarga el instalador. Se instala encima de esta versión y no pierdes nada.': 'Downloads the installer. It installs over this version and you lose nothing.',
   'Versión {v0} disponible': 'Version {v0} available',
+  // 15-11: the Intel build running on an Apple chip (Rosetta).
+  'Tu Mac puede ir más rápido con Mission Control': 'Mission Control can run faster on your Mac',
+  'Tienes la versión para Intel y tu Mac tiene chip de Apple: va emulada. Pulsa para bajar la de Apple Silicon. Se instala encima y no pierdes nada.': 'You have the Intel version and your Mac has an Apple chip: it runs emulated. Click to get the Apple Silicon one. It installs over this one and you lose nothing.',
+  'Versión para tu Mac (más rápida)': 'Version for your Mac (faster)',
   'Descargando la versión {v0}…': 'Downloading version {v0}…',
   'No se pudo descargar la versión nueva ({v0})': 'The new version could not be downloaded ({v0})',
   // 0.33.1: installing what is missing with one click, and the small ring saying «left».

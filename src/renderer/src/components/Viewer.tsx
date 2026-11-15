@@ -230,11 +230,11 @@ export function Viewer() {
               </AnimatePresence>
               {idx > 0 && !draft && (
                 <button className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center border-0 opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)', boxShadow: 'var(--shadow-2)' }} onClick={() => setViewer(list[idx - 1])} aria-label={t('Anterior (←)')} title={t('Anterior (←)')}><ChevronLeft size={20} /></button>
+                  style={{ background: 'var(--chrome)', boxShadow: 'var(--shadow-2)' }} onClick={() => setViewer(list[idx - 1])} aria-label={t('Anterior (←)')} title={t('Anterior (←)')}><ChevronLeft size={20} /></button>
               )}
               {idx >= 0 && idx < list.length - 1 && !draft && (
                 <button className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full flex items-center justify-center border-0 opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)', boxShadow: 'var(--shadow-2)' }} onClick={() => setViewer(list[idx + 1])} aria-label={t('Siguiente (→)')} title={t('Siguiente (→)')}><ChevronRight size={20} /></button>
+                  style={{ background: 'var(--chrome)', boxShadow: 'var(--shadow-2)' }} onClick={() => setViewer(list[idx + 1])} aria-label={t('Siguiente (→)')} title={t('Siguiente (→)')}><ChevronRight size={20} /></button>
               )}
               {/* EV168 (the user's note #12, from the phone: «no puedo ver los títulos de las fotos si estoy dentro deslizando
                   entre ellas»): each piece's name, and its task, over it while passing from one to the next. */}
@@ -519,8 +519,8 @@ function ImageStage({ id, compareId, split, setSplit, mode, comments, draft, set
         {nat && <Marks comments={comments} draft={live ?? draft} w={nat.w} h={nat.h} s={view.s} hover={hover} />}
       </div>
       <div className="absolute left-4 bottom-4 flex items-center gap-2 t-small">
-        <span className="pill num" style={{ background: 'var(--chrome)', backdropFilter: 'blur(12px)' }}>{Math.round(view.s * 100)} %</span>
-        {compareId && <span className="pill" style={{ background: 'var(--chrome)', backdropFilter: 'blur(12px)' }}><Columns2 size={12} /> {t('izquierda: esta · derecha: la otra versión (arrastra la línea en modo Mover)')}</span>}
+        <span className="pill num" style={{ background: 'var(--chrome)' }}>{Math.round(view.s * 100)} %</span>
+        {compareId && <span className="pill" style={{ background: 'var(--chrome)' }}><Columns2 size={12} /> {t('izquierda: esta · derecha: la otra versión (arrastra la línea en modo Mover)')}</span>}
       </div>
     </div>
   )

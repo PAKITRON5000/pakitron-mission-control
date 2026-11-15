@@ -16,7 +16,7 @@ type Reaction = 'si' | 'no'
 
 /** Like / don't like, on any picture, video or sound of a decision. */
 function Thumbs({ value, onChange, dark }: { value?: Reaction; onChange?: (v?: Reaction) => void; dark?: boolean }) {
-  const base = dark ? { background: 'rgb(0 0 0 / 0.55)', color: 'white', backdropFilter: 'blur(8px)' } : { background: 'var(--fill)' }
+  const base = dark ? { background: 'rgb(0 0 0 / 0.62)', color: 'white' } : { background: 'var(--fill)' }
   return (
     <span className="inline-flex gap-1 flex-none" onClick={(e) => e.stopPropagation()}>
       <button className="btn btn-sm btn-icon" title={t('Me gusta')} aria-pressed={value === 'si'} disabled={!onChange} style={value === 'si' ? { background: 'var(--green)', color: 'white', opacity: 1 } : base} onClick={() => onChange?.(value === 'si' ? undefined : 'si')}><ThumbsUp size={13} /></button>

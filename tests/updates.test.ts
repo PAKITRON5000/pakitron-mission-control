@@ -28,4 +28,13 @@ describe('updates', () => {
     expect(updateFrom({ ...rel, prerelease: true }, '0.33.0', 'win32', 'x64')).toBeUndefined()
     expect(updateFrom({ message: 'Not Found' }, '0.33.0', 'win32', 'x64')).toBeUndefined()
   })
+
+  it('an Intel build running on an Apple chip is offered the Apple one, even of its own version', () => {
+    const rel = { tag_name: 'v0.33.1', html_url: 'https://x/rel', assets }
+    expect(updateFrom(rel, '0.33.1', 'darwin', 'x64', true)).toMatchObject({ version: '0.33.1', download: 'https://x/arm.dmg', native: true })
+    expect(updateFrom(rel, '0.33.0', 'darwin', 'x64', true)).toMatchObject({ download: 'https://x/arm.dmg' })
+    expect(updateFrom(rel, '0.33.0', 'darwin', 'x64', true)?.native).toBeUndefined()
+    expect(updateFrom(rel, '0.33.1', 'darwin', 'x64')).toBeUndefined()
+    expect(updateFrom(rel, '0.33.2', 'darwin', 'x64', true)).toBeUndefined()
+  })
 })

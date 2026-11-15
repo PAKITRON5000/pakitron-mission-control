@@ -209,10 +209,13 @@ function applyScan(db: DB, project: ProjectConfig, found: Found[], t0: number): 
   const now = Date.now()
   const rulesKey = `mediaRules:${project.id}`
   const fresh = (db.prepare('SELECT value FROM meta WHERE key = ?').get(rulesKey) as { value: string } | undefined)?.value !== RULES_VERSION
+  // Only the files still there (15-11: the video project kept 40 000 that went, read again every 90 s on the app's main
+  // thread, 92 ms of it). One that went and is found again is looked up by its path (UNIQUE, so indexed).
   const existing = new Map<string, { id: number; size: number; mtime: number; gone: number; folder: string | null }>()
-  for (const r of db.prepare('SELECT id, path, size, mtime, gone, folder FROM assets WHERE project_id = ?').all(project.id) as any[]) {
+  for (const r of db.prepare('SELECT id, path, size, mtime, gone, folder FROM assets WHERE project_id = ? AND gone = 0').all(project.id) as any[]) {
     existing.set(r.path, { id: r.id, size: r.size, mtime: r.mtime, gone: r.gone, folder: r.folder })
   }
+  const back = db.prepare('SELECT id, size, mtime, gone, folder FROM assets WHERE project_id = ? AND path = ?')
   const ins = db.prepare('INSERT INTO assets(project_id, path, rel, name, kind, category, size, mtime, first_seen, folder, source) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
   const upd = db.prepare('UPDATE assets SET size = ?, mtime = ?, hash = NULL, gone = 0 WHERE id = ?')
   const place = db.prepare('UPDATE assets SET folder = ?, source = ?, category = ? WHERE id = ?')
@@ -223,7 +226,7 @@ function applyScan(db: DB, project: ProjectConfig, found: Found[], t0: number): 
     for (const f of found) {
       if (seen.has(f.file)) continue
       seen.add(f.file)
-      const prev = existing.get(f.file)
+      const prev = existing.get(f.file) ?? (back.get(project.id, f.file) as { id: number; size: number; mtime: number; gone: number; folder: string | null } | undefined)
       const kind = kindOf(f.file)!
       const name = basename(f.file)
       if (!prev) {

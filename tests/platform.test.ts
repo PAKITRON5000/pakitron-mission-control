@@ -3,10 +3,18 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('electron', () => ({}))
 
-import { shQuote, tasklistFromPs } from '../src/core/platform'
+import { mergedPath, shQuote, tasklistFromPs } from '../src/core/platform'
 import { terminalScript } from '../src/main/terminal'
 
 describe('macOS', () => {
+  it('the login shell PATH goes first, then what the app had, then the usual folders, never twice', () => {
+    const p = mergedPath(['/Users/ana/.nvm/versions/node/v22/bin', '/usr/bin'], '/usr/bin:/bin').split(':')
+    expect(p[0]).toBe('/Users/ana/.nvm/versions/node/v22/bin')
+    expect(p.indexOf('/usr/bin')).toBe(1)
+    expect(p).toContain('/opt/homebrew/bin')
+    expect(new Set(p).size).toBe(p.length)
+  })
+
   it('shQuote keeps any text as one word', () => {
     expect(shQuote('/Users/ana/Mis cosas')).toBe("'/Users/ana/Mis cosas'")
     expect(shQuote("it's")).toBe("'it'\\''s'")

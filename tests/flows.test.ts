@@ -1,6 +1,6 @@
 // Flows from the brief (pruebas D, E, H) on a throwaway database and a throwaway project folder.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -69,6 +69,15 @@ describe('persistence and review flow', async () => {
     hashPending(db, p.id)
     const h = db.prepare("SELECT hash FROM assets WHERE name IN ('a.png', 'copia.png')").all() as any[]
     expect(h[0].hash).toBe(h[1].hash)
+    // A file that goes is marked gone; found again, it is the same piece (with its notes), not a new one.
+    const id = (db.prepare("SELECT id FROM assets WHERE name = 'pelea.mp4'").get() as any).id
+    rmSync(join(logs, 'pelea.mp4'))
+    expect(scanMedia(db, p).removed).toBe(1)
+    writeFileSync(join(logs, 'pelea.mp4'), Buffer.alloc(5000, 2))
+    const again = scanMedia(db, p)
+    expect(again.added).toBe(0)
+    expect(again.changed).toBe(1)
+    expect(db.prepare("SELECT id, gone FROM assets WHERE name = 'pelea.mp4'").all()).toEqual([{ id, gone: 0 }])
     db.close()
   })
 

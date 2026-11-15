@@ -1,6 +1,7 @@
 // What changes between Windows and macOS (or Linux) for the parts shared by the app and pmc. Windows stays the way it
 // always was; macOS gets its own way of doing the same thing (Terminal, ps, launchd, ~/Library).
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -10,22 +11,41 @@ export const isMac = process.platform === 'darwin'
 /** One word for a POSIX shell, in single quotes (a quote inside becomes '\''). */
 export const shQuote = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`
 
+const USUAL_BINS = () => [join(homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
+
+/** The PATH with these folders first (as the login shell gave them), then what it had, then the usual ones; no repeats. */
+export function mergedPath(first: string[], current: string | undefined): string {
+  return [...new Set([...first, ...(current ?? '').split(':'), ...USUAL_BINS()].filter(Boolean))].join(':')
+}
+
 /**
  * macOS: an app opened from the Finder or the Dock gets only /usr/bin:/bin:/usr/sbin:/sbin, without Homebrew, nvm or
- * ~/.local/bin (where Claude Code installs itself), so it would find neither node nor git. The login shell's PATH is
- * read once at start (4 s at most) and the usual folders are added after it.
+ * ~/.local/bin (where Claude Code installs itself), so it would find neither node nor git: it takes the login shell's PATH,
+ * with the usual folders after it. Until 0.34.17 that held the app's start (the user, 15-11: «en mac… cuesta
+ * abrirse»): `zsh -ilc` runs the whole .zshrc (nvm, Oh My Zsh…), one to four seconds before anything else. The PATH it
+ * gave last time (kept in `cacheFile`) is used at once and read again in the background; only the very first start, with nothing
+ * kept, has to wait for it (the promise says when; it never rejects).
  */
-export function fixPosixPath(): void {
-  if (isWin) return
-  const parts = (process.env.PATH ?? '').split(':').filter(Boolean)
-  try {
+export function fixPosixPathSoon(cacheFile: string): { ready: Promise<void>; cached: boolean } {
+  if (isWin) return { ready: Promise.resolve(), cached: true }
+  let kept: string[] = []
+  try { kept = readFileSync(cacheFile, 'utf8').trim().split(':').filter(Boolean) } catch { /* first start */ }
+  process.env.PATH = mergedPath(kept, process.env.PATH)
+  const ready = new Promise<void>((resolve) => {
     const shell = process.env.SHELL || '/bin/zsh'
-    const out = execFileSync(shell, ['-ilc', 'printf "__PMC_PATH__%s__" "$PATH"'], { encoding: 'utf8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] })
-    const m = /__PMC_PATH__(.*?)__/.exec(out)
-    if (m) parts.unshift(...m[1].split(':').filter(Boolean))
-  } catch { /* the usual folders below */ }
-  parts.push(join(homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin')
-  process.env.PATH = [...new Set(parts)].join(':')
+    const child = execFile(shell, ['-ilc', 'printf "__PMC_PATH__%s__" "$PATH"'], { encoding: 'utf8', timeout: 4000 }, (_err, out) => {
+      const m = /__PMC_PATH__(.*?)__/.exec(String(out ?? ''))
+      if (m) {
+        const got = m[1].split(':').filter(Boolean)
+        process.env.PATH = mergedPath(got, process.env.PATH)
+        try { writeFileSync(cacheFile, got.join(':')) } catch { /* next start reads the shell again */ }
+      }
+      resolve()
+    })
+    // Nothing to read: a .zshrc that asks something (Oh My Zsh's «update? [Y/n]») gets its answer at once instead of waiting.
+    child.stdin?.end()
+  })
+  return { ready, cached: kept.length > 0 }
 }
 
 /** The program that lists what is running, as `tasklist` on Windows and `ps` (names only) elsewhere. */

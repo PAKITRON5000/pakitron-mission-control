@@ -13,6 +13,11 @@ export interface UpdateInfo {
   /** The installer for this system and processor, when the release has one. */
   download?: string
   publishedAt?: number
+  /**
+   * The same version, built for this Mac's own processor: the Intel one was running on an Apple chip through Rosetta
+   * (slower to open and to use; 15-11, the user: «en mac va lenta la app y cuesta abrirse»).
+   */
+  native?: boolean
 }
 
 /** -1, 0 or 1, number by number («0.33.10» is newer than «0.33.9»); a leading «v» and anything after «-» are ignored. */
@@ -35,14 +40,20 @@ export function pickAsset(assets: { name: string; browser_download_url: string }
 }
 
 /** What GitHub's «latest release» answer says, when it is newer than `current`; undefined otherwise. */
-export function updateFrom(release: any, current: string, platform: string, arch: string): UpdateInfo | undefined {
+export function updateFrom(release: any, current: string, platform: string, arch: string, translated = false): UpdateInfo | undefined {
   const tag = typeof release?.tag_name === 'string' ? release.tag_name : ''
-  if (!tag || release.draft || release.prerelease || compareVersions(tag, current) <= 0) return undefined
+  if (!tag || release.draft || release.prerelease) return undefined
+  const order = compareVersions(tag, current)
+  // `translated`: an Intel build on an Apple chip (Electron's app.runningUnderARM64Translation). Its own version, for
+  // the Apple chip, is worth installing too; and every update after that is the Apple chip's.
+  const native = order === 0 && translated && platform === 'darwin'
+  if (order <= 0 && !native) return undefined
   const at = Date.parse(release.published_at ?? '')
   return {
     version: tag.replace(/^v/i, ''),
     page: typeof release.html_url === 'string' ? release.html_url : `https://github.com/${RELEASES_REPO}/releases/latest`,
-    download: pickAsset(Array.isArray(release.assets) ? release.assets : [], platform, arch),
-    ...(Number.isFinite(at) ? { publishedAt: at } : {})
+    download: pickAsset(Array.isArray(release.assets) ? release.assets : [], platform, translated && platform === 'darwin' ? 'arm64' : arch),
+    ...(Number.isFinite(at) ? { publishedAt: at } : {}),
+    ...(native ? { native: true } : {})
   }
 }

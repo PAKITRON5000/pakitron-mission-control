@@ -175,7 +175,7 @@ function Pin({ p, n, color }: { p: [number, number, number]; n: number; color: s
 function Fallback() {
   return (
     <Html center>
-      <div className="t-small c2 px-3 py-2 rounded-xl" style={{ background: 'var(--chrome)', backdropFilter: 'blur(12px)' }}>{t('Cargando el modelo…')}</div>
+      <div className="t-small c2 px-3 py-2 rounded-xl" style={{ background: 'var(--chrome)' }}>{t('Cargando el modelo…')}</div>
     </Html>
   )
 }
@@ -264,7 +264,7 @@ export default function ModelStage({ id, name, picking, comments, draftPoint, on
         <OrbitControls makeDefault enableDamping dampingFactor={0.08} autoRotate={spin} autoRotateSpeed={1.2} />
       </Canvas>
       <div className="absolute left-4 bottom-4 flex flex-wrap items-center gap-2">
-        <div className="seg" style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)' }}>
+        <div className="seg" style={{ background: 'var(--chrome)' }}>
           {([['solido', t('Sólido')], ['arcilla', t('Arcilla')], ['malla', t('Malla')], ['normales', t('Normales')]] as const).map(([m, l]) => (
             <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{mode === m && <div className="seg-thumb" />}<span>{l}</span></button>
           ))}
@@ -275,7 +275,7 @@ export default function ModelStage({ id, name, picking, comments, draftPoint, on
         <button className="chip" onClick={() => setKey((k) => k + 1)}><RotateCcw size={13} /> {t('Encuadrar')}</button>
       </div>
       {info && (
-        <div className="absolute right-4 bottom-4 t-small c2 px-3 py-1.5 rounded-xl num" style={{ background: 'var(--chrome)', backdropFilter: 'blur(14px)' }}>
+        <div className="absolute right-4 bottom-4 t-small c2 px-3 py-1.5 rounded-xl num" style={{ background: 'var(--chrome)' }}>
           {t('{v0} triángulos · {meshes} mallas · {materials} materiales{v1}', { v0: info.triangles.toLocaleString('es-ES'), meshes: info.meshes, materials: info.materials, v1: info.animations ? t(' · {animations} animaciones', { animations: info.animations }) : '' })}
         </div>
       )}

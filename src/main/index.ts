@@ -16,7 +16,7 @@ import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
 import { closePosixClaude, openTerminalWindow, writeTerminalScript, type TerminalJob } from './terminal'
 import { attachView, detachView, dock, embeddedByPid, embeddedList, findEmbedded, forgetEmbedded, initEmbedded, inputEmbedded, keyEmbeddedId, killEmbedded, popOut, poppedIds, resizeEmbedded, startEmbedded, typeEmbeddedId } from './embedded'
 import { typedLine } from '../core/ptyproto'
-import { asTasklist, fixPosixPath, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
+import { asTasklist, fixPosixPathSoon, isMac, isWin, PROCESS_LIST, shQuote } from '../core/platform'
 import { markOpening, markTyped, noteStatus, pickNoteRoute, sentNotes, typedNoteText, type NoteRoute } from '../core/notes'
 import { t, tn, getLang, pickLang, setLang, locale } from '../core/i18n'
 import { answerPrompt, endedTurnSince, notePrompt, onlyTaskFinished, onlyTaskOf, onlyTaskPrompt, readClosedOnly, readOnlyTasks, rememberClosed, reopenForAnswer, setOnlyTask } from '../core/onlytask'
@@ -88,7 +88,7 @@ import { classify, corpusOf, isRequest, placeRequest, textsSignature, type UserR
 import { readHistory } from '../core/sessions'
 import { scanSkills, parseFind, parseList, pickSuggestions, projectToSearch, termsFor, skillsTally, mergeSkills, skillsStamp, type FoundSkill, type SkillInfo, type SkillsTally } from '../core/skills'
 import { englishTerms, hintStats, readGaps, readHints, repeatedSubjects } from '../core/skillgaps'
-import { cpSync, rmSync } from 'node:fs'
+import { appendFileSync, cpSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { exec } from 'node:child_process'
 
@@ -99,8 +99,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 for (const k of ['CLAUDE_CODE_CHILD_SESSION', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'CLAUDE_CODE_MESSAGING_SOCKET',
   'CLAUDE_CODE_MESSAGING_TOKEN', 'CLAUDE_CODE_SESSION_ATTENDED', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_EXECPATH', 'CLAUDE_CODE_SKIP_PROMPT_HISTORY', 'AI_AGENT', 'CLAUDE_CONFIG_DIR']) delete process.env[k]
 
-// macOS: opened from the Finder or the Dock the app would not find node, git nor claude (core/platform.ts).
-if (isMac) fixPosixPath()
+// macOS: opened from the Finder or the Dock the app would not find node, git nor claude (core/platform.ts). The login
+// shell's PATH from last time at once, read again without holding the start (15-11: «en mac… cuesta abrirse»).
+const posixPath = isMac ? fixPosixPathSoon(join(paths.root(), 'path-mac.txt')) : { ready: Promise.resolve(), cached: true }
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'pmc', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
@@ -3353,6 +3354,27 @@ async function screenshots(dir: string): Promise<void> {
           return { W, overflow: out.slice(0, 12) }
         })()`)
         writeFileSync(join(dir, `${route}-${w}x${h}-${theme}${look ? '-' + look : ''}${tag}.json`), JSON.stringify(report, null, 1))
+        // PMC_SHOT_CPU=seconds: what each screen spends doing nothing (the user, 15-11: «en mac va lenta la app»), per
+        // process (the app, the screen, the graphics card), into cpu.jsonl next to the pictures.
+        const cpuSecs = Number(process.env.PMC_SHOT_CPU ?? 0)
+        if (cpuSecs > 0) {
+          // As if someone were looking (App.tsx › useStill stops the endless animations 5 s after the mouse leaves).
+          await win!.webContents.executeJavaScript("window.__pmcLook = setInterval(() => window.dispatchEvent(new Event('pointermove')), 1000)")
+          // PMC_SHOT_CPU_JS: something to do first (e.g. pause every animation, to see what the screen costs without them).
+          if (process.env.PMC_SHOT_CPU_JS) await win!.webContents.executeJavaScript(process.env.PMC_SHOT_CPU_JS).catch(() => undefined)
+          await new Promise((r) => setTimeout(r, 1000))
+          // Seconds of processor each process used (cumulative), as a % of one core over the measured time.
+          const used = () => new Map(app.getAppMetrics().map((m) => [m.pid, { type: m.type, s: m.cpu.cumulativeCPUUsage ?? 0 }]))
+          const before = used()
+          const t0 = performance.now()
+          await new Promise((r) => setTimeout(r, cpuSecs * 1000))
+          const secs = (performance.now() - t0) / 1000
+          // The endless animations running then, by name and the element they move (what keeps the screen redrawing).
+          const anims = await win!.webContents.executeJavaScript(`(() => { const n = {}; for (const a of document.getAnimations()) { if (a.playState !== 'running') continue; const el = a.effect && a.effect.target; const k = (a.animationName || a.constructor.name) + ' @ ' + (el ? (el.className && el.className.baseVal !== undefined ? el.className.baseVal : String(el.className)).slice(0, 40) : '?'); n[k] = (n[k] || 0) + 1 } clearInterval(window.__pmcLook); return n })()`).catch(() => ({}))
+          const by: Record<string, number> = {}
+          for (const [pid, m] of used()) by[m.type] = Math.round(((by[m.type] ?? 0) + ((m.s - (before.get(pid)?.s ?? m.s)) / secs) * 100) * 10) / 10
+          appendFileSync(join(dir, 'cpu.jsonl'), JSON.stringify({ route, size: `${w}x${h}`, theme, ...by, anims }) + '\n')
+        }
       }
     }
   }
@@ -3463,10 +3485,15 @@ async function checkUpdate(): Promise<void> {
   try {
     const r = await fetch(LATEST_URL, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'mission-control-app' }, signal: AbortSignal.timeout(15_000) })
     if (!r.ok) return
-    update = updateFrom(await r.json(), app.getVersion(), process.platform, process.arch)
+    // The Intel build on an Apple chip runs translated (Rosetta): slower to open and to use. Its own one is offered.
+    const translated = isMac && Boolean(app.runningUnderARM64Translation)
+    update = updateFrom(await r.json(), app.getVersion(), process.platform, process.arch, translated)
+    if (translated && update?.native) service.log('Mac: va la versión de Intel en un chip de Apple (emulada, más lenta); se ofrece la de Apple Silicon')
     if (update && updateToldFor !== update.version && Notification.isSupported()) {
       updateToldFor = update.version
-      const n = new Notification({ title: t('Hay una versión nueva de Mission Control: {v0}', { v0: update.version }), body: t('Pulsa para descargarla. Se instala encima y no pierdes nada.') })
+      const n = update.native
+        ? new Notification({ title: t('Tu Mac puede ir más rápido con Mission Control'), body: t('Tienes la versión para Intel y tu Mac tiene chip de Apple: va emulada. Pulsa para bajar la de Apple Silicon. Se instala encima y no pierdes nada.') })
+        : new Notification({ title: t('Hay una versión nueva de Mission Control: {v0}', { v0: update.version }), body: t('Pulsa para descargarla. Se instala encima y no pierdes nada.') })
       n.on('click', () => { if (win) { win.show(); win.focus() } })
       n.show()
     }
@@ -3754,6 +3781,9 @@ app.whenReady().then(async () => {
   applyTheme()
   nativeTheme.on('updated', () => applyTheme())
   const cli = app.isPackaged ? join(process.resourcesPath, 'pmc', 'pmc.mjs') : join(here, '../cli/pmc.mjs')
+  // The first start on a Mac, with no PATH kept yet: node and claude are looked for with the login shell's (the window is
+  // already up meanwhile). Later starts go on at once with last time's.
+  if (!posixPath.cached) await posixPath.ready
   await service.start(cli)
   if (process.env.PMC_SHOT_DIR) void screenshots(process.env.PMC_SHOT_DIR)
   else {

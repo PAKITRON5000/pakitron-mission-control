@@ -120,7 +120,7 @@ export function ProjectSwitcher() {
 
 /** A newer version on GitHub (core/updates.ts): a button in the bar that opens its installer for this system. */
 function UpdatePill() {
-  const [u, setU] = useState<{ version: string } | undefined>()
+  const [u, setU] = useState<{ version: string; native?: boolean } | undefined>()
   const [busy, setBusy] = useState(false)
   const { toast } = useStore()
   useEffect(() => {
@@ -134,9 +134,9 @@ function UpdatePill() {
   if (!u) return null
   return (
     <button className="btn btn-sm no-drag flex-none inline-flex items-center gap-1.5" style={{ background: 'var(--accent)', color: 'white', borderRadius: 99 }}
-      title={t('Descarga el instalador. Se instala encima de esta versión y no pierdes nada.')} disabled={busy}
+      title={u.native ? t('Tienes la versión para Intel y tu Mac tiene chip de Apple: va emulada. Pulsa para bajar la de Apple Silicon. Se instala encima y no pierdes nada.') : t('Descarga el instalador. Se instala encima de esta versión y no pierdes nada.')} disabled={busy}
       onClick={() => { setBusy(true); toast(t('Descargando la versión {v0}…', { v0: u.version })); void api('installUpdate').catch((e: Error) => { toast(e.message); void api('openUpdate') }).finally(() => setBusy(false)) }}>
-      <Download size={14} strokeWidth={2.4} /> {t('Versión {v0} disponible', { v0: u.version })}
+      <Download size={14} strokeWidth={2.4} /> {u.native ? t('Versión para tu Mac (más rápida)') : t('Versión {v0} disponible', { v0: u.version })}
     </button>
   )
 }
