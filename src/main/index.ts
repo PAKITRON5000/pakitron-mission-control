@@ -9,7 +9,7 @@ import { constants as osConstants, homedir, setPriority } from 'node:os'
 import { Service, timed, nodeArgs } from './service'
 import { createModelThumbs } from './modelThumbs'
 import { AttentionBell, WaitCounter } from '../core/attentionBell'
-import { AnswerWatch } from '../core/answerWatch'
+import { AnswerWatch, askerWindow } from '../core/answerWatch'
 import { createRemote } from './remote'
 import { bringToFront, fontLine, fontPrefix, readScreen, typeKey, typeText } from './consoleTyper'
 import { LATEST_URL, updateFrom, type UpdateInfo } from '../core/updates'
@@ -1179,6 +1179,8 @@ async function routeNote(id: number, open: boolean): Promise<NoteRoute | undefin
       return { kind: 'espera', why: (e as Error).message }
     }
   }
+  // EV208: on the Mac a note from the dock stayed waiting (16-11): the log says why, to see it in mission.log.
+  service.log(`nota ${id}: ${route.kind}${'why' in route && route.why ? ` (${route.why})` : ''}; ${service.agents.map((a) => `${a.id}=${a.state}/${a.sessions.filter((x) => x.projectId === p.id).map((x) => `${x.status}${x.pid ? '' : ':sin-pid'}`).join(',') || '-'}`).join(' ')}`)
   return route
 }
 
@@ -1539,6 +1541,8 @@ const api: Record<string, Handler> = {
     const r = answerDecision(service.db, p, id, a)
     // EV160: its Claude had closed after its one task: it comes back to do what was answered.
     try { followAnswer(id) } catch (e) { service.log(`respuesta ${id}: ${(e as Error).message}`) }
+    // EV207: and at once to the window of the Claude that asked, if it has one open there.
+    void tellAsker(id).catch((e: Error) => service.log(`respuesta ${id} a quien preguntó: ${e.message}`))
     service.push()
     return r
   },
@@ -3176,11 +3180,37 @@ function watchAnswers(waiting: number): void {
   answers.update(waiting)
 }
 
+/**
+ * EV207 (the user, 16-11 19:49: «cuando responda en decidir, le llegue al claude que le toca… me ha mandado claude5 algo
+ * en decidir y al responder, le ha llegado a claude2… debería ser inmediato o casi»): the answer goes at once to the
+ * Claude that asked, and to no other. Working, the hook of its next step brings it within seconds; stopped in its window,
+ * it is typed there now. Before, a minute after the user's last answer, the newest window of the project open in the app
+ * was told, whoever it was.
+ */
+const toldAsker = new Map<string, number>()
+async function tellAsker(decisionId: number): Promise<void> {
+  if (process.env.PMC_SHOT_DIR) return
+  const d = service.db.prepare('SELECT project_id, title, asked_by, status FROM decisions WHERE id = ?').get(decisionId) as { project_id: string; title: string; asked_by: string | null; status: string } | undefined
+  if (!d?.asked_by || (d.status !== 'decidida' && d.status !== 'descartada')) return
+  const p = service.project(d.project_id)
+  const a = service.agents.find((x) => x.id === d.asked_by)
+  if (!p || !a) return
+  const chat = (x: (typeof a.sessions)[number]) => readChat(chatFile(x.cwd, x.sessionId), 1, 100 << 10)
+  const { window: w, busy } = askerWindow(a.sessions, p.id, (x) => { const c = chat(x); return Boolean(c?.midTurn && Date.now() - c.mtime < 60_000) }, (x) => chat(x)?.mtime ?? 0)
+  if (busy || w) toldAsker.set(p.id, Date.now())
+  if (!w?.pid) return
+  const title = d.title.replace(/[\r\n"«»]+/g, ' ').trim().slice(0, 80)
+  await typeText(w.pid, `Mission Control: el usuario ha contestado a tu pregunta #${decisionId} en Decidir (${title}). Ejecuta pmc respuestas, léela y hazlo.`)
+  addEvent(service.db, { projectId: p.id, at: Date.now(), account: a.id, kind: 'relevo-app', title: t('Tu respuesta a #{id} se le ha escrito a Claude {v0}, que es quien preguntó', { id: decisionId, v0: a.id.slice(6) }), source: 'Mission Control' })
+}
+
 /** One working on the project hears of the answers at its next step anyway; only when all are stopped does one need calling. */
 async function tellClaude(): Promise<void> {
   const s = service.state()
   const project = s.activeProjectId ? service.project(s.activeProjectId) : undefined
   if (!project) return
+  // EV207: the Claude that asked was already told of its answer: no other window is called for it.
+  if (Date.now() - (toldAsker.get(project.id) ?? 0) < 3 * 60_000) return
   const roots = [project.root, ...project.copies.map((c) => c.path)].map((r) => r.replace(/\//g, '\\').toLowerCase())
   // Inside the folder, not just starting like it («D:\Video App» is not in «D:\Video»).
   const here = service.agents.flatMap((a) => a.sessions).filter((x) => roots.some((r) => isInside(x.cwd, r)))

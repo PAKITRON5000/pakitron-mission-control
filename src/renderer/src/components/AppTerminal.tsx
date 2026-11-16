@@ -92,8 +92,13 @@ export function AppTerminal({ id, autoFocus, sizes = true, fontSize = 13, onExit
       else early.push(data as string)
     })
     const offExit = window.pmc.on('pty-exit', (sid, code) => { if (sid === id) exitRef.current?.(Number(code)) })
-    const input = term.onData((d) => pty.input(id, d))
-    const binary = term.onBinary((d) => pty.input(id, d))
+    // The user, 16-11 19:50: «en el de claude2, se está escribiendo solo "CECECECDCDCD…C/C-C+C)C/C0C0…" y sigue sin parar».
+    // Mouse moves in the old X10 format (ESC [ M and three bytes): Claude Code reads only the modern one (ESC [ <…M), took
+    // ESC [ M as an unknown sequence and the bytes after it as typed letters. The terminal fell back to X10 when the screen
+    // replayed on opening the chat lacked Claude's «?1006h»; it is set again below, and an X10 report never reaches Claude.
+    const send = (d: string) => { const clean = d.replace(/\x1b\[M[\s\S]{0,3}/g, ''); if (clean) pty.input(id, clean) }
+    const input = term.onData(send)
+    const binary = term.onBinary(send)
 
     let lastSize = ''
     // EV202: another view (the phone) set the size Claude Code draws for: this one draws at that size too until it is
@@ -201,6 +206,8 @@ export function AppTerminal({ id, autoFocus, sizes = true, fontSize = 13, onExit
       term.write(snap.data)
       for (const d of early) term.write(d)
       early.length = 0
+      // Mouse reports in the modern (SGR) format whenever Claude tracks the mouse, even if the replay lost its order.
+      term.write('\x1b[?1006h')
       ready = true
       refit()
       if (autoFocus) term.focus()

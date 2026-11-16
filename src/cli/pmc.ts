@@ -45,7 +45,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.34.18'
+const VERSION = '0.34.20'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -516,6 +516,30 @@ async function finishedCmd(args: string[]): Promise<void> {
   } finally { db.close() }
 }
 
+/**
+ * MC-STOP, step 3: pmc pausa ["why"] when the user asked this Claude to stop in words the app did not recognise; pmc sigue
+ * when he asks it to go on. Only this window (its session): the other accounts and the relay wheel go on as they were.
+ */
+async function pauseCmd(cmd: string, args: string[]): Promise<void> {
+  const say = (s: string) => process.stdout.write(s + '\n')
+  await loadLang()
+  const account = accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR) ?? 'claude'
+  const sessionId = process.env.CLAUDE_CODE_SESSION_ID || undefined
+  const { setPause, clearPause } = await import('../core/autonomy')
+  if (cmd === 'sigue') {
+    say(clearPause(sessionId, account) ? t('Pausa quitada: el modo autónomo vuelve a pedirte que sigas mientras haya trabajo.') : t('No estabas en pausa.'))
+    return
+  }
+  setPause({ account, sessionId, at: Date.now(), why: args.join(' ').trim().slice(0, 160) || undefined })
+  const { db, projectOf } = await openShared()
+  try {
+    const project = projectOf(process.cwd())
+    const { addEvent } = await import('../core/db')
+    addEvent(db, { projectId: project?.id, at: Date.now(), account: account as AccountId, kind: 'aviso', title: t('{who} en pausa: se lo ha pedido el usuario', { who: account.replace(/^claude/, 'Claude ') }), detail: args.join(' ').trim().slice(0, 300) || undefined, source: 'pmc' })
+  } finally { db.close() }
+  say(t('En pausa: Mission Control no te pedirá que sigas en esta ventana hasta que el usuario te diga «sigue» (o pmc sigue), o la rueda te dé un turno nuevo. Deja lo tuyo guardado (pmc guarda) y termina el turno.'))
+}
+
 async function rememberCmd(args: string[]): Promise<void> {
   const say = (s: string) => process.stdout.write(s + '\n')
   const kind = args.includes('--regla') ? 'regla' : args.includes('--preferencia') ? 'preferencia' : 'dato'
@@ -680,7 +704,21 @@ async function coordinate(event: string, account: AccountId, cwd?: string, data?
               }
             } catch { /* as before */ }
           }
-          const reason = keepGoing({ autonomous: on, next, lastPrompt: lastUserPrompt(data.transcript_path), blocks, project: project.name, elsewhere, outgoing, done, whenDone })
+          // MC-STOP: the user's «para», said any way, pauses this window (only this one) until he says «sigue».
+          const lastPrompt = lastUserPrompt(data.transcript_path)
+          let paused = false
+          try {
+            const a = await import('../core/autonomy')
+            const change = a.pauseChange(lastPrompt)
+            const before = a.pausedFor(a.readPauses(), data.session_id, account)
+            if (change === 'pausa' && !before) {
+              a.setPause({ account, sessionId: data.session_id, at: Date.now(), why: lastPrompt?.slice(0, 160) })
+              const { addEvent } = await import('../core/db')
+              addEvent(db, { projectId: project.id, at: Date.now(), account, kind: 'aviso', title: t('{who} en pausa: se lo ha pedido el usuario («{why}»)', { who: account.replace(/^claude/, 'Claude '), why: (lastPrompt ?? '').replace(/\s+/g, ' ').slice(0, 90) }), detail: t('Solo esa ventana: las demás cuentas y la rueda siguen igual. Vuelve a trabajar cuando le digas «sigue».'), source: 'pmc' })
+            } else if (change === 'sigue' && before) a.clearPause(data.session_id, account)
+            paused = change === 'pausa' || (change !== 'sigue' && Boolean(before))
+          } catch { /* as before */ }
+          const reason = keepGoing({ autonomous: on, next, lastPrompt, blocks, project: project.name, elsewhere, outgoing, done, whenDone, paused })
           if (reason) { noteBlock(data.session_id, blocks); process.stdout.write(JSON.stringify({ decision: 'block', reason })) }
         }
       } catch { /* never block Claude by mistake */ }
@@ -1219,7 +1257,8 @@ const usage = (): Record<string, string> => ({
   verifica: t('pmc verifica [ID] [--solo nombre]'), corregido: t('pmc corregido <n.º de la nota> "qué has cambiado" [--foto "ruta::qué se ve"]'),
   desechable: t('pmc desechable <ruta> "por qué"'), conservar: t('pmc conservar <ruta> "por qué"'),
   'llevar-skills': t('pmc llevar-skills <proyecto> <skill> [<skill>…] (solo si el usuario lo pidió)'), 'devolver-skills': t('pmc devolver-skills <skill> [<skill>…]'),
-  'pedido-hecho': t('pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"')
+  'pedido-hecho': t('pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"'),
+  pausa: t('pmc pausa ["lo que pidió el usuario"] (solo si el usuario te pidió parar) · pmc sigue')
 })
 const generalUsage = () => t('pmc {version}: parte | tarea <ID> [--todo] | recurso <nombre> ["para qué"|--soltar] | recursos | plan | perfil | preparar | confianza [carpeta] | gasto [días] | verifica [ID] [--solo nombre] | claim <ID> | release <ID> | claims | next | relevo <cuenta> | decide "título" --pregunta … --opcion … --foto … | entrega <ID> --que … --mirar … --foto … | trabajo "título" --log … --salida … | guarda "qué queda" | respuestas | corregido <n.º> "qué" | ahora "en qué estás" | statusline | hook | version', { version: VERSION }) + '\n'
 if (process.argv.slice(3).some((a) => /^(--help|-h|--ayuda|\/\?)$/i.test(a))) void loadLang().then(() => process.stdout.write(usage()[cmd] ? t('Uso: {usage}', { usage: usage()[cmd] }) + '\n' : generalUsage()))
@@ -1244,6 +1283,7 @@ else if (cmd === 'skills-es') void skillsEsCmd(process.argv.slice(3))
 else if (cmd === 'llevar-skills' || cmd === 'devolver-skills') void moveSkillsCmd(cmd, process.argv.slice(3))
 else if (cmd === 'recuerda') void rememberCmd(process.argv.slice(3))
 else if (cmd === 'terminado') void finishedCmd(process.argv.slice(3))
+else if (cmd === 'pausa' || cmd === 'sigue') void pauseCmd(cmd, process.argv.slice(3))
 else if (cmd === 'rumbo') void courseCmd()
 else if (cmd === 'desechable' || cmd === 'conservar') {
   // EV100: a note for the cleaning, while working: «this render was a test» / «keep it, the final cut uses it».

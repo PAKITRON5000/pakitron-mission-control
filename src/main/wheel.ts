@@ -12,6 +12,7 @@ import { duplicateWindowsToClose, idleBackgroundToStop, idleWindowsToClose, stra
 import { paths } from '../core/paths'
 import { isSessionWorking } from '../core/working'
 import { addNotice, nextTasks } from '../core/coord'
+import { accountPaused, clearPause } from '../core/autonomy'
 import { bgResumeArgs, bgStartArgs } from '../core/bgsessions'
 import { agendaBlocked, agendaDone, callText, chainStep, partnerText, nextInLine, takeTurnText, waitTurnText, type ChainMember, type RelayChain, type TurnFile } from '../core/chain'
 
@@ -206,6 +207,8 @@ export function createWheel(d: WheelDeps) {
       }
       if (act.kind === 'pasar') {
         waitingReserve.delete(projectId)
+        // MC-STOP: a new turn of the wheel lifts the pause the user gave that account («aunque luego siga en el relevo»).
+        if (act.to) clearPause(undefined, act.to, undefined, true)
         const from = act.from ? service.agents.find((a) => a.id === act.from) : undefined
         const wantsFable = /fable/i.test(from?.usage.snapshot?.model ?? '')
         // EV101: the next task's own tag first («[fable]» or «[fable u opus]»: Fable while that account has it, its limit is
@@ -253,6 +256,8 @@ export function createWheel(d: WheelDeps) {
         if (last && now - last < WAKE_EVERY_MS) continue
         // EV146: an account paying per use is not called back on its own (each call costs money; no limit would stop it).
         if (service.agents.find((a) => a.id === act.account)?.identity.plan?.paysPerUse) continue
+        // MC-STOP: the user told that Claude to stop; it is not called back until he says «sigue» or a new turn comes.
+        if (accountPaused(act.account)) continue
         woken.set(act.account, now)
         let how = ''
         try { how = await deliver(p, act.account, `Mission Control · rueda de relevos de ${p.name}: tienes el turno y llevas un rato parada con uso. Sigue con lo pendiente (pmc parte), sin resumir ni preguntar si sigues, y trabaja sin parar hasta que te quedes sin uso; entonces seguirá la siguiente de la rueda.`, false) } catch (err) { how = t('no se le pudo avisar ({v0})', { v0: (err as Error).message }) }

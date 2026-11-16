@@ -20,12 +20,116 @@ export const STOP_WORDS = /(?:^\s*(?:para|parad|parar|stop|detente|det[eé]n|alt
  * or a verb in the infinitive («para un momento», «para ya», «para de trabajar», «para.»).
  */
 export function isStopPrompt(prompt: string): boolean {
+  return startsWithStop(prompt) || stopAnywhere(prompt)
+}
+
+function startsWithStop(prompt: string): boolean {
   if (!STOP_WORDS.test(prompt)) return false
+  // MC-STOP: «parar el bot» is a task about something else, not an order to this window.
+  if (/^\s*parar\s+(?!ya\b|un\s)[a-záéíóúñ]/i.test(prompt)) return false
   const m = prompt.match(/^\s*para\s+([a-záéíóúñ]+)/i)
   if (!m) return true
   const next = m[1].toLowerCase()
   if (/^(que|qué|ello|eso|esto|esta|este|estas|estos|los|las|el|la|lo|le|les|mi|mis|tu|tus|su|sus|todo|toda|todos|todas|cada|cuando|como|cómo|no|nada|mí|ti|nosotros|vosotros|ellos|ellas)$/.test(next)) return false
   if (/(ar|er|ir|arlo|erlo|irlo|arla|erla|irla|arlos|arlas|arse|erse|irse)$/.test(next) && next !== 'parar') return false
+  return true
+}
+
+/** Lower case and without accents, so «detén» and «deten», «continúa» and «continua» are the same word. */
+const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
+
+/**
+ * MC-STOP (the user, 16-11: «cuando yo digo a un claude que pare, y sigue insistiendo en que trabajéis»): the order to
+ * stop anywhere in the message, and asked politely, not only as its first word: «¿puedes parar un momento?», «cuando
+ * puedas, te detienes en un punto seguro y dejas todo cerrado para poder usar yo el pc». `neg: false` are the ones that
+ * already are a negation («no sigas»); the rest do not count after «no», «sin» or «nunca» («no quiero que pares»,
+ * «trabaja sin parar»).
+ */
+const STOP_ANYWHERE: { re: RegExp; neg?: false }[] = [
+  { re: /\b(?:para|parad|parar|parate|paraos)\s+(?:un (?:momento|rato|segundo|poco|minuto)|ya\b|aqui\b|ahi\b|por (?:hoy|ahora|el momento)|de (?:trabajar|hacer|programar|currar|tocar)|en (?:un punto|cuanto|el punto))/ },
+  { re: /(?:^|[,;:]\s*|\b(?:y|luego|despues|entonces|ya)\s+)(?:para|parad|parar|parate|paraos)\s*(?:[.!?…,;]|$)/ },
+  { re: /\b(?:puedes|podrias|podeis|podriais|puede|pueden|quiero que|necesito que|te pido que|os pido que|haz el favor de|por favor,?)\s+(?:te\s+)?(?:parar(?:te)?|pares|pareis|detener(?:te)?|detengas|detengais|descansar|pausar|dejar de trabajar)\b/ },
+  { re: /\bque (?:te )?(?:pares|pareis|detengas|detengais)\b/ },
+  { re: /\b(?:detente|deteneos|detenerte|te detienes|te detengas|te paras|parate|paraos)\b/ },
+  { re: /\b(?:deja|dejad|dejas|deja ya) de (?:trabajar|hacer cosas|programar|currar|tocar (?:nada|cosas))\b/ },
+  { re: /\b(?:deja|dejas|dejad|dejalo|dejadlo)\s+(?:lo\s+)?(?:todo\s+)?(?:cerrado|guardado|recogido)\b/ },
+  { re: /\b(?:dejalo|dejadlo|lo dejamos|lo dejas) (?:aqui|ahi|por hoy|por ahora)\b/ },
+  { re: /\busar yo el (?:pc|ordenador)\b|\b(?:poder|quiero|voy a|necesito|tengo que) usar (?:yo )?el (?:pc|ordenador)\b|\b(?:libera|liberes|deja libre|dejes libre) el (?:pc|ordenador)\b/ },
+  { re: /\b(?:descansa|descansad|tomate un descanso|haz una pausa|haced una pausa|ponte en pausa|pausate)\b/ },
+  { re: /\bno (?:sigas|sigais|continues|continueis|trabajes mas|hagas nada mas|toques nada mas)\s*(?:[.!?…,;]|$)/, neg: false },
+  { re: /\b(?:no hagas nada|no toques nada|espera|esperad|quedate quieto)\b[^.!?]{0,40}\bhasta que (?:te|os) (?:avise|diga)\b/, neg: false },
+  { re: /\bya basta\b|\b(?:suficiente|ya esta|ya vale|es todo) por hoy\b/ },
+  // English, for the app in English.
+  { re: /^\s*(?:stop|pause|hold on)\b/ },
+  { re: /\b(?:please|can you|could you|you can|you should|i want you to|i need you to|now)\s+(?:stop|pause|take a break)\b/ },
+  { re: /\bstop (?:working|now|here|for now|for today|there|everything)\b|\b(?:and|then)\s+stop\s*(?:[.!?,;]|$)|\btake a break\b/ },
+  { re: /\b(?:don'?t|do not) (?:continue|keep going|do anything (?:else|more))\b/, neg: false },
+  { re: /\b(?:i (?:want|need) to use|let me use) the (?:pc|computer)\b/ }
+]
+
+const NEGATED = /\b(?:no|sin|nunca|jamas|ni|don'?t|do not|never|without)\b[^.,;:!?]{0,24}$/
+
+function stopAnywhere(prompt: string): boolean {
+  const s = fold(prompt)
+  for (const { re, neg } of STOP_ANYWHERE) {
+    const m = re.exec(s)
+    if (m && (neg === false || !NEGATED.test(s.slice(Math.max(0, m.index - 30), m.index)))) return true
+  }
+  return false
+}
+
+/** MC-STOP: the user telling a paused window to go on again. */
+export function isGoPrompt(prompt: string): boolean {
+  const s = fold(prompt)
+  const m = /\b(?:sigue|seguid|continua|continuad|continue|reanuda|adelante|go on|keep going|resume|vuelve (?:al trabajo|a trabajar|a lo tuyo)|a trabajar|(?:ya )?puedes seguir)\b/.exec(s)
+  return Boolean(m) && !NEGATED.test(s.slice(Math.max(0, m!.index - 30), m!.index))
+}
+
+/** What the user's last words do to this window's pause; the texts the app types into windows («Mission Control…») do nothing. */
+export function pauseChange(prompt: string | undefined): 'pausa' | 'sigue' | undefined {
+  if (!prompt || /^\s*mission control\b/i.test(prompt)) return undefined
+  if (isStopPrompt(prompt)) return 'pausa'
+  if (isGoPrompt(prompt)) return 'sigue'
+  return undefined
+}
+
+/**
+ * MC-STOP, step 2 (the user, 16-11: «molaría que entienda Mission Control si yo he pedido que un Claude en concreto pare,
+ * aunque luego siga en el relevo»): the pause is of that one window (its session), not of autonomous mode. It holds while
+ * the user talks to it about other things, until he says «sigue», the Claude runs `pmc sigue`, or the relay wheel gives
+ * that account a new turn. Without a session id (an old Claude Code), it is the account's until its next session.
+ */
+export interface Pause { account: string; sessionId?: string; at: number; why?: string }
+export const PAUSE_KEEP_MS = 3 * 86_400_000
+const pausesFile = () => join(paths.root(), 'pausas.json')
+
+export function readPauses(file = pausesFile(), now = Date.now()): Pause[] {
+  try { return (JSON.parse(readFileSync(file, 'utf8')) as Pause[]).filter((p) => now - p.at < PAUSE_KEEP_MS) } catch { return [] }
+}
+
+const samePause = (p: Pause, sessionId: string | undefined, account: string) => (sessionId && p.sessionId ? p.sessionId === sessionId : p.account === account)
+
+/** The pause that holds this window, if any. */
+export function pausedFor(list: Pause[], sessionId: string | undefined, account: string): Pause | undefined {
+  return list.find((p) => (p.sessionId ? p.sessionId === sessionId : p.account === account))
+}
+
+/** Whether any window of this account is paused (the wheel does not call it back to work). */
+export function accountPaused(account: string, list = readPauses()): boolean {
+  return list.some((p) => p.account === account)
+}
+
+export function setPause(p: Pause, file = pausesFile()): void {
+  const list = readPauses(file, p.at).filter((x) => !samePause(x, p.sessionId, p.account))
+  try { writeFileSync(file, JSON.stringify([...list, p], null, 1)) } catch { /* next time */ }
+}
+
+/** Lifts the pause of this window; with `wholeAccount`, every pause of the account (a new turn of the wheel). */
+export function clearPause(sessionId: string | undefined, account: string, file = pausesFile(), wholeAccount = false): boolean {
+  const list = readPauses(file)
+  const left = list.filter((x) => !(wholeAccount ? x.account === account : samePause(x, sessionId, account) || (!x.sessionId && x.account === account)))
+  if (left.length === list.length) return false
+  try { writeFileSync(file, JSON.stringify(left, null, 1)) } catch { /* next time */ }
   return true
 }
 
@@ -48,6 +152,8 @@ export interface StopInput {
   done?: boolean
   /** EV126: what the user wants then: rest, or go on in another project with work. */
   whenDone?: WhenDone
+  /** MC-STOP: the user paused this window (and has not said «sigue» since). */
+  paused?: boolean
 }
 
 /**
@@ -96,7 +202,7 @@ export const OUTGOING_WINDOW_MS = 15 * 60_000
  */
 export function keepGoing(i: StopInput): string | undefined {
   const now = i.now ?? Date.now()
-  if (!i.autonomous) return undefined
+  if (!i.autonomous || i.paused) return undefined
   if (i.lastPrompt && isStopPrompt(i.lastPrompt)) return undefined
   if (i.blocks.filter((at) => now - at < BLOCK_WINDOW_MS).length >= MAX_BLOCKS) return undefined
   if (i.outgoing) {

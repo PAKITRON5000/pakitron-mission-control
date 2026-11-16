@@ -270,7 +270,11 @@ export function keyEmbeddedId(id: string, key: string): void {
 }
 
 export function inputEmbedded(id: string, data: string): void {
-  if (typeof data === 'string' && data.length <= 1 << 20) client?.write(id, data)
+  if (typeof data !== 'string' || data.length > 1 << 20) return
+  // Mouse reports in the old X10 format (ESC [ M + 3 bytes) are typed by Claude Code as letters («CECECD…», 16-11): never
+  // sent, from any view (an older window of the app, the phone).
+  const clean = data.replace(/\x1b\[M[\s\S]{0,3}/g, '')
+  if (clean) client?.write(id, clean)
 }
 
 /** `desk`: asked by a window of the app on the PC (not by the phone), kept to give it back when the phone stops looking. */

@@ -35,3 +35,13 @@ export class AnswerWatch {
     this.timer = undefined
   }
 }
+
+/**
+ * EV207: where an answer in Decidir goes: the windows of the Claude that asked, in that project (never another account's).
+ * `busy`: one of them is mid-turn, and the hook of its next step brings the answer; otherwise `window` is the one to type into.
+ */
+export function askerWindow<S extends { pid?: number; kind?: string; projectId?: string }>(sessions: S[], projectId: string, moving: (s: S) => boolean, mtime: (s: S) => number): { window?: S; busy: boolean } {
+  const wins = sessions.filter((s) => s.pid && s.kind !== 'background' && s.projectId === projectId)
+  if (wins.some(moving)) return { busy: true }
+  return { window: [...wins].sort((a, b) => mtime(b) - mtime(a))[0], busy: false }
+}
