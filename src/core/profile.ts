@@ -525,6 +525,7 @@ export const pmcSkill = (): string => [
   t('- Algo de más de 5 minutos (un render, una grabación): `pmc trabajo "Render del tráiler" --log ruta.log --salida ruta.mp4 [--pid N]`.'),
   t('- Para que el usuario decida, no te pares: `pmc decide "título" --pregunta "…" --opcion "A: …" --opcion "B: …" --foto "ruta::qué se ve" [--audio "ruta::qué es::para qué"] [--tarea EV12]`, y sigue con otra cosa; su respuesta te llega sola (o con `pmc respuestas`). Enséñale siempre lo concreto.'),
   t('- Si el usuario te pide que pares (con las palabras que sea) y el aviso de Mission Control insiste en que sigas: `pmc pausa "lo que te pidió"`, guarda lo tuyo y termina. Solo esta ventana queda en pausa; cuando te diga que sigas, `pmc sigue`.'),
+  t('- Si la tarea pide algo que ninguna skill instalada cubre: `pmc skills-busca "tema en inglés"` y, si una sirve de verdad, `pmc skills-instala autor/repo@skill`. Va solo a este proyecto y solo pone las fiables (más de mil instalaciones); las que el usuario quitó no vuelven.'),
   '',
   t('## Cerrar'),
   t('- `pmc verifica EV12`: pasa las comprobaciones del proyecto (`pmc.json`) y deja el resultado en la tarea. Si fallan, arréglalo antes de darla por hecha. Lo que no tenga prueba, dilo en la entrega.'),

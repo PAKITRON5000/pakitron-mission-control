@@ -364,6 +364,8 @@ export interface Settings {
   notifyVolume?: number
   /** From midnight to nine it only flashes, without sound. */
   quietNights?: boolean
+  /** EV205: after each search alone, the few most trusted suggestions that fit go into the project alone (unset: on). */
+  autoSkills?: boolean
   theme: 'system' | 'dark' | 'light'
   reduceMotion: 'system' | 'on' | 'off'
   activeProjectId?: string

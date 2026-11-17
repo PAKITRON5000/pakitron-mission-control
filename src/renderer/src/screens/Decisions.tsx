@@ -145,9 +145,16 @@ function DecisionCard({ d, onDone }: { d: Decision; onDone: (d: Decision) => voi
     if (!state) return
     setBusy(true)
     try {
-      const r = await api<Decision>('answerDecision', state.activeProjectId, d.id, { choice: status === 'descartada' ? undefined : choice, note, status, reactions: status === 'descartada' ? undefined : react })
+      const r = await api<Decision & { delivery?: { kind: 'escrita' | 'ocupado' | 'sin-ventana' | 'nadie'; account?: string } }>('answerDecision', state.activeProjectId, d.id, { choice: status === 'descartada' ? undefined : choice, note, status, reactions: status === 'descartada' ? undefined : react })
       setNote('')
-      toast(d.askedBy ? t('Enviado a {v0}: le llega en su próximo paso', { v0: accName(d.askedBy) }) : t('Decisión guardada: la recoge el primer Claude que trabaje'))
+      // EV207 (17-11): what really happened to the answer, so nobody has to tell the Claude «respondido» by hand.
+      const who = accName(r.delivery?.account ?? d.askedBy ?? '')
+      const kind = r.delivery?.kind
+      toast(!d.askedBy ? t('Decisión guardada: la recoge el primer Claude que trabaje')
+        : kind === 'escrita' ? t('Enviado a {v0}: se lo acabo de escribir en su ventana', { v0: who })
+        : kind === 'ocupado' ? t('Enviado a {v0}: está a mitad de algo y le llega en cuanto lo acabe; no hace falta que le escribas', { v0: who })
+        : kind === 'sin-ventana' ? t('Guardado para {v0}: no tiene ninguna ventana abierta en este proyecto y lo leerá en cuanto vuelva a trabajar', { v0: who })
+        : t('Enviado a {v0}: le llega en su próximo paso', { v0: who }))
       onDone(r)
     } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
   }

@@ -45,7 +45,7 @@ function readTurn(account: string, cwd?: string): TurnAnswer {
   } catch { return { inWheel: false } }
 }
 
-const VERSION = '0.34.20'
+const VERSION = '0.34.22'
 
 function readStdin(): string {
   try { return readFileSync(0, 'utf8') } catch { return '' }
@@ -489,6 +489,94 @@ async function moveSkillsCmd(cmd: string, args: string[]): Promise<void> {
       const m = takeSkillToProject({ name, projectId: project.id, accountSkillDirs: skillDirs, copies, gitExclude: gitExcludeOf(project.root) })
       say(t('Llevada a {project}: {name} (en {n} copias; apartada en {folders})', { project: project.name, name, n: m.placed.length, folders: tn(m.aside.length, '{n} carpeta de cuentas', '{n} carpetas de cuentas') }))
     } catch (e) { say(`${name}: ${(e as Error).message}`); process.exitCode = 1 }
+  }
+}
+
+/** The skills CLI of skills.sh through npx; what it printed (empty with no npx or no network: the caller says so). */
+async function skillsNpx(args: string, cwd: string, timeout: number): Promise<string> {
+  const { exec } = await import('node:child_process')
+  return new Promise((resolve) => exec(`npx -y skills ${args}`, { cwd, timeout, windowsHide: true, maxBuffer: 8 << 20, env: { ...process.env, CI: '1', NO_COLOR: '1' } }, (_e, out, err) => resolve(`${out ?? ''}\n${err ?? ''}`)))
+}
+
+/**
+ * EV205 step 3 (the user, 16-11 19:40: «o que cuando toque según lo que pida el usuario se le instalen»): a Claude whose
+ * task needs something no installed skill covers. `pmc skills-busca "tema"`: what skills.sh has for it (trusted: more
+ * than MIN_INSTALLS installs; not installed yet), with what each does. `pmc skills-instala <autor/repo@skill>`: puts one
+ * in this project's folder only (out of its git, written down as put by this account), under the same trust rules, and
+ * never one the user took away from the project.
+ */
+async function skillsFindCmd(cmd: string, args: string[]): Promise<void> {
+  const say = (s: string) => process.stdout.write(s + '\n')
+  await loadLang()
+  const { parseFind, parseList, scanSkills, MIN_INSTALLS } = await import('../core/skills')
+  const auto = await import('../core/skillauto')
+  const { tmpdir, homedir } = await import('node:os')
+  const { db, projectOf } = await openShared()
+  try {
+    const project = projectOf(process.cwd())
+    if (!project) { say(t('Esta carpeta no pertenece a ningún proyecto de Mission Control.')); process.exitCode = 2; return }
+    const removed = auto.readAuto()[project.id]?.removed ?? []
+    const isRemoved = (name: string) => removed.some((x) => x.toLowerCase() === name.toLowerCase())
+    if (cmd === 'skills-busca') {
+      const term = args.join(' ').replace(/"/g, '').trim()
+      if (!term) { say(t('Uso: pmc skills-busca "tema en inglés" (por ejemplo "unity shaders" o "video editing")')); process.exitCode = 2; return }
+      const out = await skillsNpx(`find "${term}"`, tmpdir(), 90_000)
+      const found = parseFind(out, term)
+      if (!found.length) { say(/installs?/i.test(out) ? t('skills.sh no tiene nada para «{term}». Prueba con otras palabras, en inglés.', { term }) : t('No se ha podido buscar en skills.sh (¿sin internet o sin npx?). Prueba más tarde.')); return }
+      const accounts = configuredAccounts().map((a) => ({ id: a.id, configDir: a.configDir || join(homedir(), '.claude') }))
+      const installed = scanSkills({ accounts, projects: [{ id: project.id, roots: [project.root, ...project.copies.map((c) => c.path)] }] }).map((s) => s.name)
+      const picks = auto.pickForSearch(found, installed, MIN_INSTALLS)
+      if (!picks.length) { say(t('En skills.sh no hay nada fiable para «{term}» que no tengas ya (solo cuentan las de más de mil instalaciones). Prueba con otras palabras, en inglés.', { term })); return }
+      // What each does (one listing per repository, a few seconds each; at most four, at once).
+      const desc: Record<string, string> = {}
+      await Promise.all([...new Set(picks.map((f) => f.source))].slice(0, 4).map(async (source) => {
+        for (const [k, v] of Object.entries(parseList(await skillsNpx(`add ${source} -l`, tmpdir(), 120_000)))) desc[`${source}@${k}`] = v
+      }))
+      say(t('Skills fiables en skills.sh para «{term}» que no tienes:', { term }))
+      for (const f of picks) {
+        say(`- ${f.id} · ${t('{v0} instalaciones', { v0: f.installs.toLocaleString(locale()) })}${isRemoved(f.skill) ? ' · ' + t('el usuario la quitó de este proyecto: no se pone') : ''}`)
+        if (desc[f.id]) say(`  ${desc[f.id].slice(0, 300)}`)
+        if (f.url) say(`  ${f.url}`)
+      }
+      say(t('Para ponerla en este proyecto (solo aquí y fuera de git): pmc skills-instala <autor/repo@skill>. Pon solo la que de verdad le sirva a la tarea: cada skill suma su descripción a lo que lee cada sesión de este proyecto.'))
+      return
+    }
+    // pmc skills-instala <autor/repo@skill>
+    const id = (args[0] ?? '').trim()
+    if (!id) { say(t('Uso: pmc skills-instala <autor/repo@skill> (el nombre que da pmc skills-busca)')); process.exitCode = 2; return }
+    const skill = id.split('@')[1] ?? ''
+    // The folder this Claude works in (the project's root or one of its copies), where its sessions look for skills.
+    const here = pathKey(process.cwd())
+    const folder = [project.root, ...project.copies.map((c) => c.path)].filter((d) => here === pathKey(d) || here.startsWith(pathKey(d) + '\\')).sort((a, b) => b.length - a.length)[0] ?? project.root
+    if (auto.SKILL_ID_RE.test(id) && existsSync(join(folder, '.claude', 'skills', skill, 'SKILL.md'))) { say(t('{skill} ya está en este proyecto: cárgala con la herramienta Skill.', { skill })); return }
+    let found: ReturnType<typeof parseFind> = []
+    if (auto.SKILL_ID_RE.test(id) && !isRemoved(skill)) {
+      const repo = id.split('@')[0].split('/')[1]
+      for (const q of [skill.replace(/[-_]/g, ' '), `${repo} ${skill}`]) {
+        found.push(...parseFind(await skillsNpx(`find "${q.replace(/"/g, '')}"`, tmpdir(), 90_000), q))
+        if (found.some((f) => f.id.toLowerCase() === id.toLowerCase())) break
+      }
+    }
+    const why = auto.refuseInstall(id, found, removed, MIN_INSTALLS)
+    if (why) {
+      say(why === 'nombre' ? t('«{id}» no es un nombre de skill: es autor/repo@skill, como lo da pmc skills-busca.', { id })
+        : why === 'quitada' ? t('El usuario quitó {skill} de {project}: no se vuelve a poner sin él. Si de verdad hace falta, pregúntaselo con pmc decide.', { skill, project: project.name })
+        : why === 'pocas' ? t('{id} tiene menos de mil instalaciones en skills.sh: no se pone sin el usuario. Si de verdad hace falta, pregúntaselo con pmc decide.', { id })
+        : t('skills.sh no lista {id} (o no se ha podido buscar): solo se ponen las que lista con más de mil instalaciones. Búscala con pmc skills-busca "tema".', { id }))
+      process.exitCode = 1
+      return
+    }
+    const out = await skillsNpx(`add ${id} -a claude-code -y --copy`, folder, 240_000)
+    if (!existsSync(join(folder, '.claude', 'skills', skill, 'SKILL.md'))) { say(t('No se ha instalado: {v0}', { v0: out.trim().slice(-300) })); process.exitCode = 1; return }
+    const { gitExcludeOf } = await import('../core/skillmove')
+    auto.excludeFromGit(gitExcludeOf(project.root), skill)
+    const account = accountFromConfigDir(process.env.CLAUDE_CONFIG_DIR) ?? 'claude'
+    auto.noteInstalled(project.id, { name: skill, id, by: account })
+    const { addEvent } = await import('../core/db')
+    addEvent(db, { projectId: project.id, at: Date.now(), account: account as AccountId, kind: 'skill', title: t('{who} ha puesto la skill {skill} en {project}', { who: account.replace(/^claude/, 'Claude '), skill, project: project.name }), detail: t('{id}: la pidió su tarea. Si no te sirve, quítala en Skills y no volverá.', { id }), source: 'pmc' })
+    say(t('Puesta en {project}: {skill} (en {folder}, fuera de git). Cárgala con la herramienta Skill; si aún no te aparece, estará en la próxima sesión.', { project: project.name, skill, folder: join(folder, '.claude', 'skills', skill) }))
+  } finally {
+    db.close()
   }
 }
 
@@ -1205,7 +1293,11 @@ async function claims(cmd: string, args: string[]): Promise<void> {
             if (line) say(line)
             if (found.length) g.appendHint({ kind: 'dada', at: Date.now(), account, project: project.id, task: id, names: found.map((x) => x.name) })
             // EV191 step 2: nothing installed fits: its subjects wait for the app's search on skills.sh.
-            else g.writeGaps(g.noteGap(g.readGaps(), project.id, id, text))
+            else {
+              g.writeGaps(g.noteGap(g.readGaps(), project.id, id, text))
+              // EV205 step 3: and this Claude can look for one itself, now, if the task really needs it.
+              say(t('Ninguna skill instalada encaja con esta tarea. Si te haría falta una: pmc skills-busca "tema en inglés" y, si alguna sirve, pmc skills-instala <autor/repo@skill> (solo en este proyecto).'))
+            }
           } catch { /* advice only */ }
         }
       }
@@ -1260,7 +1352,7 @@ const usage = (): Record<string, string> => ({
   'pedido-hecho': t('pmc pedido-hecho "un trozo del texto de la petición (8 letras o más)"'),
   pausa: t('pmc pausa ["lo que pidió el usuario"] (solo si el usuario te pidió parar) · pmc sigue')
 })
-const generalUsage = () => t('pmc {version}: parte | tarea <ID> [--todo] | recurso <nombre> ["para qué"|--soltar] | recursos | plan | perfil | preparar | confianza [carpeta] | gasto [días] | verifica [ID] [--solo nombre] | claim <ID> | release <ID> | claims | next | relevo <cuenta> | decide "título" --pregunta … --opcion … --foto … | entrega <ID> --que … --mirar … --foto … | trabajo "título" --log … --salida … | guarda "qué queda" | respuestas | corregido <n.º> "qué" | ahora "en qué estás" | statusline | hook | version', { version: VERSION }) + '\n'
+const generalUsage = () => t('pmc {version}: parte | tarea <ID> [--todo] | recurso <nombre> ["para qué"|--soltar] | recursos | plan | perfil | preparar | confianza [carpeta] | gasto [días] | verifica [ID] [--solo nombre] | claim <ID> | release <ID> | claims | next | relevo <cuenta> | decide "título" --pregunta … --opcion … --foto … | entrega <ID> --que … --mirar … --foto … | trabajo "título" --log … --salida … | guarda "qué queda" | respuestas | corregido <n.º> "qué" | ahora "en qué estás" | skills-busca "tema" | skills-instala <autor/repo@skill> | statusline | hook | version', { version: VERSION }) + '\n'
 if (process.argv.slice(3).some((a) => /^(--help|-h|--ayuda|\/\?)$/i.test(a))) void loadLang().then(() => process.stdout.write(usage()[cmd] ? t('Uso: {usage}', { usage: usage()[cmd] }) + '\n' : generalUsage()))
 else if (cmd === 'statusline') statusline(arg)
 else if (cmd === 'install-statusline' || cmd === 'uninstall-statusline' || cmd === 'statusline-state') manage(cmd, arg)
@@ -1280,6 +1372,7 @@ else if (cmd === 'gasto') void costCmd(process.argv.slice(3))
 else if (cmd === 'puede-arrancar') void canStart(process.argv[3], process.argv[4])
 else if (cmd === 'turno') void turnCmd(process.argv.slice(3))
 else if (cmd === 'skills-es') void skillsEsCmd(process.argv.slice(3))
+else if (cmd === 'skills-busca' || cmd === 'skills-instala') void skillsFindCmd(cmd, process.argv.slice(3))
 else if (cmd === 'llevar-skills' || cmd === 'devolver-skills') void moveSkillsCmd(cmd, process.argv.slice(3))
 else if (cmd === 'recuerda') void rememberCmd(process.argv.slice(3))
 else if (cmd === 'terminado') void finishedCmd(process.argv.slice(3))

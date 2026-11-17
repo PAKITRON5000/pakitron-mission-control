@@ -1,7 +1,7 @@
 {
   "name": "pakitron-mission-control",
   "productName": "Pakitron Mission Control",
-  "version": "0.34.20",
+  "version": "0.34.22",
   "description": "Coordina tus cuentas de Claude Code en tus proyectos: quién trabaja dónde y quién sigue cuando una se queda sin uso",
   "author": "Pakitron",
   "license": "Apache-2.0",

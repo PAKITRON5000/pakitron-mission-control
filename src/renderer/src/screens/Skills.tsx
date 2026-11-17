@@ -1,6 +1,6 @@
 import { t, tn } from '../../../core/i18n'
 import { useEffect, useState } from 'react'
-import { Puzzle, Search, Download, Trash2, ExternalLink, FolderOpen, Sparkles, ShieldAlert } from 'lucide-react'
+import { Puzzle, Search, Download, Trash2, ExternalLink, FolderOpen, Sparkles, ShieldAlert, Wand2 } from 'lucide-react'
 import { useStore, useAsync } from '../lib/store'
 import { api } from '../lib/api'
 import { Avatar, Empty, Segmented, accName } from '../components/ui'
@@ -8,7 +8,7 @@ import { whenFull } from '../lib/format'
 
 interface SkillInfo { name: string; description: string; scope: 'proyecto' | 'cuenta' | 'plugin'; accounts: string[]; projects: string[]; dir: string; source?: string; updatedAt?: number }
 interface Found { id: string; skill: string; source: string; installs: number; url?: string; term: string; description?: string }
-interface SkillsView { es: Record<string, string>; installed: SkillInfo[]; uses: Record<string, number>; usesEverywhere?: Record<string, number>; countedEverywhere?: boolean; aside?: string[]; onlyIn?: Record<string, string>; moved?: { name: string; projectId: string; at: number }[]; usesAt?: number; kinds: string[]; summary?: string; terms: string[]; suggestions: Found[]; searchedAt?: number; gapTerms?: string[]; hinted?: Record<string, { given: number; used: number }> }
+interface SkillsView { es: Record<string, string>; installed: SkillInfo[]; uses: Record<string, number>; usesEverywhere?: Record<string, number>; countedEverywhere?: boolean; aside?: string[]; onlyIn?: Record<string, string>; moved?: { name: string; projectId: string; at: number }[]; usesAt?: number; kinds: string[]; summary?: string; terms: string[]; suggestions: Found[]; searchedAt?: number; gapTerms?: string[]; hinted?: Record<string, { given: number; used: number }>; put?: { name: string; id: string; at: number; by: string }[]; fitting?: string[] }
 
 const err = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 const fmt = (n: number) => (n >= 1000 ? t('{v0} mil', { v0: (n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace('.', ',') }) : String(n))
@@ -19,7 +19,7 @@ const fmt = (n: number) => (n >= 1000 ? t('{v0} mil', { v0: (n / 1000).toFixed(n
  * on skills.sh for what the project is, to install with a click.
  */
 export function Skills() {
-  const { state, toast } = useStore()
+  const { state, toast, refresh } = useStore()
   const pid = state?.activeProjectId
   const project = state?.projects.find((p) => p.id === pid)
   const [busy, setBusy] = useState<string>()
@@ -39,6 +39,12 @@ export function Skills() {
     try { await fn(); v.reload(); toast(ok) } catch (e) { toast(err(e)) } finally { setBusy(undefined) }
   }
   const mine = (data?.installed ?? []).filter((s) => s.scope === 'proyecto' && s.projects.includes(project.id))
+  // EV205: on unless the user turned it off; which of the project's skills the app put alone.
+  const autoOn = state.settings?.autoSkills !== false
+  const putAlone = new Set((data?.put ?? []).filter((x) => x.by === 'app').map((x) => x.name.toLowerCase()))
+  // The suggestions «Instalar las que le sirven» would put, by id (owner/repo@skill): two authors can share a skill's name.
+  const fits = new Set(data?.fitting ?? [])
+  const fitNames = (data?.fitting ?? []).map((id) => id.split('@')[1])
   const accounts = (data?.installed ?? []).filter((s) => s.scope === 'cuenta')
   const plugins = (data?.installed ?? []).filter((s) => s.scope === 'plugin')
   // What it does, in Spanish when a session has written it (pmc skills-es), else as its author wrote it.
@@ -103,16 +109,29 @@ export function Skills() {
         <div className="flex items-center gap-2 flex-wrap">
           <Sparkles size={16} style={{ color: 'var(--pink)' }} /><b className="t-body">{t('Sugeridas para {name}', { name: project.name })}</b>
           {data?.summary && <span className="t-small c3">{t('· es {v0}', { v0: data.summary.charAt(0).toLowerCase() + data.summary.slice(1) })}</span>}
-          <button className="btn btn-sm btn-primary ml-auto" disabled={busy === 'buscar'} onClick={() => void run('buscar', () => api('skillsSearch', project.id), t('Sugerencias al día'))}>
-            <Search size={13} /> {busy === 'buscar' ? t('Buscando en skills.sh… (1-2 min)') : data?.searchedAt ? t('Buscar otra vez') : t('Buscar sugerencias')}
-          </button>
+          <span className="flex items-center gap-1.5 flex-wrap ml-auto">
+            {/* EV205: the trusted ones that fit, at once (the same choice the app makes alone, up to five). */}
+            {(data?.fitting?.length ?? 0) > 0 && (
+              <button className="btn btn-sm" disabled={!!busy} title={t('Instala en {name}: {list}', { name: project.name, list: fitNames.join(', ') })}
+                onClick={() => void run('sirven', () => api('skillInstallFitting', project.id), tn(data!.fitting!.length, '{n} skill instalada en {name}', '{n} skills instaladas en {name}', { name: project.name }))}>
+                <Wand2 size={13} /> {busy === 'sirven' ? t('Instalando…') : t('Instalar las que le sirven ({n})', { n: data!.fitting!.length })}
+              </button>
+            )}
+            <button className="btn btn-sm btn-primary" disabled={busy === 'buscar'} onClick={() => void run('buscar', () => api('skillsSearch', project.id), t('Sugerencias al día'))}>
+              <Search size={13} /> {busy === 'buscar' ? t('Buscando en skills.sh… (1-2 min)') : data?.searchedAt ? t('Buscar otra vez') : t('Buscar sugerencias')}
+            </button>
+          </span>
         </div>
         <div className="t-small c3">{t('Busca en skills.sh por')} {data?.terms.length || data?.gapTerms?.length ? [...(data?.terms ?? []), ...(data?.gapTerms ?? [])].map((t) => `«${t}»`).join(', ') : t('lo que es el proyecto')} {t('y solo propone las de más de mil instalaciones que aún no tienes.{v0}', { v0: data?.searchedAt ? t(' Última búsqueda: {v0}.', { v0: whenFull(data.searchedAt, Date.now()) }) : '' })}</div>
+        <label className="t-small c2 flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 accent-[var(--accent)]" checked={autoOn} onChange={(e) => void api('setSettings', { autoSkills: e.target.checked }).then(() => { refresh(); toast(e.target.checked ? t('Las más fiables se pondrán solas') : t('Ya no se pondrá ninguna sola')) }, (er) => toast(err(er)))} />
+          <span><b>{t('Ponerlas solas')}</b> · {t('tras cada búsqueda sola (una vez por semana), las más fiables que le encajan a cada proyecto (más de cinco mil instalaciones, tres como mucho) se instalan en él, no en las cuentas. Si quitas una, no vuelve.')}</span>
+        </label>
         {data?.suggestions.length ? (
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {data.suggestions.map((f) => (
               <div key={f.id} className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: 'var(--fill)' }}>
-                <div className="flex items-baseline gap-2 min-w-0"><b className="t-body truncate">{f.skill}</b><span className="t-small c3 ml-auto whitespace-nowrap">{t('{v0} instalaciones', { v0: fmt(f.installs) })}</span></div>
+                <div className="flex items-baseline gap-2 min-w-0"><b className="t-body truncate">{f.skill}</b>{fits.has(f.id) &&<span className="t-small whitespace-nowrap" style={{ color: 'var(--green)' }} title={t('Entra en «Instalar las que le sirven»: autor muy usado y encaja con lo que es el proyecto')}>{t('le sirve')}</span>}<span className="t-small c3 ml-auto whitespace-nowrap">{t('{v0} instalaciones', { v0: fmt(f.installs) })}</span></div>
                 <div className="t-small c2 clamp-3" style={{ minHeight: '3.9em' }} title={f.description}>{say(f.skill, f.description) ?? t('Sin descripción: pulsa el enlace para leerla en skills.sh.')}</div>
                 <div className="t-small c3 truncate">{t('de {source} · por «{term}»', { source: f.source, term: f.term })}</div>
                 <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -150,6 +169,7 @@ export function Skills() {
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2 flex-wrap">
                 <b className="t-body">{s.name}</b>
+                {s.scope === 'proyecto' && putAlone.has(s.name.toLowerCase()) && <span className="pill t-small" style={{ background: 'var(--fill)', height: 22 }} title={t('La puso Mission Control sola tras buscar para este proyecto. Si no te sirve, quítala y no volverá.')}>{t('puesta sola')}</span>}
                 {uses(s.name) > 0 ? <span className="t-small" style={{ color: 'var(--green)' }}>{t('usada {v0} {v1} aquí', { v0: uses(s.name), v1: uses(s.name) === 1 ? t('vez') : t('veces') })}</span> : <span className="t-small c3">{t('sin usar aquí')}</span>}
               </div>
               <div className="t-small c2 clamp-2" title={s.description}>{say(s.name, s.description) || t('Sin descripción')}</div>
@@ -165,7 +185,7 @@ export function Skills() {
               <button className="btn btn-sm btn-icon btn-ghost" title={t('Abrir su carpeta')} onClick={() => void api('openPath', s.dir)}><FolderOpen size={13} /></button>
               {s.scope !== 'plugin' && s.name !== 'mission-control' && (
                 <button className="btn btn-sm btn-icon btn-ghost" title={s.scope === 'proyecto' ? t('Quitarla de este proyecto') : t('Quitarla de todas las cuentas')}
-                  onClick={() => { if (window.confirm(t('¿Quitar la skill «{name}» {v0}?\n\nSe borra su carpeta; se puede volver a instalar.', { name: s.name, v0: s.scope === 'proyecto' ? t('de {name}', { name: project.name }) : t('de todas las cuentas') }))) void run('rm' + s.name, () => api('skillRemove', project.id, s.name, s.scope as 'proyecto' | 'cuenta'), t('{name} quitada', { name: s.name })) }}><Trash2 size={13} /></button>
+                  onClick={() => { if (window.confirm((s.scope === 'proyecto' ? t('¿Quitar la skill «{name}» {v0}?\n\nSe borra su carpeta y Mission Control no la volverá a poner sola; se puede volver a instalar con un clic.', { name: s.name, v0: t('de {name}', { name: project.name }) }) : t('¿Quitar la skill «{name}» {v0}?\n\nSe borra su carpeta; se puede volver a instalar.', { name: s.name, v0: t('de todas las cuentas') })))) void run('rm' + s.name, () => api('skillRemove', project.id, s.name, s.scope as 'proyecto' | 'cuenta'), t('{name} quitada', { name: s.name })) }}><Trash2 size={13} /></button>
               )}
             </span>
           </div>

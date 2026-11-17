@@ -159,6 +159,8 @@ export function Tasks() {
   const [view, setView] = useState<'kanban' | 'lista'>('kanban')
   const [q, setQ] = useState('')
   const [owner, setOwner] = useState<AccountId | 'all'>('all')
+  // EV206 (the user, 16-11 19:44: «poder filtrar por prioridades para encontrar las tareas de una prioridad concreta»).
+  const [prio, setPrio] = useState<number>()
   const [openId, setOpenId] = useState<number>()
   const [more, setMore] = useState<Record<string, number>>({})
   const [over, setOver] = useState<string>()
@@ -169,8 +171,8 @@ export function Tasks() {
   const tasks = local ?? data.data ?? []
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return tasks.filter((t) => (owner === 'all' || t.owner === owner) && (!s || `${t.extId ?? ''} ${t.title} ${t.detail} ${t.section}`.toLowerCase().includes(s)))
-  }, [tasks, q, owner])
+    return tasks.filter((t) => (owner === 'all' || t.owner === owner) && (prio == null || (t.priority ?? 2) === prio) && (!s || `${t.extId ?? ''} ${t.title} ${t.detail} ${t.section}`.toLowerCase().includes(s)))
+  }, [tasks, q, owner, prio])
   // What a Claude finished but says the user still has to look at is waiting for the user, not done.
   const columnOf = (t: Task): Column => (t.change ? 'cambios' : t.waitingLook && !t.verified ? 'revision' : t.status === 'terminada' && t.verified ? 'aceptada' : t.status)
   const cols = COLUMNS.filter((c) => c.always || filtered.some((t) => columnOf(t) === c.s))
@@ -235,6 +237,16 @@ export function Tasks() {
           return (
             <button key={a} className={`chip ${owner === a ? 'on' : ''}`} onClick={() => setOwner(owner === a ? 'all' : a)}>
               <span className="dot" style={{ background: ACCOUNT_COLOR[a] }} /> {accName(a)} · {n}
+            </button>
+          )
+        })}
+        {/* EV206: by priority, the open ones of each; pressing the chosen one again shows them all. */}
+        <span className="c3 self-center px-1" aria-hidden>·</span>
+        {PRIORITY.map((p) => {
+          const n = tasks.filter((x) => (x.priority ?? 2) === p.v && x.status !== 'terminada').length
+          return (
+            <button key={`p${p.v}`} className={`chip ${prio === p.v ? 'on' : ''}`} onClick={() => setPrio(prio === p.v ? undefined : p.v)} title={t('Solo las de prioridad {label}', { label: p.label.toLowerCase() })}>
+              <span className="dot" style={{ background: p.color }} /> {p.label} · {n}
             </button>
           )
         })}

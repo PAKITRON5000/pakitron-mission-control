@@ -88,6 +88,7 @@ import { classify, corpusOf, isRequest, placeRequest, textsSignature, type UserR
 import { readHistory } from '../core/sessions'
 import { scanSkills, parseFind, parseList, pickSuggestions, projectToSearch, termsFor, skillsTally, mergeSkills, skillsStamp, type FoundSkill, type SkillInfo, type SkillsTally } from '../core/skills'
 import { englishTerms, hintStats, readGaps, readHints, repeatedSubjects } from '../core/skillgaps'
+import { SKILL_ID_RE, excludeFromGit, noteInstalled, noteRemoved, pickAutoInstall, readAuto } from '../core/skillauto'
 import { appendFileSync, cpSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { exec } from 'node:child_process'
@@ -592,8 +593,8 @@ function gapTermsFor(projectId: string): string[] {
 /**
  * EV167 (the user, 14-11 13:47: «buscando skills para cada proyecto de cada persona… eso son cosas que debe hacer la
  * app también»): the same search, alone, for a project just added and once a week for each one, one project at a time
- * and never while the PC is loaded. Installing stays the user's click (a skill works with every permission): Inicio
- * says how many would fit and the Cronología keeps it.
+ * and never while the PC is loaded. Inicio says how many would fit and the Cronología keeps it. EV205: the few most
+ * trusted of them (core/skillauto.ts › pickAutoInstall) go into the project alone; the rest stays the user's click.
  */
 let skillSearching = false
 async function autoSkillSearch(onlyId?: string): Promise<void> {
@@ -608,15 +609,38 @@ async function autoSkillSearch(onlyId?: string): Promise<void> {
   try {
     const before = service.skillsTally[p.id]?.suggested ?? 0
     await searchSkillsFor(p)
-    await api.skills(p.id)
+    const view = await api.skills(p.id) as { suggestions: FoundSkill[] }
+    // EV205: the few most trusted that fit go in alone, in the project only (Skills › «Ponerlas solas» turns it off).
+    const auto = service.settings.autoSkills !== false
+    if (auto) {
+      const put: string[] = []
+      for (const f of pickAutoInstall(view.suggestions, readAuto()[p.id]?.removed ?? [])) {
+        try { await installInProject(p, f.id); noteInstalled(p.id, { name: f.skill, id: f.id, by: 'app' }); put.push(f.skill) } catch (e) { service.log(`skill sola ${f.id}: ${(e as Error).message}`) }
+      }
+      if (put.length) {
+        addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'skill', title: tn(put.length, 'Skill puesta sola en {name}: {list}', 'Skills puestas solas en {name}: {list}', { name: p.name, list: put.join(', ') }), detail: t('Las más fiables de las recomendadas para lo que es el proyecto, solo en él. Si alguna no te sirve, quítala en Skills y no volverá.'), source: 'Mission Control' })
+        await api.skills(p.id) // the board's count of suggestions, without the ones just put
+      }
+    }
     const now = service.skillsTally[p.id]?.suggested ?? 0
-    if (now > before) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'relevo-app', title: tn(now, '{n} skill recomendada para {name}', '{n} skills recomendadas para {name}', { name: p.name }), detail: t('Buscadas solas en skills.sh para lo que es el proyecto. Míralas en Skills: instalar es cosa tuya.'), source: 'Mission Control' })
+    if (now > before) addEvent(service.db, { projectId: p.id, at: Date.now(), kind: 'relevo-app', title: tn(now, '{n} skill recomendada para {name}', '{n} skills recomendadas para {name}', { name: p.name }), detail: auto ? t('Buscadas solas en skills.sh para lo que es el proyecto. Las más fiables ya se han puesto solas; el resto, en Skills, con un clic.') : t('Buscadas solas en skills.sh para lo que es el proyecto. Míralas en Skills: instalar es cosa tuya.'), source: 'Mission Control' })
     service.push()
   } catch (e) {
     service.log(`skills solas: ${p.name}: ${(e as Error).message}`)
   } finally {
     skillSearching = false
   }
+}
+
+/** EV205: one skill from skills.sh into the project's work copy, checked, and kept out of its git. Returns its name. */
+async function installInProject(p: ProjectConfig, id: string): Promise<string> {
+  if (!SKILL_ID_RE.test(id)) throw new Error(t('Nombre de skill no válido'))
+  const skill = id.split('@')[1]
+  const cwd = workCopy(p)?.path ?? p.root
+  const out = await runNpx(`npx -y skills add ${id} -a claude-code -y --copy`, cwd, 240_000)
+  if (!existsSync(join(cwd, '.claude', 'skills', skill, 'SKILL.md'))) throw new Error(t('No se ha instalado: {v0}', { v0: out.slice(-300) }))
+  excludeFromGit(gitExcludeOf(p.root), skill)
+  return skill
 }
 
 /** Skill searches already made, by project (skills.sh is asked again only when the user presses «Buscar»). */
@@ -1541,10 +1565,11 @@ const api: Record<string, Handler> = {
     const r = answerDecision(service.db, p, id, a)
     // EV160: its Claude had closed after its one task: it comes back to do what was answered.
     try { followAnswer(id) } catch (e) { service.log(`respuesta ${id}: ${(e as Error).message}`) }
-    // EV207: and at once to the window of the Claude that asked, if it has one open there.
-    void tellAsker(id).catch((e: Error) => service.log(`respuesta ${id} a quien preguntó: ${e.message}`))
+    // EV207: and at once to the window of the Claude that asked, if it has one open there; Decidir says what happened.
+    let delivery: AskerDelivery = { kind: 'nadie' }
+    try { delivery = tellAsker(id) } catch (e) { service.log(`respuesta ${id} a quien preguntó: ${(e as Error).message}`) }
     service.push()
-    return r
+    return { ...r, delivery }
   },
   /** EV160: the same, by hand (or for an answer given before the app knew to do it). */
   followAnswer: (id: number) => ({ opened: followAnswer(id) }),
@@ -2437,7 +2462,11 @@ const api: Record<string, Handler> = {
     const suggestions = cache ? pickSuggestions(cache.found.filter((f) => searched.includes(f.term)), installed.map((s) => s.name), 18, 5, prof?.kinds ?? []) : []
     // EV133: what this screen has just counted is also the board's figure (installing or removing one comes through here).
     if (p && saveSkillsTally(p.id, skillsTally(installed, p.id, cache ? suggestions.length : undefined))) service.push()
-    return { es: skillsEs(), installed, uses, usesEverywhere, countedEverywhere, aside, onlyIn, moved: Object.values(moved).map((m) => ({ name: m.name, projectId: m.projectId, at: m.at })), usesAt: p ? subagentCounts.get(p.id)?.at : undefined, kinds: prof?.kinds ?? [], summary: prof?.summary, terms: termsFor(prof?.kinds ?? []), gapTerms: cache?.gapTerms ?? [], suggestions, searchedAt: cache?.at, hinted: hintStats(readHints()) }
+    // EV205: which of this project's skills Mission Control put (alone or with «Instalar las que le sirven») and which
+    // suggestions that button would put now.
+    const autoRec = readAuto()[projectId]
+    const fitting = pickAutoInstall(suggestions, autoRec?.removed ?? [], 5).map((f) => f.id) // ids: two authors can share a name
+    return { es: skillsEs(), installed, uses, usesEverywhere, countedEverywhere, aside, onlyIn, moved: Object.values(moved).map((m) => ({ name: m.name, projectId: m.projectId, at: m.at })), usesAt: p ? subagentCounts.get(p.id)?.at : undefined, kinds: prof?.kinds ?? [], summary: prof?.summary, terms: termsFor(prof?.kinds ?? []), gapTerms: cache?.gapTerms ?? [], suggestions, searchedAt: cache?.at, hinted: hintStats(readHints()), put: autoRec?.auto ?? [], fitting }
   },
   /** Looks on skills.sh for what fits the project (one search per term; a minute or two). */
   skillsSearch: async (projectId: string) => {
@@ -2446,16 +2475,30 @@ const api: Record<string, Handler> = {
     await searchSkillsFor(p)
     return api.skills(projectId)
   },
+  /** EV205: «Instalar las que le sirven»: the trusted suggestions that fit, in the project, at once (up to five). */
+  skillInstallFitting: async (projectId: string) => {
+    const p = service.project(projectId)
+    if (!p) throw new Error(t('Proyecto desconocido'))
+    const view = await api.skills(projectId) as { suggestions: FoundSkill[] }
+    const picks = pickAutoInstall(view.suggestions, readAuto()[projectId]?.removed ?? [], 5)
+    const done: string[] = []
+    for (const f of picks) {
+      try { await installInProject(p, f.id); noteInstalled(p.id, { name: f.skill, id: f.id, by: 'usuario' }); done.push(f.skill) } catch (e) { service.log(`skill ${f.id}: ${(e as Error).message}`) }
+    }
+    if (done.length) addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: tn(done.length, 'Skill instalada en {name}: {list}', 'Skills instaladas en {name}: {list}', { name: p.name, list: done.join(', ') }), detail: t('Las que le sirven de las sugeridas (autores fiables, muy usadas).'), source: 'Mission Control' })
+    service.push()
+    return api.skills(projectId)
+  },
   /** Installs a skill: in the project (every account sees it) or for every account in use. */
   skillInstall: async (projectId: string, id: string, scope: 'proyecto' | 'todas') => {
-    if (!/^[\w.-]+\/[\w.-]+@[\w.:-]+$/.test(id)) throw new Error(t('Nombre de skill no válido'))
+    if (!SKILL_ID_RE.test(id)) throw new Error(t('Nombre de skill no válido'))
     const p = service.project(projectId)
     if (!p) throw new Error(t('Proyecto desconocido'))
     const skill = id.split('@')[1]
     if (scope === 'proyecto') {
-      const cwd = workCopy(p)?.path ?? p.root
-      const out = await runNpx(`npx -y skills add ${id} -a claude-code -y --copy`, cwd, 240_000)
-      if (!existsSync(join(cwd, '.claude', 'skills', skill, 'SKILL.md'))) throw new Error(t('No se ha instalado: {v0}', { v0: out.slice(-300) }))
+      await installInProject(p, id)
+      // EV205: put by the user's click: if it had been taken away before, it no longer counts as «quitada».
+      noteInstalled(p.id, { name: skill, id, by: 'usuario' })
       addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: t('Skill instalada en {name}: {skill}', { name: p.name, skill: skill }), detail: id, source: 'Mission Control' })
     } else {
       const out = await runNpx(`npx -y skills add ${id} -g -a claude-code -y --copy`, tmpdir(), 240_000)
@@ -2482,6 +2525,8 @@ const api: Record<string, Handler> = {
       : service.accounts.map((a) => join(envFor(a).CLAUDE_CONFIG_DIR ?? (a.configDir || join(homedir(), '.claude')), 'skills', name))
     let n = 0
     for (const d of [...new Set(dirs)]) if (existsSync(join(d, 'SKILL.md'))) { rmSync(d, { recursive: true, force: true }); n++ }
+    // EV205: taken away from the project by the user: the app never puts it there alone again.
+    if (scope === 'proyecto' && p) noteRemoved(p.id, name)
     addEvent(service.db, { projectId, at: Date.now(), kind: 'skill', title: `Skill quitada (${scope === 'proyecto' ? 'del proyecto' : 'de las cuentas'}): ${name}`, detail: `${n} carpetas`, source: 'Mission Control' })
     service.push()
     return api.skills(projectId)
@@ -3186,22 +3231,38 @@ function watchAnswers(waiting: number): void {
  * Claude that asked, and to no other. Working, the hook of its next step brings it within seconds; stopped in its window,
  * it is typed there now. Before, a minute after the user's last answer, the newest window of the project open in the app
  * was told, whoever it was.
+ * 17-11 (the user: «has revisado que el decidir mande los mensajes al momento al mismo claude que hizo la pregunta?»):
+ * #183 reached claude2, the one that asked, 2 min 28 s after the answer: it had just started a 2 min 23 s game test, and
+ * Claude Code takes nothing in while a step runs (the user's own «Respondido en decidir», typed at 1:06, waited too). The
+ * first possible moment, but the user was not told and wrote to it by hand. So what happened is now said back to Decidir
+ * (the toast) and, when it has to wait, to the Cronología.
  */
+type AskerDelivery = { kind: 'escrita' | 'ocupado' | 'sin-ventana' | 'nadie'; account?: string }
 const toldAsker = new Map<string, number>()
-async function tellAsker(decisionId: number): Promise<void> {
-  if (process.env.PMC_SHOT_DIR) return
+function tellAsker(decisionId: number): AskerDelivery {
+  if (process.env.PMC_SHOT_DIR) return { kind: 'nadie' }
   const d = service.db.prepare('SELECT project_id, title, asked_by, status FROM decisions WHERE id = ?').get(decisionId) as { project_id: string; title: string; asked_by: string | null; status: string } | undefined
-  if (!d?.asked_by || (d.status !== 'decidida' && d.status !== 'descartada')) return
+  if (!d?.asked_by || (d.status !== 'decidida' && d.status !== 'descartada')) return { kind: 'nadie' }
   const p = service.project(d.project_id)
   const a = service.agents.find((x) => x.id === d.asked_by)
-  if (!p || !a) return
-  const chat = (x: (typeof a.sessions)[number]) => readChat(chatFile(x.cwd, x.sessionId), 1, 100 << 10)
-  const { window: w, busy } = askerWindow(a.sessions, p.id, (x) => { const c = chat(x); return Boolean(c?.midTurn && Date.now() - c.mtime < 60_000) }, (x) => chat(x)?.mtime ?? 0)
+  if (!p || !a) return { kind: 'nadie', account: d.asked_by }
+  const chats = new Map(a.sessions.map((x) => [x, readChat(chatFile(x.cwd, x.sessionId), 1, 100 << 10)] as const))
+  const { window: w, busy } = askerWindow(a.sessions, p.id, (x) => { const c = chats.get(x); return Boolean(c?.midTurn && Date.now() - c.mtime < 60_000) }, (x) => chats.get(x)?.mtime ?? 0)
   if (busy || w) toldAsker.set(p.id, Date.now())
-  if (!w?.pid) return
+  const who = a.id.slice(6)
+  if (busy) {
+    // Mid-step: the hook of its next step brings it (typing now would only queue it behind that step anyway).
+    addEvent(service.db, { projectId: p.id, at: Date.now(), account: a.id, kind: 'relevo-app', title: t('Tu respuesta a #{id} le llega a Claude {v0} en cuanto acabe el paso en que está', { id: decisionId, v0: who }), detail: t('Mientras una orden suya está en marcha (una prueba, una compilación), Claude Code no recibe nada; al acabarla, la lee sola. No hace falta escribirle.'), source: 'Mission Control' })
+    return { kind: 'ocupado', account: a.id }
+  }
+  if (!w?.pid) return { kind: 'sin-ventana', account: a.id }
+  // A step that has gone on for over a minute (a long test) also takes the typed note only when it ends.
+  const long = Boolean(chats.get(w)?.midTurn)
   const title = d.title.replace(/[\r\n"«»]+/g, ' ').trim().slice(0, 80)
-  await typeText(w.pid, `Mission Control: el usuario ha contestado a tu pregunta #${decisionId} en Decidir (${title}). Ejecuta pmc respuestas, léela y hazlo.`)
-  addEvent(service.db, { projectId: p.id, at: Date.now(), account: a.id, kind: 'relevo-app', title: t('Tu respuesta a #{id} se le ha escrito a Claude {v0}, que es quien preguntó', { id: decisionId, v0: a.id.slice(6) }), source: 'Mission Control' })
+  void typeText(w.pid, `Mission Control: el usuario ha contestado a tu pregunta #${decisionId} en Decidir (${title}). Ejecuta pmc respuestas, léela y hazlo.`)
+    .then(() => addEvent(service.db, { projectId: p.id, at: Date.now(), account: a.id, kind: 'relevo-app', title: t('Tu respuesta a #{id} se le ha escrito a Claude {v0}, que es quien preguntó', { id: decisionId, v0: who }), source: 'Mission Control' }))
+    .catch((e: Error) => service.log(`respuesta ${decisionId} a quien preguntó: ${e.message}`))
+  return { kind: long ? 'ocupado' : 'escrita', account: a.id }
 }
 
 /** One working on the project hears of the answers at its next step anyway; only when all are stopped does one need calling. */
